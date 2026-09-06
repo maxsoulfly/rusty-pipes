@@ -21,11 +21,20 @@ export async function setInventoryPinned(userId, inventoryId, pinned) {
   if (error) throw error
 }
 
+// Returns the inserted row (real id + server defaults) so useInventory can
+// swap out the optimistic placeholder - without that reconciliation the
+// local row keeps its fake `optimistic-<id>` id forever, which later
+// breaks anything that needs the real id (e.g. a Speed Rack pin UPDATE).
+// The trailing select reads the just-inserted own row, allowed by the same
+// "read own" RLS policy as any other inventory read.
 export async function addIngredientTypeOwnership(userId, ingredientTypeId) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("user_inventory")
     .insert({ user_id: userId, ingredient_type_id: ingredientTypeId })
+    .select("id, ingredient_type_id, product_id, pinned")
+    .single()
   if (error) throw error
+  return data
 }
 
 export async function removeIngredientTypeOwnership(userId, ingredientTypeId) {
@@ -37,11 +46,15 @@ export async function removeIngredientTypeOwnership(userId, ingredientTypeId) {
   if (error) throw error
 }
 
+// Returns the inserted row - see addIngredientTypeOwnership above.
 export async function addProductOwnership(userId, productId) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("user_inventory")
     .insert({ user_id: userId, product_id: productId })
+    .select("id, ingredient_type_id, product_id, pinned")
+    .single()
   if (error) throw error
+  return data
 }
 
 export async function removeProductOwnership(userId, productId) {

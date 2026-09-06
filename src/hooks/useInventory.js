@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { findPinnableRow, reconcileOptimisticRow } from "@/domain/inventoryRows"
 import { retryOnClockSkew } from "@/lib/retryOnClockSkew"
 import {
   addIngredientTypeOwnership,
@@ -73,22 +74,26 @@ export function useInventory(userId) {
     rows.filter((r) => r.product_id && r.pinned).map((r) => r.product_id),
   )
 
-  // Optimistic pin toggle, same shape as toggleType: flip local state now,
-  // write in the background, reload to the real state only if it fails. The
-  // row must already exist and be persisted (a just-created optimistic
-  // ownership row has a fake id and no server row to update yet) - callers
-  // only offer the pin control on an owned, loaded item, and this bails
-  // quietly otherwise.
+  // Optimistic pin toggle: flip local state now, write in the background,
+  // revert just that flag if the write fails. `findPinnableRow` returns
+  // null while the only matching row is a not-yet-reconciled optimistic
+  // ownership add (no real id to UPDATE) - a rare, sub-second window now
+  // that adds reconcile on success (see toggleType); the toggle is a
+  // no-op until then rather than a failed UPDATE on a fake id.
   const setPinnedOnRow = async (matchRow, nextPinned) => {
-    const row = rows.find(matchRow)
-    if (!row || String(row.id).startsWith("optimistic-")) return
+    const row = findPinnableRow(rows, matchRow)
+    if (!row) return
     setRows((prev) =>
       prev.map((r) => (r.id === row.id ? { ...r, pinned: nextPinned } : r)),
     )
     try {
       await setInventoryPinned(userId, row.id, nextPinned)
     } catch (err) {
-      load()
+      // Revert only the optimistic flag change - no full reload (which
+      // would flash the app to its loading screen via App.jsx's gate).
+      setRows((prev) =>
+        prev.map((r) => (r.id === row.id ? { ...r, pinned: !nextPinned } : r)),
+      )
       throw err
     }
   }
@@ -128,7 +133,13 @@ export function useInventory(userId) {
       if (wasOwned) {
         await removeIngredientTypeOwnership(userId, typeId)
       } else {
-        await addIngredientTypeOwnership(userId, typeId)
+        // Swap the optimistic placeholder for the real row so its id is
+        // usable (e.g. a later Speed Rack pin UPDATE) - without this the
+        // local row keeps its fake id until the next full reload.
+        const realRow = await addIngredientTypeOwnership(userId, typeId)
+        setRows((prev) =>
+          reconcileOptimisticRow(prev, `optimistic-${typeId}`, realRow),
+        )
       }
     } catch (err) {
       load() // roll back to real state on failure
@@ -146,7 +157,10 @@ export function useInventory(userId) {
       },
     ])
     try {
-      await addProductOwnership(userId, productId)
+      const realRow = await addProductOwnership(userId, productId)
+      setRows((prev) =>
+        reconcileOptimisticRow(prev, `optimistic-${productId}`, realRow),
+      )
     } catch (err) {
       load()
       throw err
@@ -175,7 +189,10 @@ export function useInventory(userId) {
       if (wasOwned) {
         await removeProductOwnership(userId, productId)
       } else {
-        await addProductOwnership(userId, productId)
+        const realRow = await addProductOwnership(userId, productId)
+        setRows((prev) =>
+          reconcileOptimisticRow(prev, `optimistic-${productId}`, realRow),
+        )
       }
     } catch (err) {
       load()
