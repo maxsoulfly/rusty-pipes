@@ -37,9 +37,9 @@ Each numbered step is a development chunk boundary for this file.
 4. ~~Begin Stage 1 of the approved My Bar UX redesign~~ (item 17) - **done and committed 2026-09-07 (`9afc57c`). All manual mobile checks confirmed passed by the user, 2026-09-07.**
 5. ~~My Bar redesign Stage 2 (shelf visuals + the admin ⋯ header menu)~~ - **COMPLETE, 2026-09-07** (`bda465a` + visibility fix `a1a9d84`). Fully mobile-verified by the user on a current build; the earlier "no menu / no shelves" was a stale preview, resolved by a redeploy. See the Stage 2 chunk's "Verification" section.
 
-**My Bar redesign: Stages 1-2 done. Stage 3 (Speed Rack) stays deferred - do not start it.**
+**My Bar redesign: Stages 1-2 done. Stage 3 (Speed Rack) stays deferred - do not start it, but its blocker is now cleared.**
 
-**Migration-history mismatch: read-only audit done 2026-09-07 (see "Last completed chunk"). Conclusion: all 14 unrecorded migrations are FULLY applied to the live DB - the fix is a ledger-only `supabase migration repair`, no DDL/DML replay. Repair proposal written, NOT executed - awaiting the user's review before any DB change.** This is the blocker in front of Speed Rack.
+**Migration-history mismatch: RESOLVED 2026-09-07 (ledger-only `supabase migration repair`, see "Last completed chunk").** Audit found 14 (not 15) unrecorded migrations, all verified fully applied; earlier "15" was a counting error. The 14 versions are now marked `applied` in the remote ledger. `migration list --linked` shows all 46 as `local == remote`; `db push --dry-run` reports "Remote database is up to date." No migration SQL ran, no schema/data changed. **`db push` is unblocked - Speed Rack's future migration can push normally.**
 
 Separately, still true, none blocking: the cosmetic pluralize-at-save-time item (serving-size Stage 1 chunk below) remains untouched.
 
@@ -51,9 +51,35 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## Last completed chunk (Migration-history mismatch - read-only audit, 2026-09-07)
+## Last completed chunk (Migration-history mismatch - audited, reconciled, and RESOLVED, 2026-09-07)
 
-**Scope: read-only. No DB writes, no `migration repair`, no `db push`, no replay. A repair is proposed below for the user to review and run.**
+**Outcome: the 14 unrecorded migrations are now marked `applied` in the remote ledger via `supabase migration repair` (ledger-only). No migration SQL executed, no schema/data change. `db push` is unblocked. Pre-repair audit + reconciliation + execution log below.**
+
+### Reconciliation of the "14 vs 15" discrepancy (done before executing)
+
+An earlier note (2026-09-05, top-up chunk) said "Migrations `20260825100000` through `20260826120000` (14 entries)" + the separate `20260905130000` - reading as 15 unrecorded. **That "14" was a miscount.** Verified against the exact files and ledger:
+
+- `ls supabase/migrations/*.sql` -> **46 files, 46 unique versions**. Files with version `>= 20260825100000`: **14** (thirteen in `20260825100000..20260826120000` inclusive, plus `20260905130000`).
+- Remote ledger (`select version from supabase_migrations.schema_migrations`) -> **32 rows**, contiguous `20260815200430`..`20260823160000`.
+- `comm` set-diff (CR-normalised): local-not-in-ledger = **exactly 14**; ledger-not-in-local (orphans) = **0**; in-both = **32**.
+- The 14-version diff is **byte-identical** to the 14 versions verified applied in this same chunk's audit. No new/unverified migration surfaced. So: **14 unrecorded, not 15** - the `20260825100000..20260826120000` inclusive range has 13 files, not 14.
+
+### The 14 versions repaired
+
+`20260825100000 20260825100100 20260825100200 20260825100300 20260825100400 20260825110000 20260825120000 20260825130000 20260825140000 20260825150000 20260826100000 20260826110000 20260826120000 20260905130000`
+
+### Execution log (2026-09-07, `npx supabase` CLI v2.116.0, `--linked`)
+
+1. **Ledger snapshot saved** (recovery baseline): 32 rows, `20260815200430 initial_schema` .. `20260823160000 liquid_colors_policy_role_scope` (full list captured to a scratchpad file at audit time).
+2. `npx supabase migration repair --linked --status applied --yes <the 14 versions>` -> `"Migration history repaired"`, `status: applied`. Ledger-only; runs no migration DDL/DML.
+3. `npx supabase migration list --linked` -> **46 rows, all `local == remote`, 0 mismatches.**
+4. `npx supabase db push --linked --dry-run` -> `{"upToDate":true,"dryRun":true,"migrations":[],"message":"Remote database is up to date."}` - nothing would be replayed.
+
+**Not run:** `db push` for real (dry-run only), any migration SQL, any schema/data change. **Recovery if ever needed:** `npx supabase migration repair --linked --status reverted <version…>` removes ledger rows; target good state is the 46 now present. `migration repair` cannot touch table data or schema, so no DB restore is in scope.
+
+### Pre-repair audit (read-only) - what was verified before touching the ledger
+
+Scope was strictly read-only: `migration list`, `db query` SELECTs against `pg_proc`/`pg_policies`/`pg_constraint`/`information_schema`/data tables, and `--help`.
 
 ### What the ledger says (verified fresh, `npx supabase migration list --linked`)
 
@@ -84,21 +110,9 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 `supabase db push` replays every local migration whose version is absent from the remote ledger, in order, from `20260825100000`. That file's `create function public.is_moderator() …` hits an object that already exists -> `is_moderator already exists` -> the whole push aborts. It is not a data problem; it is purely the ledger being out of sync with reality (those 14 were applied out-of-band via `supabase db query --linked --file`, which never writes the ledger).
 
-### Proposed smallest safe repair (NOT executed - for review)
+### The repair (executed 2026-09-07 - see the "Execution log" near the top of this chunk)
 
-`supabase migration repair` only inserts/deletes rows in the `schema_migrations` **ledger**. It runs **no** migration DDL/DML. Since all 14 are verified fully applied, marking them `applied` is accurate.
-
-1. **Snapshot the ledger first** (recovery baseline):
-   `npx supabase db query --linked --file -` with `select version from supabase_migrations.schema_migrations order by version;` -> save output.
-2. **Mark the 14 as applied** (one call, ledger-only):
-   `npx supabase migration repair --linked --status applied 20260825100000 20260825100100 20260825100200 20260825100300 20260825100400 20260825110000 20260825120000 20260825130000 20260825140000 20260825150000 20260826100000 20260826110000 20260826120000 20260905130000`
-3. **Verify**: `npx supabase migration list --linked` -> all 46 rows show `local == remote`.
-4. **Confirm push is unblocked**: `npx supabase db push --linked` -> expect **"Remote database is up to date."** (a clean no-op). Only run this *after* step 2.
-5. **Recovery if step 2 goes wrong**: `npx supabase migration repair --linked --status reverted <version…>` removes any ledger row that shouldn't be there; compare against the step-1 snapshot. No data restore is ever needed - `migration repair` cannot touch table data or schema.
-
-Alternative for `20260905130000` only: since it is now a no-op, it could instead be **deleted from `supabase/migrations/`** rather than marked applied. Recommendation: mark it applied like the rest - keeps the history file as the record of a real incident, and future contributors see it was handled.
-
-Not doing any of this yet - waiting for the user's go-ahead.
+`supabase migration repair` only inserts/deletes rows in the `schema_migrations` **ledger** - **no** migration DDL/DML. All 14 were verified fully applied, so marking them `applied` is accurate. Ran: snapshot -> `migration repair --linked --status applied --yes <14 versions>` -> `migration list --linked` (46/46 `local == remote`) -> `db push --linked --dry-run` (`upToDate: true`, nothing to replay). `20260905130000` was marked `applied` like the rest (kept as the historical record of the incident) rather than deleted.
 
 ## Earlier chunk (My Bar redesign Stage 2 - shelf visuals + admin ⋯ header menu)
 
