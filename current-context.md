@@ -35,11 +35,12 @@ Each numbered step is a development chunk boundary for this file.
 2. ~~Investigate the recurring "JWT issued at future" startup error~~ - **root cause identified and a scoped fix committed (`65ecc74`), 2026-09-06. See "Earlier chunk" below.** `first open after idle` verification is still **pending** the user's confirmation on a phone - a separate follow-up, does not block the My Bar redesign. Do not mark it done without a real result.
 3. ~~Complete the existing Stage 5~~ (final integration review/regression/docs close-out) for the Cocktail Library + My Bar UX effort (item 16) - **done 2026-09-07, no defects found, feature complete. See "Last completed chunk" below.**
 4. ~~Begin Stage 1 of the approved My Bar UX redesign~~ (item 17) - **done and committed 2026-09-07 (`9afc57c`). All manual mobile checks confirmed passed by the user, 2026-09-07.**
-5. ~~My Bar redesign Stage 2 (shelf visuals + the admin ⋯ header menu)~~ - **COMPLETE, 2026-09-07** (`bda465a` + visibility fix `a1a9d84`). Fully mobile-verified by the user on a current build; the earlier "no menu / no shelves" was a stale preview, resolved by a redeploy. See the Stage 2 chunk's "Verification" section.
+5. ~~My Bar redesign Stage 2 (shelf visuals + the admin ⋯ header menu)~~ - **COMPLETE, 2026-09-07** (`bda465a` + visibility fix `a1a9d84`). Fully mobile-verified.
+6. ~~My Bar redesign Stage 3 (Speed Rack)~~ - **built and committed 2026-09-07** (`pinned` column on `user_inventory`, migration `20260906130000` pushed the normal way; pin star on `IngredientDetailScreen`; `SpeedRack` strip on `/bar`). **Mobile verification pending the user's iPhone check** (checklist in "Last completed chunk").
 
-**My Bar redesign: Stages 1-2 done. Stage 3 (Speed Rack) stays deferred - do not start it, but its blocker is now cleared.**
+**My Bar redesign: all three stages built. Stage 3 mobile check is the only thing outstanding - the plan (`docs/my-bar-ux-plan.md`) is otherwise feature-complete. No further stages. No active task queued.**
 
-**Migration-history mismatch: RESOLVED 2026-09-07 (ledger-only `supabase migration repair`, see "Last completed chunk").** Audit found 14 (not 15) unrecorded migrations, all verified fully applied; earlier "15" was a counting error. The 14 versions are now marked `applied` in the remote ledger. `migration list --linked` shows all 46 as `local == remote`; `db push --dry-run` reports "Remote database is up to date." No migration SQL ran, no schema/data changed. **`db push` is unblocked - Speed Rack's future migration can push normally.**
+**Migration-history mismatch: RESOLVED 2026-09-07** (ledger-only `supabase migration repair` - see "Earlier chunk"). All 46 recorded migrations showed `local == remote`; Stage 3's new migration `20260906130000` then pushed cleanly via the normal `db push` workflow (47/47 now).
 
 Separately, still true, none blocking: the cosmetic pluralize-at-save-time item (serving-size Stage 1 chunk below) remains untouched.
 
@@ -51,7 +52,48 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## Last completed chunk (Migration-history mismatch - audited, reconciled, and RESOLVED, 2026-09-07)
+## Last completed chunk (My Bar redesign Stage 3 - Speed Rack, 2026-09-07)
+
+**Committed 2026-09-07. Mobile verification pending the user's iPhone check (checklist below). This is the last stage of the My Bar redesign - no more stages.**
+
+### Decision made at stage start (plan Decision 7 left it open)
+
+**Persistence: a `pinned boolean` column on `user_inventory`** (not a separate `user_speed_rack` table). The user picked this from the two plan candidates - smallest change, no join, un-owning drops the pin automatically, and no `position` column since there is no reorder UI (out of scope, not in the plan).
+
+### Migration `20260906130000_user_inventory_pinned.sql` - applied via the normal `db push` workflow
+
+- `alter table public.user_inventory add column pinned boolean not null default false`.
+- `user_inventory` had only read/insert/delete policies (ownership is add-or-remove, never updated). Added `"user_inventory: update own"` (`for update ... using/with check (user_id = (select auth.uid()))`).
+- Column-scoped the grant: `revoke update on public.user_inventory from anon, authenticated; grant update (pinned) on public.user_inventory to authenticated` - the same pattern `recipes` uses. Supabase's default blanket table UPDATE grant would otherwise let the new policy also rewrite `user_id`/`ingredient_type_id`/`product_id`.
+- **Applied with `npx supabase db push --linked`** (not `db query`) so it is recorded: `migration list --linked` now shows **47/47 `local == remote`**. Verified live: column present (`not null default false`), the update-own policy exists, `has_table_privilege('authenticated','user_inventory','UPDATE')` = false, `has_column_privilege(... ,'pinned','UPDATE')` = true, `has_column_privilege(...,'ingredient_type_id','UPDATE')` = false, anon table UPDATE = false. `db advisors --type security` = 18 findings, unchanged baseline, none mentioning `user_inventory`/`pinned`.
+- **RLS suite** (`supabase/tests/rls_suite.sql`) extended in-place in the existing `user_inventory` block: owner can set `pinned`; the flag actually persists; a non-`pinned` column stays unwritable (`insufficient_privilege`); a different member's `pinned` update affects 0 rows; anon is denied. Full suite re-run against the live project - clean (it aborts loudly on any `FAIL`; it did not).
+
+### Client
+
+- `services/inventory.js`: `fetchInventory` selects `pinned`; new `setInventoryPinned(userId, inventoryId, pinned)` (`update({pinned}).eq(id).eq(user_id)`).
+- `useInventory.js`: new `pinnedTypeIds` / `pinnedProductIds` sets (kept independent of the owned sets), and `togglePinType(typeId)` / `togglePinProduct(productId)` - optimistic, same shape as `toggleType` (flip local, write in background, `load()` + rethrow on failure). Bails on an unpersisted optimistic row.
+- **Pin control on `IngredientDetailScreen`** (not on the shelf tile - keeps the verified Stage 2 layout untouched): a star toggle in the `TopBar` `right` slot, shown **only when the viewed item is owned** (`ownedTypeIds`/`ownedProductIds`) - you can't Speed-Rack what you don't own. `aria-pressed`, tinted when pinned. It only ever flips `pinned`, never ownership.
+- **New `src/components/myBar/SpeedRack.jsx`**: the strip at the top of `/bar` content (above the shelves), rendered only when >=1 pin. Wrapping pills (>=44px tall, no horizontal scroll per the plan's own rule), each = small icon + short name, tap -> that item's recipe page (same as a shelf item). Order: name-sorted. A pinned product borrows its type's icon/colour.
+- `MyBarScreen.jsx`: builds `speedRackItems` from the pinned sets + catalog, renders `<SpeedRack>`. sessionStorage browsing-state logic untouched.
+
+### Derived (not spelled out in the plan) - flagged for the user
+
+- **Pin/unpin affordance lives on the recipe detail page**, not the shelf tile or the strip itself. Rationale: "preserve the verified shelf layout" (explicit in the Stage 3 request) rules out a third tile button, and it keeps the strip minimal. Unpinning = open the strip item -> tap the star again.
+- **No reorder.** The plan says "pin persists and displays in a small top strip", nothing about ordering; strip is name-sorted.
+
+**Verified 2026-09-07**: `corepack pnpm@10.34.3 test` 193/193 (no new unit tests - no new pure-domain logic; pin logic is optimistic-state plumbing like the existing toggles, and RLS is covered by the suite). `pnpm build` clean (164 modules, +1 SpeedRack). `pnpm format` clean. RLS suite clean. Committed as `77dcb18`.
+
+**Manual mobile checklist (My Bar redesign Stage 3 - Speed Rack):**
+
+1. Open **My Bar** with nothing pinned -> no Speed Rack strip; shelves look exactly as before (Stage 2 unchanged).
+2. Tap an owned bottle's name/icon -> its recipe page. A **star** button is in the top bar. Tap it -> back to My Bar -> a **Speed Rack** strip now sits above the shelves with that item as a pill.
+3. Pin two or three more (including, if you have one, a specific product via its own page). The strip fills with wrapping pills - confirm they wrap onto short rows with **no sideways scrolling**, names readable, each comfortably tappable.
+4. Tap a Speed Rack pill -> opens that item's recipe page (same as tapping it on the shelf). Tap the star again -> it's removed from the strip on return.
+5. Un-own a pinned item (its shelf checkmark) -> it disappears from both the shelf and the Speed Rack strip.
+6. On a bottle you **don't** own, open its page -> there is **no** star button (can't Speed-Rack what you don't own).
+7. Confirm unchanged: shelf bottle/name = view, checkmark = own, chevron = products; the admin ⋯ menu; search + category + back-navigation state restoration; Build Your Bar on Home.
+
+## Earlier chunk (Migration-history mismatch - audited, reconciled, and RESOLVED, 2026-09-07)
 
 **Outcome: the 14 unrecorded migrations are now marked `applied` in the remote ledger via `supabase migration repair` (ledger-only). No migration SQL executed, no schema/data change. `db push` is unblocked. Pre-repair audit + reconciliation + execution log below.**
 
