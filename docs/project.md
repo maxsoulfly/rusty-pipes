@@ -22,15 +22,15 @@ You might revisit this every few months, not every day.
 Fixing the recurring "JWT issued at future" startup error on the first app open of the day.
 
 # Next
-- My Bar redesign (`docs/my-bar-ux-plan.md`): all three stages built (owned-first "My ingredients", "Add ingredients" split, shelf visuals, Speed Rack). Speed Rack awaiting phone verification.
+- Improve mood/taste discovery.
 
 # Backlog
-- Improve mood/taste discovery.
 
 # Done
 - Serving-size selector + parts ratio view — 2026-09-05.
 - Homepage "Build your bar" for an empty My Bar — 2026-09-06.
 - Cocktail Library + My Bar UX (grouped Library, Sort control, ingredient/bottle recipe pages) — 2026-09-06.
+- My Bar redesign (owned-first "My ingredients", "Add ingredients" split, shelf visuals, Speed Rack) — 2026-09-07.
 
 # Scenarios
 S01 — Choose a drink

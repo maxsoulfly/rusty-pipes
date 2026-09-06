@@ -1,6 +1,6 @@
 # My Bar UX Plan — Owned-First Default + Add Ingredients Split
 
-Saved 2026-09-06. **Stages 1 and 2 done, committed, and mobile-verified (2026-09-07). Stage 3 (Speed Rack) built and committed 2026-09-07 - mobile verification pending.** With Stage 3 verified, this plan is feature-complete. Engineering detail for each stage is in `current-context.md`.
+Saved 2026-09-06. **COMPLETE - all three stages built, committed, and mobile-verified (2026-09-07).** Engineering detail for each stage is in `current-context.md`.
 
 ## Direction
 
@@ -67,7 +67,7 @@ Not yet built:
 |---|---|---|---|
 | **1** ✅ done, committed `9afc57c`, mobile-verified 2026-09-07 | Route split: `/bar` becomes owned-only My ingredients (existing card grid, unchanged visually); new `/bar/add-ingredients` route with category-first browsing; admin pencil removed from the main grid; Build Your Bar's "Find more ingredients" repointed | My ingredients shows exactly the owned set, no inferred parents (Requirement 1 holds); Add ingredients lets you find and toggle any type; admin edit still reachable; scroll/expanded-state preserved per Requirement 2; `test`/`build`/`format` clean | Yes - pure restructuring, no visual risk |
 | **2** ✅ done, committed `bda465a` (+ visibility fix `a1a9d84`), mobile-verified 2026-09-07 | Shelf visual reskin of My ingredients only (bottles on subtle shelf lines, softened family grouping); the admin ⋯ header menu from the revised Decision 5. Add ingredients stays a plain browse/search grid - no decorative shelves. | ✅ Verified: short wrapping rows, no horizontal scroll, readable names, touch targets intact, scroll/expanded-state holds; bottle/name view vs. checkmark-own vs. product-expand all distinct; generic vs. product ownership independent; admin ⋯ -> Ingredient Types works desktop + mobile; Add ingredients + Build Your Bar unchanged | Yes |
-| **3** ✅ built, committed 2026-09-07, mobile verification pending | Speed Rack: `pinned boolean` column on `user_inventory` (chosen over a separate table at stage start); pin star on `IngredientDetailScreen` (owned items only); `SpeedRack` wrapping-pill strip at the top of `/bar`, name-sorted, tap opens the recipe page. No reorder (not in scope). Migration `20260906130000` pushed the normal way (ledger now 47/47). | RLS suite extended for the `pinned` column (owner-only update, column-scoped grant, member/anon denied) - clean. Pin persists; shows in the top strip; un-owning drops the pin. Mobile check pending. | N/A |
+| **3** ✅ done, committed `77dcb18` (+ fix `207769b`), mobile-verified 2026-09-07 | Speed Rack: `pinned boolean` column on `user_inventory` (chosen over a separate table at stage start); pin star on `IngredientDetailScreen` (owned items only); `SpeedRack` wrapping-pill strip at the top of `/bar`, name-sorted, tap opens the recipe page. No reorder (not in scope). Migration `20260906130000` pushed the normal way (ledger 47/47). | ✅ Verified: RLS suite extended for the `pinned` column (owner-only update, column-scoped grant, member/anon denied); pin persists, shows in the strip, un-owning drops the pin; own/pin/un-own/re-own/pin lifecycle works for generic types and specific products (a mid-verification bug there was fixed in `207769b`). | N/A |
 
 Stage 1 and 2 are deliberately separated so a shelf-visual iteration never risks the underlying data/routing logic, and vice versa.
 
