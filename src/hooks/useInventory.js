@@ -6,6 +6,7 @@ import {
   fetchInventory,
   removeIngredientTypeOwnership,
   removeProductOwnership,
+  setInventoryPinned,
 } from "@/services/inventory"
 
 export function useInventory(userId) {
@@ -60,6 +61,47 @@ export function useInventory(userId) {
   const ownedProductIds = new Set(
     rows.filter((r) => r.product_id).map((r) => r.product_id),
   )
+  // Speed Rack: which owned rows are pinned. Kept independent from the
+  // owned sets above - pinning is a flag on an already-owned row, never a
+  // second way to own something.
+  const pinnedTypeIds = new Set(
+    rows
+      .filter((r) => r.ingredient_type_id && r.pinned)
+      .map((r) => r.ingredient_type_id),
+  )
+  const pinnedProductIds = new Set(
+    rows.filter((r) => r.product_id && r.pinned).map((r) => r.product_id),
+  )
+
+  // Optimistic pin toggle, same shape as toggleType: flip local state now,
+  // write in the background, reload to the real state only if it fails. The
+  // row must already exist and be persisted (a just-created optimistic
+  // ownership row has a fake id and no server row to update yet) - callers
+  // only offer the pin control on an owned, loaded item, and this bails
+  // quietly otherwise.
+  const setPinnedOnRow = async (matchRow, nextPinned) => {
+    const row = rows.find(matchRow)
+    if (!row || String(row.id).startsWith("optimistic-")) return
+    setRows((prev) =>
+      prev.map((r) => (r.id === row.id ? { ...r, pinned: nextPinned } : r)),
+    )
+    try {
+      await setInventoryPinned(userId, row.id, nextPinned)
+    } catch (err) {
+      load()
+      throw err
+    }
+  }
+  const togglePinType = (typeId) =>
+    setPinnedOnRow(
+      (r) => r.ingredient_type_id === typeId,
+      !pinnedTypeIds.has(typeId),
+    )
+  const togglePinProduct = (productId) =>
+    setPinnedOnRow(
+      (r) => r.product_id === productId,
+      !pinnedProductIds.has(productId),
+    )
 
   // Optimistic: update local state immediately so the toggle feels instant,
   // fire the write in the background, and only pay the network round-trip
@@ -147,9 +189,13 @@ export function useInventory(userId) {
     loaded,
     ownedTypeIds,
     ownedProductIds,
+    pinnedTypeIds,
+    pinnedProductIds,
     toggleType,
     ownProduct,
     toggleProduct,
+    togglePinType,
+    togglePinProduct,
     refetch: load,
   }
 }

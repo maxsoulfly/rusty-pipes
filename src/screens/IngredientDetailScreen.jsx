@@ -2,7 +2,7 @@ import { useMemo } from "react"
 import clsx from "clsx"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { CocktailCard } from "@/components/CocktailCard"
-import { IconBottle, IconGlass } from "@/components/icons"
+import { IconBottle, IconGlass, IconStar } from "@/components/icons"
 import { TopBar } from "@/components/Nav"
 import {
   AVAIL_CFG,
@@ -62,8 +62,25 @@ function matchAnnotation(match) {
 export default function IngredientDetailScreen({ kind }) {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { computed, catalog } = useOutletContext()
+  const { computed, catalog, inventory } = useOutletContext()
   const { types, products } = catalog
+
+  // Speed Rack pin/unpin lives here, not on the shelf tile (keeps the
+  // verified Stage 2 shelf layout untouched). Only offered for something
+  // the member actually owns - you can't pin what isn't in your bar - and
+  // it only ever flips the `pinned` flag, never touches ownership.
+  const canPin =
+    kind === "product"
+      ? inventory.ownedProductIds.has(id)
+      : inventory.ownedTypeIds.has(id)
+  const isPinned =
+    kind === "product"
+      ? inventory.pinnedProductIds.has(id)
+      : inventory.pinnedTypeIds.has(id)
+  const togglePin = () =>
+    kind === "product"
+      ? inventory.togglePinProduct(id)
+      : inventory.togglePinType(id)
 
   const product = kind === "product" ? products.find((p) => p.id === id) : null
   const resolvedType =
@@ -119,7 +136,29 @@ export default function IngredientDetailScreen({ kind }) {
 
   return (
     <div className="pb-[calc(96px_+_env(safe-area-inset-bottom,0px))]">
-      <TopBar title={displayName} onBack={() => navigate(-1)} />
+      <TopBar
+        title={displayName}
+        onBack={() => navigate(-1)}
+        right={
+          canPin && (
+            <button
+              onClick={togglePin}
+              aria-label={
+                isPinned ? "Remove from Speed Rack" : "Pin to Speed Rack"
+              }
+              aria-pressed={isPinned}
+              className={clsx(
+                "rounded-sm w-9 h-9 cursor-pointer flex items-center justify-center border",
+                isPinned
+                  ? "bg-cyan/15 border-cyan text-cyan"
+                  : "bg-surface border-bdr text-tx2",
+              )}
+            >
+              <IconStar size={16} />
+            </button>
+          )
+        }
+      />
       <div className="p-4">
         {/* Only shown when it adds real information - viewing a type
             directly never shows this, since it would just repeat the

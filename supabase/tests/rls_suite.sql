@@ -796,7 +796,7 @@ $$;
 -- to catch drift on (see liquid_colors in the last chunk).
 
 do $$
-declare f record; v_type_id uuid; v_id uuid; n int; affected int;
+declare f record; v_type_id uuid; v_id uuid; n int; affected int; v_pinned boolean;
 begin
   select * into f from rls_fixture_ids;
 
@@ -829,6 +829,34 @@ begin
 
   select count(*) into n from public.user_inventory where id = v_id;
   perform pg_temp.assert(n = 1, 'user_inventory: the owner can read their own inventory row');
+
+  -- Speed Rack `pinned` column (Stage 3): a narrow "update own" policy plus
+  -- an UPDATE grant scoped to just `pinned` (20260906130000). The owner can
+  -- flip pinned; the grant does not reach any other column; a different
+  -- member / anon cannot touch it at all.
+  update public.user_inventory set pinned = true where id = v_id;
+  get diagnostics affected = row_count;
+  perform pg_temp.assert(affected = 1, 'user_inventory: the owner can set pinned on their own row');
+  select pinned into v_pinned from public.user_inventory where id = v_id;
+  perform pg_temp.assert(v_pinned is true, 'user_inventory: the pinned flag actually took');
+  begin
+    update public.user_inventory set ingredient_type_id = ingredient_type_id where id = v_id;
+    perform pg_temp.assert(false, 'user_inventory: updating a non-pinned column should be denied by the column grant');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'user_inventory: the UPDATE grant is column-scoped to pinned - ownership columns stay unwritable');
+  end;
+  perform pg_temp.set_identity('authenticated', f.member_other_id);
+  update public.user_inventory set pinned = false where id = v_id;
+  get diagnostics affected = row_count;
+  perform pg_temp.assert(affected = 0, 'user_inventory: a different member cannot change pinned on someone else''s row');
+  perform pg_temp.set_identity('anon', null);
+  begin
+    update public.user_inventory set pinned = false where id = v_id;
+    get diagnostics affected = row_count;
+    perform pg_temp.assert(affected = 0, 'user_inventory: an anon pinned update affects nothing');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'user_inventory: anon has no UPDATE grant on user_inventory at all');
+  end;
 
   perform pg_temp.set_identity('authenticated', f.member_other_id);
   select count(*) into n from public.user_inventory where id = v_id;

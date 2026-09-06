@@ -6,6 +6,7 @@ import { ExpandedProducts } from "@/components/myBar/ExpandedProducts"
 import { FamilyCluster } from "@/components/myBar/FamilyCluster"
 import { SearchFilterHeader } from "@/components/myBar/SearchFilterHeader"
 import { ShelfItem } from "@/components/myBar/ShelfItem"
+import { SpeedRack } from "@/components/myBar/SpeedRack"
 import { Btn } from "@/components/primitives"
 
 // Within a category, order by real-world "how likely is this on a bar" -
@@ -65,6 +66,8 @@ export default function MyBarScreen() {
     loading: inventoryLoading,
     ownedTypeIds,
     ownedProductIds,
+    pinnedTypeIds,
+    pinnedProductIds,
     toggleType,
     toggleProduct,
   } = inventory
@@ -270,6 +273,37 @@ export default function MyBarScreen() {
     return acc
   }, {})
 
+  // Speed Rack strip: pinned generic types + pinned specific products,
+  // name-sorted. Ignores the search/category filters above - it's a
+  // fast-access strip, not part of the browse. A product borrows its
+  // type's icon/color.
+  const speedRackItems = useMemo(() => {
+    const items = []
+    types.forEach((t) => {
+      if (pinnedTypeIds.has(t.id))
+        items.push({
+          key: `t-${t.id}`,
+          name: t.name,
+          shape: t.shape,
+          color: t.color,
+          to: `/bar/type/${t.id}`,
+        })
+    })
+    products.forEach((p) => {
+      if (pinnedProductIds.has(p.id)) {
+        const pt = types.find((t) => t.id === p.ingredient_type_id)
+        items.push({
+          key: `p-${p.id}`,
+          name: p.name,
+          shape: pt?.shape ?? "spirit_bottle",
+          color: pt?.color,
+          to: `/bar/product/${p.id}`,
+        })
+      }
+    })
+    return items.sort((a, b) => a.name.localeCompare(b.name))
+  }, [types, products, pinnedTypeIds, pinnedProductIds])
+
   const renderCard = (type, isChild) => {
     const owned = isOwned(type.id)
     const ownedProducts = productsByType.get(type.id) ?? []
@@ -348,6 +382,8 @@ export default function MyBarScreen() {
       />
 
       <div className="p-4">
+        <SpeedRack items={speedRackItems} onOpen={(it) => navigate(it.to)} />
+
         {Object.entries(grouped).map(([categoryName, clusters]) => (
           <div key={categoryName} className="mb-5">
             <div className="flex items-center gap-1.5 mb-2">
