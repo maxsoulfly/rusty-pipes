@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { retryOnClockSkew } from "@/lib/retryOnClockSkew"
 import {
   addIngredientTypeOwnership,
   addProductOwnership,
@@ -31,7 +32,10 @@ export function useInventory(userId) {
       return Promise.resolve([])
     }
     setLoading(true)
-    return fetchInventory(userId)
+    // retryOnClockSkew: absorbs the brief "JWT issued at future" window on the
+    // first read after a startup token refresh (see retryOnClockSkew.js). Only
+    // the read is wrapped - the ownership writes below must never be retried.
+    return retryOnClockSkew(() => fetchInventory(userId))
       .then((data) => {
         setRows(data)
         setLoading(false)

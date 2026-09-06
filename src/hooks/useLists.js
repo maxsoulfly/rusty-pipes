@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { retryOnClockSkew } from "@/lib/retryOnClockSkew"
 import {
   addFavorite,
   addWantToMake,
@@ -35,7 +36,12 @@ export function useLists(userId) {
       return Promise.resolve()
     }
     setLoading(true)
-    return Promise.all([fetchFavorites(userId), fetchWantToMake(userId)])
+    // retryOnClockSkew: absorbs the brief "JWT issued at future" window on the
+    // first read after a startup token refresh (see retryOnClockSkew.js). Only
+    // the read is wrapped - the favorite/want-to-make writes must not retry.
+    return retryOnClockSkew(() =>
+      Promise.all([fetchFavorites(userId), fetchWantToMake(userId)]),
+    )
       .then(([favs, wtm]) => {
         setFavoriteIds(new Set(favs.map((r) => r.recipe_id)))
         setWantToMakeIds(new Set(wtm.map((r) => r.recipe_id)))

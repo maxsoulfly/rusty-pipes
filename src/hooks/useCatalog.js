@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { retryOnClockSkew } from "@/lib/retryOnClockSkew"
 import {
   fetchCocktailFamilies,
   fetchGlassAliases,
@@ -46,17 +47,21 @@ export function useCatalog() {
   // wrong. On a refetch failure, the functional setState spread preserves
   // whatever data was already loaded rather than wiping it to empty.
   const load = useCallback(() => {
-    return Promise.all([
-      fetchIngredientCategories(),
-      fetchIngredientTypes(),
-      fetchIngredientAliases(),
-      fetchProducts(),
-      fetchGlasses(),
-      fetchGlassAliases(),
-      fetchTasteTags(),
-      fetchCocktailFamilies(),
-      fetchLiquidColors(),
-    ])
+    // retryOnClockSkew: absorbs the brief "JWT issued at future" window on the
+    // first read after a startup token refresh (see retryOnClockSkew.js).
+    return retryOnClockSkew(() =>
+      Promise.all([
+        fetchIngredientCategories(),
+        fetchIngredientTypes(),
+        fetchIngredientAliases(),
+        fetchProducts(),
+        fetchGlasses(),
+        fetchGlassAliases(),
+        fetchTasteTags(),
+        fetchCocktailFamilies(),
+        fetchLiquidColors(),
+      ]),
+    )
       .then(
         ([
           categories,

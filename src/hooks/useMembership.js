@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { retryOnClockSkew } from "@/lib/retryOnClockSkew"
 import { fetchMembership, fetchProfile } from "@/services/membership"
 
 export function useMembership(userId) {
@@ -24,7 +25,13 @@ export function useMembership(userId) {
     }
     let active = true
     setState((prev) => ({ ...prev, loading: true }))
-    Promise.all([fetchProfile(userId), fetchMembership(userId)])
+    // First authenticated reads after startup - see retryOnClockSkew.js for
+    // why a freshly refreshed token can be briefly rejected as "issued at
+    // future". The hook stays `loading: true` across the retries, so App.jsx
+    // keeps showing the normal loading screen rather than flashing an error.
+    retryOnClockSkew(() =>
+      Promise.all([fetchProfile(userId), fetchMembership(userId)]),
+    )
       .then(([profile, membership]) => {
         if (active)
           setState({

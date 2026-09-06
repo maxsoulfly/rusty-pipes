@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { retryOnClockSkew } from "@/lib/retryOnClockSkew"
 import { fetchRecipes } from "@/services/recipes"
 
 export function useRecipes() {
@@ -22,7 +23,9 @@ export function useRecipes() {
   // initial fetch used to leave `loading: true` forever, since nothing
   // ever set it false).
   const load = useCallback(() => {
-    return fetchRecipes()
+    // retryOnClockSkew: absorbs the brief "JWT issued at future" window on the
+    // first read after a startup token refresh (see retryOnClockSkew.js).
+    return retryOnClockSkew(() => fetchRecipes())
       .then((data) => {
         setRecipes(data)
         setLoading(false)
