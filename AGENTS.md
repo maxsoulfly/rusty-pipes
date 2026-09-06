@@ -79,8 +79,16 @@ Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, ...). Propose a messag
 - Update it at the end of every completed chunk: verified result, decisions and reasons, migrations/env changes, last test/build result, exact next action, relevant files/areas.
 - Update `CLAUDE.md` or this file only when a durable command, convention, or architectural fact has genuinely changed — remove or correct stale instructions rather than appending contradictions. Don't use either file as a progress diary.
 
+## `docs/project.md` — the user's planning space
+
+`docs/project.md` is the user's own short, hand-written planning doc (Vision, Current Focus, Next, Backlog, Done, Scenarios, brief product Decisions). Keep it scannable and in the user's voice.
+
+- **All engineering progress goes in `current-context.md`**, not here — stage histories, test/build results, commit hashes, resolved-bug writeups, and implementation rationale. Don't duplicate them into `project.md`.
+- **Don't auto-append to `project.md` after a stage.** Change it on explicit request, or for small planning updates only: mark an item "— done", move a finished item out of Current Focus, or adjust priorities the user has agreed to. Keep each item a short line in the user's wording; no histories, test results, details, or long decision explanations.
+- Only record a Decision here if it's a brief, user-approved *product* decision useful for future planning. Everything else belongs in `current-context.md` or the relevant `docs/plans/*` / spec.
+
 ## Toolchain notes for this sandbox
 
-- Node 22, pnpm pinned via `.mise.toml` (10.34.3) — bare `pnpm` is not on PATH; use `corepack pnpm ...` or `npx pnpm ...`.
+- Node 22, pnpm pinned via `.mise.toml` (10.34.3) — bare `pnpm` is not on PATH. Use `corepack pnpm@10.34.3 ...` and pin that version explicitly. **Do not run bare `npx pnpm ...`**: with no `packageManager` field in `package.json`, npx/corepack fetch the latest pnpm (v12), which on this machine tries to wipe `node_modules`, fails with "Access is denied", and leaves a broken install — recover with `corepack pnpm@10.34.3 install --frozen-lockfile`.
 - Supabase CLI is not globally installed — use `npx supabase ...` (confirmed reachable, v2.114.0).
 - No git repository exists yet.
