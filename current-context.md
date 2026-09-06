@@ -35,7 +35,7 @@ Each numbered step is a development chunk boundary for this file.
 2. ~~Investigate the recurring "JWT issued at future" startup error~~ - **root cause identified and a scoped fix committed (`65ecc74`), 2026-09-06. See "Earlier chunk" below.** `first open after idle` verification is still **pending** the user's confirmation on a phone - a separate follow-up, does not block the My Bar redesign. Do not mark it done without a real result.
 3. ~~Complete the existing Stage 5~~ (final integration review/regression/docs close-out) for the Cocktail Library + My Bar UX effort (item 16) - **done 2026-09-07, no defects found, feature complete. See "Last completed chunk" below.**
 4. ~~Begin Stage 1 of the approved My Bar UX redesign~~ (item 17) - **done and committed 2026-09-07 (`9afc57c`). All manual mobile checks confirmed passed by the user, 2026-09-07.**
-5. ~~My Bar redesign Stage 2 (shelf visuals + the admin ⋯ header menu)~~ - **done and committed 2026-09-07. Mobile verification pending the user's iPhone check (checklist in "Last completed chunk"). Stop after this stage.** Speed Rack (Stage 3) stays deferred behind the `db push` migration-history mismatch.
+5. ~~My Bar redesign Stage 2 (shelf visuals + the admin ⋯ header menu)~~ - **built (`bda465a`) + follow-up trigger/visibility fix (`a1a9d84`), 2026-09-07.** Mobile verification pending: the user's first check ran against a **stale preview build older than `bda465a`** (no shelves, no ⋯ menu) - see the Stage 2 chunk's "Follow-up" section. The admin ⋯ shortcut check is recorded **FAILED** until re-checked on a build that includes `bda465a`/`a1a9d84`; the other Stage 2 checks are unreported. **Next session: confirm the user has redeployed, then get the Stage 2 checklist results.** Speed Rack (Stage 3) stays deferred behind the `db push` migration-history mismatch.
 
 Separately, still true, none blocking: the cosmetic pluralize-at-save-time item (serving-size Stage 1 chunk below) and the `db push` migration-history mismatch (`docs/my-bar-ux-plan.md` Database dependencies - blocks the My Bar plan's Speed Rack stage) remain untouched.
 
@@ -49,7 +49,20 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 ## Last completed chunk (My Bar redesign Stage 2 - shelf visuals + admin ⋯ header menu)
 
-**Committed `bda465a`, 2026-09-07. Mobile verification pending the user's iPhone check (checklist below). Stop after this stage - Stage 3 (Speed Rack) stays deferred behind the `db push` migration-history mismatch.**
+**Committed `bda465a`, 2026-09-07. Follow-up fix `a1a9d84` (see below). Mobile verification pending the user's iPhone check (checklist below). Stop after this stage - Stage 3 (Speed Rack) stays deferred behind the `db push` migration-history mismatch.**
+
+### Follow-up: "admin ⋯ menu missing" investigation (`a1a9d84`, 2026-09-07)
+
+**User tested and saw no ⋯ menu on either header, and also no shelf visuals - the screenshot still showed the pre-Stage-2 bordered cards + family boxes.**
+
+Investigation - the committed code is correct and reachable:
+- `isAdmin` chain intact: `App.jsx` sets `outletContext.isAdmin = profile?.role === "admin"`; `MyBarScreen` and `AddIngredientsScreen` both destructure it from `useOutletContext()` and pass it down (`SearchFilterHeader` prop / `TopBar` `right` slot); `AdminMenu` renders a 44px `<button>` whenever `isAdmin` is truthy (hooks run before its `if (!isAdmin) return null`).
+- Destination verified: `AdminMenu` -> `navigate("/admin?tab=types")`; `AdminScreen` now reads `?tab=` once on mount, `visibleTabs.some(id === "types")` is true, so `tab` initialises to `"types"` and `{tab === "types" && <TypesTab/>}` renders. `/admin` stays behind `RequireStaff`.
+- `git ls-remote origin refs/heads/main` = `9d9e57d`, which contains `bda465a` - **Stage 2 is on GitHub `main`**. A fresh `corepack pnpm@10.34.3 build` bundle contains `"Edit ingredients"`, `"Ingredient admin"`, `tab=types`.
+- **Conclusion: the tested preview is running a build older than `bda465a`** - it is missing *both* Stage 2 features at once (shelves and the menu), which rules out a role/wiring bug and points at deploy/serve staleness. Could not reach or inspect the running server from the agent shell (`$PORT` empty; nothing responding on 8443/5173/3000/8080/4173), so the redeploy has to happen on the user's side (git remote is already current; `vite build` output is already correct).
+- `a1a9d84` hardens the trigger so it can't be overlooked once the current build is live: bolder `IconDots` (r 1.5 -> 2), full-contrast `text-tx`, clearer bordered button, `title`. No behaviour change - admins only, page-level, never on a tile, destination `/admin?tab=types`.
+
+**Stage 2 mobile checklist status: the admin ⋯ shortcut check is recorded as FAILED (not seen on the tested build) pending the user's re-check on a build that actually includes `bda465a`/`a1a9d84`. The other Stage 2 checks below are unreported.**
 
 ### Approved plan revision (recorded in `docs/my-bar-ux-plan.md`, Decision 5)
 
