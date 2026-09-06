@@ -17,6 +17,7 @@ import { useLists } from "@/hooks/useLists"
 import { useMembership } from "@/hooks/useMembership"
 import { useRecipes } from "@/hooks/useRecipes"
 import { useSupabaseSession } from "@/hooks/useSupabaseSession"
+import AddIngredientsScreen from "@/screens/AddIngredientsScreen"
 import AddProductScreen from "@/screens/AddProductScreen"
 import AdminScreen from "@/screens/AdminScreen"
 import DetailScreen from "@/screens/DetailScreen"
@@ -370,6 +371,10 @@ function AuthenticatedApp() {
         <Route path="/library/:id" element={<DetailScreen />} />
         <Route path="/library/:id/edit" element={<EditorScreen />} />
         <Route path="/bar" element={<MyBarScreen />} />
+        {/* Owned-first My ingredients (/bar) vs. the separate category-first
+            "find and add" flow. /bar/add stays the specific-bottle tracker,
+            now reached from within Add ingredients. */}
+        <Route path="/bar/add-ingredients" element={<AddIngredientsScreen />} />
         <Route path="/bar/add" element={<AddProductScreen />} />
         {/* Two routes, one screen - `kind` tells IngredientDetailScreen
             which id flavor it received rather than sniffing the path.

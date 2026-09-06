@@ -1,8 +1,9 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import clsx from "clsx"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { CocktailCard } from "@/components/CocktailCard"
-import { IconBottle, IconGlass } from "@/components/icons"
+import { IconBottle, IconEdit, IconGlass } from "@/components/icons"
+import { IngredientTypeEditor } from "@/components/IngredientTypeEditor"
 import { TopBar } from "@/components/Nav"
 import {
   AVAIL_CFG,
@@ -62,8 +63,13 @@ function matchAnnotation(match) {
 export default function IngredientDetailScreen({ kind }) {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { computed, catalog } = useOutletContext()
+  const { computed, catalog, isAdmin } = useOutletContext()
   const { types, products } = catalog
+  // Admin-only "Edit type" convenience, moved here from My Bar's old inline
+  // grid pencil (My Bar redesign Stage 1). Full type management still lives
+  // in Admin -> Ingredient Types; this is the same shared IngredientTypeEditor
+  // reachable from where an admin is already looking at the type.
+  const [editing, setEditing] = useState(false)
 
   const product = kind === "product" ? products.find((p) => p.id === id) : null
   const resolvedType =
@@ -119,8 +125,41 @@ export default function IngredientDetailScreen({ kind }) {
 
   return (
     <div className="pb-[calc(96px_+_env(safe-area-inset-bottom,0px))]">
-      <TopBar title={displayName} onBack={() => navigate(-1)} />
+      <TopBar
+        title={displayName}
+        onBack={() => navigate(-1)}
+        right={
+          isAdmin &&
+          !editing && (
+            <button
+              onClick={() => setEditing(true)}
+              aria-label={`Edit the ${resolvedType.name} ingredient type`}
+              className="rounded-sm w-9 h-9 cursor-pointer flex items-center justify-center border bg-surface border-bdr text-tx2"
+            >
+              <IconEdit size={16} />
+            </button>
+          )
+        }
+      />
       <div className="p-4">
+        {editing && (
+          <div className="mb-6">
+            <IngredientTypeEditor
+              type={resolvedType}
+              categories={catalog.categories}
+              types={types}
+              aliases={catalog.aliases}
+              liquidColors={catalog.liquidColors}
+              onAliasesChanged={catalog.refetch}
+              onSaved={async () => {
+                await catalog.refetch()
+                setEditing(false)
+              }}
+              onCancel={() => setEditing(false)}
+            />
+          </div>
+        )}
+
         {/* Only shown when it adds real information - viewing a type
             directly never shows this, since it would just repeat the
             title above. */}

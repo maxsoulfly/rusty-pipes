@@ -1,12 +1,12 @@
-import { useMemo, useState } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useOutletContext } from "react-router-dom"
 import { IngredientIcon } from "@/components/IngredientIcon"
-import { IngredientTypeEditor } from "@/components/IngredientTypeEditor"
 import { EmptyState } from "@/components/myBar/EmptyState"
 import { ExpandedProducts } from "@/components/myBar/ExpandedProducts"
 import { FamilyCluster } from "@/components/myBar/FamilyCluster"
 import { SearchFilterHeader } from "@/components/myBar/SearchFilterHeader"
 import { TypeCard } from "@/components/myBar/TypeCard"
+import { Btn } from "@/components/primitives"
 
 // Within a category, order by real-world "how likely is this on a bar" -
 // bar_priority already exists on every type (currently only consumed by
@@ -19,9 +19,41 @@ const byPriorityThenName = (a, b) =>
   (PRIORITY_RANK[a.bar_priority] ?? 99) -
     (PRIORITY_RANK[b.bar_priority] ?? 99) || a.name.localeCompare(b.name)
 
+// My ingredients preserves its own browsing state (search text, category
+// jump, which type rows are expanded, scroll offset) across a round trip to
+// an ingredient/bottle recipe page and back. React Router does NOT restore
+// any of this on its own - the screen fully unmounts when navigating to
+// /bar/type/:id, so component state is gone and navigate(-1) only brings
+// back the URL. sessionStorage is the least invasive fix: session-scoped,
+// survives the unmount, and every read/write is guarded (private mode /
+// quota / disabled storage all just mean "don't restore").
+const VIEW_STATE_KEY = "rustyPipes.myIngredients.viewState"
+function readViewState() {
+  try {
+    const raw = sessionStorage.getItem(VIEW_STATE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+function patchViewState(patch) {
+  try {
+    const current = readViewState() ?? {}
+    sessionStorage.setItem(
+      VIEW_STATE_KEY,
+      JSON.stringify({ ...current, ...patch }),
+    )
+  } catch {
+    /* storage unavailable - fine, state just won't be restored */
+  }
+}
+// The scroll happens on AppShell's own overflow container (App.jsx), not
+// window - MyBarScreen doesn't own that DOM node, so walk up to it.
+const findScroller = (el) => el?.closest(".overflow-y-auto") ?? null
+
 export default function MyBarScreen() {
   const navigate = useNavigate()
-  const { catalog, inventory, isAdmin, isStaff } = useOutletContext()
+  const { catalog, inventory, isAdmin } = useOutletContext()
   const {
     loading: catalogLoading,
     categories,
@@ -37,22 +69,13 @@ export default function MyBarScreen() {
     toggleProduct,
   } = inventory
 
-  const [query, setQuery] = useState("")
-  const [cat, setCat] = useState("All")
-  const [ownedOnly, setOwnedOnly] = useState(false)
-
-  // Ingredient-type correction - once a type was created (Single Ingredient,
-  // batch import, or a live data fix), nothing could ever edit it again, not
-  // even an admin. The form itself is IngredientTypeEditor, shared with
-  // Admin's own Ingredient Types tab - here we just track which type (if
-  // any) is currently being edited.
-  const [editingTypeId, setEditingTypeId] = useState(null)
-
-  // Which type rows have their full product list expanded - separate from
-  // ownership, since browsing what's in the shared catalog (e.g. products an
-  // admin just batch-imported) is the only way to then claim one without
-  // retyping its name into Add Product and creating a duplicate row.
-  const [expandedTypeIds, setExpandedTypeIds] = useState(new Set())
+  // Hydrate browsing state once, from the last visit this session.
+  const restored = useRef(readViewState()).current
+  const [query, setQuery] = useState(restored?.query ?? "")
+  const [cat, setCat] = useState(restored?.cat ?? "All")
+  const [expandedTypeIds, setExpandedTypeIds] = useState(
+    () => new Set(restored?.expandedTypeIds ?? []),
+  )
   const toggleExpanded = (typeId) =>
     setExpandedTypeIds((prev) => {
       const next = new Set(prev)
@@ -60,6 +83,48 @@ export default function MyBarScreen() {
       else next.add(typeId)
       return next
     })
+
+  const rootRef = useRef(null)
+  // Kept pointed at AppShell's scroll container after every render (it may
+  // not exist yet on the loading render) so the unmount handler below can
+  // still read scrollTop even though React has detached rootRef by then.
+  const scrollerRef = useRef(null)
+  useEffect(() => {
+    scrollerRef.current = findScroller(rootRef.current)
+  })
+
+  // Persist filters/expanded whenever they change.
+  useEffect(() => {
+    patchViewState({
+      query,
+      cat,
+      expandedTypeIds: [...expandedTypeIds],
+    })
+  }, [query, cat, expandedTypeIds])
+
+  // Capture scroll offset on unmount (i.e. exactly when navigating to a
+  // recipe page) - a scroll listener would be needless churn since this is
+  // the only moment the value matters.
+  useEffect(() => {
+    return () => {
+      if (scrollerRef.current) {
+        patchViewState({ scrollTop: scrollerRef.current.scrollTop })
+      }
+    }
+  }, [])
+
+  // Restore scroll once, after the first render that actually has content
+  // (the loading branch below renders a shorter placeholder, so restoring
+  // before data lands would just clamp to the bottom of that).
+  const didRestoreScroll = useRef(false)
+  useLayoutEffect(() => {
+    if (didRestoreScroll.current || catalogLoading || inventoryLoading) return
+    const scroller = findScroller(rootRef.current)
+    if (!scroller) return
+    didRestoreScroll.current = true
+    const saved = readViewState()
+    if (saved?.scrollTop) scroller.scrollTop = saved.scrollTop
+  })
 
   const productsByType = useMemo(() => {
     const map = new Map()
@@ -85,8 +150,12 @@ export default function MyBarScreen() {
 
   // "Owned" for display combines generic ownership and any owned product
   // mapped to the type, per the spec ("owning a product satisfies its
-  // mapped generic type"). The toggle itself only ever writes the generic
-  // row - see useInventory.js.
+  // mapped generic type"). Direct ownership only - a parent type is NOT
+  // treated as owned just because an owned child (e.g. Dark Rum) satisfies
+  // it for recipe matching. That keeps an inferred parent out of My
+  // ingredients as a standalone possession (My Bar redesign Stage 1),
+  // while an explicitly owned parent still shows. The toggle itself only
+  // ever writes the generic row - see useInventory.js.
   const isOwned = (typeId) =>
     ownedTypeIds.has(typeId) || productsByType.has(typeId)
 
@@ -99,6 +168,11 @@ export default function MyBarScreen() {
     [categories],
   )
   const cats = ["All", ...categories.map((c) => c.name)]
+  // A restored category that has since been renamed/removed would silently
+  // filter everything out - fall back to "All" rather than showing an empty
+  // screen with a stale label.
+  const effectiveCat =
+    cat === "All" || categories.some((c) => c.name === cat) ? cat : "All"
 
   // Some types are mid-level groupings for a category (e.g. "Rum", "Whiskey"
   // under Spirit - see supabase/migrations/20260816010047) rather than
@@ -131,9 +205,16 @@ export default function MyBarScreen() {
     return map
   }, [aliases])
 
+  // /bar is owned-only now (My Bar redesign Stage 1) - finding and adding
+  // ingredients is its own flow at /bar/add-ingredients.
+  const hasAnyOwned = ownedTypeIds.size > 0 || ownedProductIds.size > 0
+
   const filtered = types.filter((t) => {
-    if (ownedOnly && !isOwned(t.id)) return false
-    if (cat !== "All" && categoryNameById.get(t.category_id) !== cat)
+    if (!isOwned(t.id)) return false
+    if (
+      effectiveCat !== "All" &&
+      categoryNameById.get(t.category_id) !== effectiveCat
+    )
       return false
     if (query) {
       const q = query.toLowerCase()
@@ -148,8 +229,8 @@ export default function MyBarScreen() {
 
   // Renders parent types followed immediately by their (filtered) children,
   // indented - a child whose parent didn't pass the filter (e.g. searching
-  // "dark" matches "Dark Rum" but not "Rum") still shows, just flat, so
-  // grouping never hides a real search match.
+  // "dark" matches "Dark Rum" but not "Rum", or the parent simply isn't
+  // owned) still shows, just flat, so grouping never hides a real match.
   const buildRows = (items) => {
     const filteredIds = new Set(items.map((t) => t.id))
     const topLevel = items.filter((t) => !t.parent_type_id)
@@ -213,34 +294,15 @@ export default function MyBarScreen() {
         expanded={expanded}
         onToggleExpand={() => toggleExpanded(type.id)}
         coveringChildren={coveringChildren}
-        isStaff={isStaff}
-        onEditType={() => setEditingTypeId(type.id)}
         // Tap-to-view, not tap-to-select - the one deliberate difference
-        // from Build Your Bar's own use of this same shared card (see
-        // current-context.md's Stage 4 chunk). Only the dedicated
-        // checkmark button changes ownership here.
+        // from Build Your Bar / Add ingredients, which use this same shared
+        // card for tap-to-own. Only the dedicated checkmark button changes
+        // ownership here.
         onCardClick={() => navigate(`/bar/type/${type.id}`)}
         onToggleOwned={() => toggleType(type.id)}
       />
     )
   }
-
-  const renderEditForm = (type, style) => (
-    <IngredientTypeEditor
-      type={type}
-      categories={categories}
-      types={types}
-      aliases={aliases}
-      liquidColors={catalog.liquidColors}
-      onAliasesChanged={catalog.refetch}
-      style={style}
-      onSaved={async () => {
-        await catalog.refetch()
-        setEditingTypeId(null)
-      }}
-      onCancel={() => setEditingTypeId(null)}
-    />
-  )
 
   const renderExpanded = (type, style) => {
     if (!expandedTypeIds.has(type.id)) return null
@@ -270,15 +332,16 @@ export default function MyBarScreen() {
   }
 
   return (
-    <div className="pb-[calc(96px_+_env(safe-area-inset-bottom,0px))]">
+    <div
+      ref={rootRef}
+      className="pb-[calc(96px_+_env(safe-area-inset-bottom,0px))]"
+    >
       <SearchFilterHeader
         query={query}
         onQueryChange={setQuery}
-        onAddClick={() => navigate("/bar/add")}
-        ownedOnly={ownedOnly}
-        onToggleOwnedOnly={() => setOwnedOnly(!ownedOnly)}
+        onAddClick={() => navigate("/bar/add-ingredients")}
         cats={cats}
-        cat={cat}
+        cat={effectiveCat}
         onCatChange={setCat}
         categoryShapeByName={categoryShapeByName}
       />
@@ -316,16 +379,9 @@ export default function MyBarScreen() {
                       // the grid, so the card and (if expanded) its
                       // full-width product panel both participate as direct
                       // grid items instead of being nested inside one grid
-                      // cell. A standalone card already has its own border
-                      // via Card's own base style - a childless single
-                      // doesn't need FamilyCluster's extra grouping
-                      // wrapper+label, since there's no group to indicate
-                      // (and giving it one would force it to the full row
-                      // width instead of flowing alongside other cards).
+                      // cell.
                       <div key={parent.id} className="contents">
-                        {editingTypeId === parent.id
-                          ? renderEditForm(parent, { gridColumn: "1 / -1" })
-                          : renderCard(parent, false)}
+                        {renderCard(parent, false)}
                         {renderExpanded(parent, { gridColumn: "1 / -1" })}
                       </div>
                     ))}
@@ -338,16 +394,36 @@ export default function MyBarScreen() {
                     key={parent.id}
                     parent={parent}
                     children={children}
-                    editingTypeId={editingTypeId}
                     renderCard={renderCard}
-                    renderEditForm={(t) => renderEditForm(t, { width: "100%" })}
                     renderExpanded={(t) => renderExpanded(t, { width: "100%" })}
                   />
                 ))}
             </div>
           </div>
         ))}
-        {filtered.length === 0 && <EmptyState />}
+
+        {filtered.length === 0 &&
+          (hasAnyOwned ? (
+            <EmptyState />
+          ) : (
+            <div className="text-center py-12 text-tx3">
+              <p className="text-[15px] font-display font-semibold text-tx2">
+                Your bar is empty
+              </p>
+              <p className="mt-1.5 text-[13px]">
+                Add the ingredients you already have to see what you can make.
+              </p>
+              <div className="mt-4 flex justify-center">
+                <Btn
+                  variant="primary"
+                  small
+                  onClick={() => navigate("/bar/add-ingredients")}
+                >
+                  Add ingredients
+                </Btn>
+              </div>
+            </div>
+          ))}
       </div>
     </div>
   )

@@ -1,5 +1,5 @@
 import clsx from "clsx"
-import { IconCheck, IconChevD, IconChevR, IconEdit } from "@/components/icons"
+import { IconCheck, IconChevD, IconChevR } from "@/components/icons"
 import { IngredientIcon } from "@/components/IngredientIcon"
 import { Card } from "@/components/primitives"
 
@@ -12,11 +12,16 @@ import { Card } from "@/components/primitives"
 // silently changing what's owned (found as a real inconsistency during the
 // Cocktail Library + My Bar UX audit: ExpandedProducts.jsx already got
 // this right via its own OwnedToggle, this card didn't). Each consumer
-// decides what tapping the card body does: Build Your Bar passes the same
-// function to both (preserving its existing tap-to-select-and-own
-// behavior exactly), My Bar passes a navigate-to-view handler to
-// `onCardClick` and keeps `onToggleOwned` as the only thing the dedicated
-// checkmark button below ever does.
+// decides what tapping the card body does: Build Your Bar and Add
+// ingredients pass the same function to both (tap-to-select-and-own), My
+// ingredients passes a navigate-to-view handler to `onCardClick` and keeps
+// `onToggleOwned` as the only thing the dedicated checkmark button below
+// ever does.
+//
+// Admin ingredient-type editing is NOT here - it moved to an admin-only
+// "Edit type" action on IngredientDetailScreen (My Bar redesign Stage 1);
+// full editing also stays in Admin -> Ingredient Types. Keeping the pencil
+// off the browsing grid keeps the card a pure browse/own control.
 export function TypeCard({
   type,
   isChild,
@@ -26,8 +31,6 @@ export function TypeCard({
   expanded,
   onToggleExpand,
   coveringChildren,
-  isStaff,
-  onEditType,
   onCardClick,
   onToggleOwned,
 }) {
@@ -51,17 +54,14 @@ export function TypeCard({
         background: owned ? "rgba(34,211,238,0.08)" : "var(--surface)",
       }}
     >
-      {/* Always rendered now - the ownership checkmark must always be
-          reachable, not just "when there's something to show" (the old
-          reasoning for hiding this row entirely on a plain unowned
-          no-products card no longer applies once ownership has its own
-          always-present control). flex-wrap is a deliberate defensive
-          choice, not decorative: the checkmark button alone is 44x44px
-          (a stricter minimum than the 32px chevron/edit already use,
-          per the explicit touch-target requirement) on cards as narrow as
-          104px in My Bar's own singles grid - wrapping to a second line
-          rather than overflowing/clipping if a family-cluster child card
-          (with all three controls at once) can't fit them on one row. */}
+      {/* Always rendered - the ownership checkmark must always be reachable,
+          not just "when there's something to show". flex-wrap is a
+          deliberate defensive choice: the checkmark button alone is 44x44px
+          (a stricter minimum than the 32px chevron, per the explicit
+          touch-target requirement) on cards as narrow as 104px in My
+          ingredients' own singles grid - wrapping to a second line rather
+          than overflowing/clipping if the checkmark + expand chevron can't
+          fit one row on a family-cluster child card. */}
       <div className="w-full flex flex-wrap items-center justify-between gap-1">
         <button
           onClick={(e) => {
@@ -83,32 +83,18 @@ export function TypeCard({
         >
           {owned && <IconCheck size={14} />}
         </button>
-        <div className="flex gap-0.5">
-          {allProducts.length > 0 && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onToggleExpand()
-              }}
-              title={`${allProducts.length} product(s)`}
-              className="bg-transparent border-none cursor-pointer w-8 h-8 text-tx3 flex items-center justify-center"
-            >
-              {expanded ? <IconChevD size={12} /> : <IconChevR size={12} />}
-            </button>
-          )}
-          {isStaff && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onEditType()
-              }}
-              title="Edit ingredient type"
-              className="bg-transparent border-none cursor-pointer w-8 h-8 text-tx3 flex items-center justify-center"
-            >
-              <IconEdit size={12} />
-            </button>
-          )}
-        </div>
+        {allProducts.length > 0 && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleExpand()
+            }}
+            title={`${allProducts.length} product(s)`}
+            className="bg-transparent border-none cursor-pointer w-8 h-8 text-tx3 flex items-center justify-center"
+          >
+            {expanded ? <IconChevD size={12} /> : <IconChevR size={12} />}
+          </button>
+        )}
       </div>
       {/* No tinted background tile - the icon's own fillColor already
           carries the ingredient's real color (same as a "Clear" swatch,

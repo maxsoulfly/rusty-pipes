@@ -8,11 +8,11 @@ import {
 } from "@/data/buildYourBarEssentials"
 import { resolveEssentialsList } from "@/domain/buildYourBar"
 
-// Build Your Bar never shows product-level detail (that's My Bar's job,
-// reached via "Find more ingredients") - every TypeCard here is always
-// generic-ownership-only, so the expand/edit callbacks are permanently
-// no-ops and never actually invoked (TypeCard only renders those buttons
-// when allProducts.length > 0 or isStaff, both always false/empty here).
+// Build Your Bar never shows product-level detail (that's the Add
+// ingredients / My ingredients job, reached via "Find more ingredients") -
+// every TypeCard here is always generic-ownership-only, so onToggleExpand
+// is a permanent no-op and never actually invoked (TypeCard only renders
+// the expand chevron when allProducts.length > 0, always empty here).
 const NOOP = () => {}
 
 // Resolves a curated name list against the live catalog, dropping (not
@@ -69,8 +69,8 @@ export function BuildYourBar({ catalog, inventory, computed }) {
   const renderTile = (type) => {
     // Tap-to-select, preserved exactly - both the card body and the
     // dedicated checkmark button toggle the same thing here, unlike My
-    // Bar (see current-context.md's Stage 4 chunk for why the two screens
-    // deliberately differ on what a card tap does).
+    // ingredients (see current-context.md's Stage 4 chunk for why the two
+    // screens deliberately differ on what a card tap does).
     const toggle = () => inventory.toggleType(type.id)
     return (
       <TypeCard
@@ -83,8 +83,6 @@ export function BuildYourBar({ catalog, inventory, computed }) {
         expanded={false}
         onToggleExpand={NOOP}
         coveringChildren={[]}
-        isStaff={false}
-        onEditType={NOOP}
         onCardClick={toggle}
         onToggleOwned={toggle}
       />
@@ -157,7 +155,11 @@ export function BuildYourBar({ catalog, inventory, computed }) {
             Show my cocktails
           </Btn>
         )}
-        <Btn variant="ghost" full onClick={() => navigate("/bar?focus=1")}>
+        <Btn
+          variant="ghost"
+          full
+          onClick={() => navigate("/bar/add-ingredients?focus=1")}
+        >
           Find more ingredients
         </Btn>
       </div>
