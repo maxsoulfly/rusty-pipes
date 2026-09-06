@@ -37,9 +37,11 @@ Each numbered step is a development chunk boundary for this file.
 4. ~~Begin Stage 1 of the approved My Bar UX redesign~~ (item 17) - **done and committed 2026-09-07 (`9afc57c`). All manual mobile checks confirmed passed by the user, 2026-09-07.**
 5. ~~My Bar redesign Stage 2 (shelf visuals + the admin ⋯ header menu)~~ - **COMPLETE, 2026-09-07** (`bda465a` + visibility fix `a1a9d84`). Fully mobile-verified by the user on a current build; the earlier "no menu / no shelves" was a stale preview, resolved by a redeploy. See the Stage 2 chunk's "Verification" section.
 
-**My Bar redesign: Stages 1-2 done. The only remaining work is Stage 3 (Speed Rack), which stays deferred behind the `db push` migration-history mismatch - do not start it.** No active task queued.
+**My Bar redesign: Stages 1-2 done. Stage 3 (Speed Rack) stays deferred - do not start it.**
 
-Separately, still true, none blocking: the cosmetic pluralize-at-save-time item (serving-size Stage 1 chunk below) and the `db push` migration-history mismatch (`docs/my-bar-ux-plan.md` Database dependencies - blocks the My Bar plan's Speed Rack stage) remain untouched.
+**Migration-history mismatch: read-only audit done 2026-09-07 (see "Last completed chunk"). Conclusion: all 14 unrecorded migrations are FULLY applied to the live DB - the fix is a ledger-only `supabase migration repair`, no DDL/DML replay. Repair proposal written, NOT executed - awaiting the user's review before any DB change.** This is the blocker in front of Speed Rack.
+
+Separately, still true, none blocking: the cosmetic pluralize-at-save-time item (serving-size Stage 1 chunk below) remains untouched.
 
 Otherwise unrelated, still open from Phase 6, none blocking:
 
@@ -49,7 +51,56 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## Last completed chunk (My Bar redesign Stage 2 - shelf visuals + admin ⋯ header menu)
+## Last completed chunk (Migration-history mismatch - read-only audit, 2026-09-07)
+
+**Scope: read-only. No DB writes, no `migration repair`, no `db push`, no replay. A repair is proposed below for the user to review and run.**
+
+### What the ledger says (verified fresh, `npx supabase migration list --linked`)
+
+- 46 local migration files. **32 recorded** in the remote `supabase_migrations.schema_migrations` ledger (`20260815200430` -> `20260823160000`, all `local == remote`).
+- **14 NOT recorded** (`remote: ""`): the 13 schema/policy migrations `20260825100000` -> `20260826120000`, plus the `20260905130000` top-up data-repair migration.
+- Confirmed the ledger table itself holds exactly those 32 `version` rows.
+
+### Did each unrecorded migration actually land? (verified against live objects + data, not just names)
+
+**All 14 are FULLY applied.** Zero partial, zero absent, zero uncertain. Evidence per migration:
+
+- `20260825100000 moderator_role` - `is_moderator()`/`is_admin_or_moderator()` exist (both `security definer`, `search_path=public`); `profiles_role_check` = `role IN ('admin','moderator','member')`; `admin_set_user_role` body widened to accept 'moderator' **and still guarded by `if not is_admin()`** (no privilege-escalation).
+- `20260825100100 moderator_catalog_policies` - all **19** write policies across the 7 lookup tables (`ingredient_categories/types/aliases`, `glasses`, `taste_tags`, `cocktail_families`, `liquid_colors`) reference `is_admin_or_moderator()`; **0** still on bare `is_admin(`; policy counts normal (4 per table, `liquid_colors` 2 - it was never split).
+- `20260825100200 moderator_ingredient_requests_policies` - read policy = `(requested_by = auth.uid()) OR is_admin_or_moderator()`; resolve policy = `is_admin_or_moderator()`.
+- `20260825100300 moderator_recipe_moderation_functions` - `admin_promote_recipe_to_classic` / `admin_demote_recipe_to_community` / `unpublish_recipe` bodies all reference `is_admin_or_moderator`; anon can't execute any, authenticated can all.
+- `20260825100400 moderator_function_grant_fix` - `anon` **cannot** execute `is_moderator()` / `is_admin_or_moderator()` (PUBLIC grant revoked); `authenticated` can.
+- `20260825110000 ingredient_type_shapes_and_categories` - `ingredient_types.shape` column (`not null default 'spirit_bottle'`) + `ingredient_types_shape_check` (11 values); categories **Dairy & Eggs** and **Sauce** exist; the 6 relocations landed (`Soy sauce/Tabasco/Worcestershire Sauce` -> Sauce; `Aquafaba/Egg White/Fresh Cream` -> Dairy & Eggs); `Wine.sort_order = 5`; **0** null/invalid shapes; per-row overrides landed (`Ice=ice`, `Salt=jar`, `White Peach Purée=fruit`).
+- `20260825120000 admin_merge_ingredient_type` - function `admin_merge_ingredient_type(uuid,uuid,boolean)` exists. (Separate, unrelated: the Black Pepper/Pepper duplicate this tool was built for has still never actually been merged - a catalog-cleanup task, not a migration gap.)
+- `20260825130000 ingredient_category_shapes` - `ingredient_categories.shape` column + `ingredient_categories_shape_check`; **0** null; spot checks correct (`Wine=wine_bottle`, `Bitters=dropper`, `Sauce=sauce_bottle`, `Dairy & Eggs=dairy`).
+- `20260825140000 glass_aliases` - table `glass_aliases (id, glass_id, alias)`, both indexes (`_glass_id_idx`, `_alias_lower_idx`), RLS enabled, **4** policies with the right expressions (read = `is_member() OR is_admin()`, writes = `is_admin_or_moderator()`).
+- `20260825150000 recipe_liquid_color_2` - `recipes.liquid_color_2` (text, nullable); table-level UPDATE on `recipes` **revoked** from `authenticated`; column-UPDATE grant list = exactly `{name, description, glass_id, family_id, liquid_color, liquid_color_2, steps}`.
+- `20260826100000 liquid_colors_alpha` - `liquid_colors_hex_check` = `hex ~* '^#[0-9a-f]{6}([0-9a-f]{2})?$'`; `Clear` row hex = `#dbeafe80`.
+- `20260826110000 recipe_popularity_counters` - `recipes.favorite_count` / `want_to_make_count` (`integer not null default 0`); both `sync_*` functions exist; both triggers (`user_favorites_sync_count`, `user_want_to_make_sync_count`) exist and enabled; **backfill is exact** - 0 recipes where the stored count differs from a live `count(*)`, `sum(favorite_count) = 4 = total user_favorites rows`; `favorite_count` is **not** in the authenticated column grant (privacy shape intact).
+- `20260826120000 public_recipe_share` - `get_shared_recipe(uuid)` exists, `security definer`, filters `visibility='shared' AND moderation_status='active'`, executable by `anon`.
+- `20260905130000 fix_topup_part_corruption` (DATA) - **effect fully present**: **0** `recipe_components` rows anywhere have `unit_label = 'top-up part'`, and there are no out-of-vocabulary unit labels at all (every non-ml, non-numeric label is exactly `top-up` or `to taste`). Nuance: 4 of the 5 row ids the migration targets still exist and read `'top-up'`; the 5th (`4c0031a9…`, "Bloody Mary: Ice") **no longer exists** - that recipe was re-saved since (recipe-component edits delete+reinsert all rows), so its Ice component now has a new id (`fda6a271…`) and was written correctly as `'top-up'` by the shipped `parseUnitLabel()` fix. So the repair is complete; replaying this migration now would be a no-op (`where unit_label = 'top-up part'` matches nothing). User data intact: 43 recipes (8 user-owned), 234 recipe_components, nothing malformed.
+
+### Why `db push` fails
+
+`supabase db push` replays every local migration whose version is absent from the remote ledger, in order, from `20260825100000`. That file's `create function public.is_moderator() …` hits an object that already exists -> `is_moderator already exists` -> the whole push aborts. It is not a data problem; it is purely the ledger being out of sync with reality (those 14 were applied out-of-band via `supabase db query --linked --file`, which never writes the ledger).
+
+### Proposed smallest safe repair (NOT executed - for review)
+
+`supabase migration repair` only inserts/deletes rows in the `schema_migrations` **ledger**. It runs **no** migration DDL/DML. Since all 14 are verified fully applied, marking them `applied` is accurate.
+
+1. **Snapshot the ledger first** (recovery baseline):
+   `npx supabase db query --linked --file -` with `select version from supabase_migrations.schema_migrations order by version;` -> save output.
+2. **Mark the 14 as applied** (one call, ledger-only):
+   `npx supabase migration repair --linked --status applied 20260825100000 20260825100100 20260825100200 20260825100300 20260825100400 20260825110000 20260825120000 20260825130000 20260825140000 20260825150000 20260826100000 20260826110000 20260826120000 20260905130000`
+3. **Verify**: `npx supabase migration list --linked` -> all 46 rows show `local == remote`.
+4. **Confirm push is unblocked**: `npx supabase db push --linked` -> expect **"Remote database is up to date."** (a clean no-op). Only run this *after* step 2.
+5. **Recovery if step 2 goes wrong**: `npx supabase migration repair --linked --status reverted <version…>` removes any ledger row that shouldn't be there; compare against the step-1 snapshot. No data restore is ever needed - `migration repair` cannot touch table data or schema.
+
+Alternative for `20260905130000` only: since it is now a no-op, it could instead be **deleted from `supabase/migrations/`** rather than marked applied. Recommendation: mark it applied like the rest - keeps the history file as the record of a real incident, and future contributors see it was handled.
+
+Not doing any of this yet - waiting for the user's go-ahead.
+
+## Earlier chunk (My Bar redesign Stage 2 - shelf visuals + admin ⋯ header menu)
 
 **Committed `bda465a`, 2026-09-07. Follow-up fix `a1a9d84` (see below). Stage 2 is COMPLETE - fully mobile-verified by the user 2026-09-07 (see "Verification" below). Stage 3 (Speed Rack) stays deferred behind the `db push` migration-history mismatch - not started.**
 
