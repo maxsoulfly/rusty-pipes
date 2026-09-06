@@ -1,49 +1,44 @@
 import { IngredientIcon } from "@/components/IngredientIcon"
 
-// A parent type with children renders as its own bordered "family" cluster
-// spanning the full grid width, instead of relying on card size alone to
-// suggest the relationship - that read as too subtle once there were 10+
-// cards in a row. `renderCard`/`renderExpanded` come from the screen shell
-// so the same per-type dispatch logic used for a standalone (non-clustered)
-// type isn't duplicated here - this component only owns the cluster's
-// box/layout.
+// A parent type with children, on the shelf (My Bar redesign Stage 2).
+// Softened from the old bordered card to just a small label plus its own
+// stretch of shelf - it reads as part of the same shelf, not a separate
+// box. The grouping logic still comes from the screen; this component only
+// owns the label + sub-shelf layout. `renderCard`/`renderExpanded` are the
+// same per-type dispatch used for standalone types.
 export function FamilyCluster({
   parent,
   children,
   renderCard,
   renderExpanded,
 }) {
+  const members = [
+    { type: parent, isChild: false },
+    ...children.map((c) => ({ type: c, isChild: true })),
+  ]
   return (
-    <div className="col-span-full border border-bdr rounded-lg bg-white/2 pt-2.5 px-2.5 pb-3 flex flex-col gap-2">
-      <div className="flex items-center gap-1.5">
-        {/* The parent IS a real ingredient type (Rum, Whiskey, ...) - reuse
-            its own shape/color exactly as TypeCard renders it below, rather
-            than a flat neutral icon, so the label reads as "this cluster is
-            the same bottle" instead of a second, disconnected pictogram. */}
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-1.5 pl-1">
         <IngredientIcon
           shape={parent.shape}
-          size={14}
+          size={12}
           color="var(--text3)"
           fillColor={parent.color ?? "#4e6680"}
         />
         <div className="text-[10px] font-bold text-tx3 uppercase tracking-[0.06em] font-display">
-          {parent.name} family
+          {parent.name}
         </div>
       </div>
-      {/* w-28/w-30 gives the top control row (44px checkmark + 32px expand
-          chevron) and the icon below real room without either overflowing
-          on a narrow phone. */}
-      <div className="flex flex-wrap gap-2">
-        <div className="w-30">{renderCard(parent, false)}</div>
-        {children.map((child) => (
-          <div key={child.id} className="w-28">
-            {renderCard(child, true)}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-x-0 gap-y-5">
+        {members.map(({ type, isChild }) => (
+          // display:contents so the card and (when expanded) its full-width
+          // product panel are both direct grid items.
+          <div key={type.id} className="contents">
+            {renderCard(type, isChild)}
+            {renderExpanded(type, { gridColumn: "1 / -1" })}
           </div>
         ))}
       </div>
-      {[parent, ...children].map((t) => (
-        <div key={`expanded-${t.id}`}>{renderExpanded(t)}</div>
-      ))}
     </div>
   )
 }

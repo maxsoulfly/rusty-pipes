@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { IconChevD, IconPlus, IconSearch } from "@/components/icons"
 import { IngredientIcon } from "@/components/IngredientIcon"
+import { AdminMenu } from "@/components/myBar/AdminMenu"
 import { BottomSheet, FilterChip } from "@/components/primitives"
 
 // My ingredients' sticky header: search within the owned set, a visible
@@ -17,6 +18,7 @@ export function SearchFilterHeader({
   cat,
   onCatChange,
   categoryShapeByName,
+  isAdmin,
 }) {
   const [catPickerOpen, setCatPickerOpen] = useState(false)
   const catTriggerRef = useRef(null)
@@ -30,18 +32,21 @@ export function SearchFilterHeader({
   }, [searchParams])
   return (
     <div className="pt-4 px-4 pb-3 bg-bg2 border-b border-bdr sticky top-0 z-10 backdrop-blur-md">
-      <div className="relative mb-2">
-        <IconSearch
-          size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-tx3"
-        />
-        <input
-          ref={searchInputRef}
-          placeholder="Search your bar..."
-          value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
-          className="bg-surface border border-bdr rounded-sm py-[9px] pl-9 pr-3 text-tx text-sm font-body w-full"
-        />
+      <div className="flex gap-2 mb-2">
+        <div className="relative flex-1">
+          <IconSearch
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-tx3"
+          />
+          <input
+            ref={searchInputRef}
+            placeholder="Search your bar..."
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            className="bg-surface border border-bdr rounded-sm py-[9px] pl-9 pr-3 text-tx text-sm font-body w-full"
+          />
+        </div>
+        <AdminMenu isAdmin={isAdmin} />
       </div>
       <button
         onClick={onAddClick}

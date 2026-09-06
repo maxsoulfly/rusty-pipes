@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react"
 import clsx from "clsx"
-import { useNavigate, useOutletContext } from "react-router-dom"
+import {
+  useNavigate,
+  useOutletContext,
+  useSearchParams,
+} from "react-router-dom"
 import { IconChevD } from "@/components/icons"
 import { TopBar } from "@/components/Nav"
 import {
@@ -67,7 +71,15 @@ export default function AdminScreen() {
   const { catalog, computed, refetchRecipes, userId, isAdmin } =
     useOutletContext()
   const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin)
-  const [tab, setTab] = useState("overview")
+  // Deep-link support (?tab=types) so e.g. My Bar's admin ⋯ menu can open
+  // straight into Ingredient Types. Read once as the initial value, not kept
+  // in sync afterward - manual tab clicks shouldn't rewrite the URL. Falls
+  // back to Overview for an unknown or (for a moderator) admin-only id.
+  const [searchParams] = useSearchParams()
+  const requestedTab = searchParams.get("tab")
+  const [tab, setTab] = useState(
+    visibleTabs.some((t) => t.id === requestedTab) ? requestedTab : "overview",
+  )
   const [invites, setInvites] = useState([])
   const [invitesLoading, setInvitesLoading] = useState(true)
 

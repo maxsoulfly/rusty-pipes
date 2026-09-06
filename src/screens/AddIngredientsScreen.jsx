@@ -7,6 +7,7 @@ import {
 import { IconBack, IconSearch } from "@/components/icons"
 import { IngredientIcon } from "@/components/IngredientIcon"
 import { TopBar } from "@/components/Nav"
+import { AdminMenu } from "@/components/myBar/AdminMenu"
 import { TypeCard } from "@/components/myBar/TypeCard"
 
 // Same within-category order My ingredients uses (see MyBarScreen.jsx) -
@@ -25,7 +26,7 @@ const NOOP = () => {}
 // A specific bottle/brand/homemade product is still tracked via /bar/add.
 export default function AddIngredientsScreen() {
   const navigate = useNavigate()
-  const { catalog, inventory } = useOutletContext()
+  const { catalog, inventory, isAdmin } = useOutletContext()
   const { loading, categories, types, products, aliases } = catalog
   const { ownedTypeIds, ownedProductIds, toggleType } = inventory
 
@@ -121,7 +122,11 @@ export default function AddIngredientsScreen() {
 
   return (
     <div className="pb-[calc(96px_+_env(safe-area-inset-bottom,0px))]">
-      <TopBar title="Add ingredients" onBack={() => navigate(-1)} />
+      <TopBar
+        title="Add ingredients"
+        onBack={() => navigate(-1)}
+        right={<AdminMenu isAdmin={isAdmin} />}
+      />
 
       <div className="p-4">
         <div className="relative mb-4">

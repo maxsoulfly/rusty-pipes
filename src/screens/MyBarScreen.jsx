@@ -5,7 +5,7 @@ import { EmptyState } from "@/components/myBar/EmptyState"
 import { ExpandedProducts } from "@/components/myBar/ExpandedProducts"
 import { FamilyCluster } from "@/components/myBar/FamilyCluster"
 import { SearchFilterHeader } from "@/components/myBar/SearchFilterHeader"
-import { TypeCard } from "@/components/myBar/TypeCard"
+import { ShelfItem } from "@/components/myBar/ShelfItem"
 import { Btn } from "@/components/primitives"
 
 // Within a category, order by real-world "how likely is this on a bar" -
@@ -285,7 +285,7 @@ export default function MyBarScreen() {
         ? (childrenByParentId.get(type.id) ?? []).filter((c) => isOwned(c.id))
         : []
     return (
-      <TypeCard
+      <ShelfItem
         type={type}
         isChild={isChild}
         owned={owned}
@@ -295,9 +295,9 @@ export default function MyBarScreen() {
         onToggleExpand={() => toggleExpanded(type.id)}
         coveringChildren={coveringChildren}
         // Tap-to-view, not tap-to-select - the one deliberate difference
-        // from Build Your Bar / Add ingredients, which use this same shared
-        // card for tap-to-own. Only the dedicated checkmark button changes
-        // ownership here.
+        // from Build Your Bar / Add ingredients, which use TypeCard for
+        // tap-to-own. Only the dedicated checkmark button changes ownership
+        // here.
         onCardClick={() => navigate(`/bar/type/${type.id}`)}
         onToggleOwned={() => toggleType(type.id)}
       />
@@ -344,6 +344,7 @@ export default function MyBarScreen() {
         cat={effectiveCat}
         onCatChange={setCat}
         categoryShapeByName={categoryShapeByName}
+        isAdmin={isAdmin}
       />
 
       <div className="p-4">
@@ -359,27 +360,22 @@ export default function MyBarScreen() {
                 {categoryName}
               </div>
             </div>
-            {/* Singles render as one contiguous block before any family
-                cluster, not interleaved by priority/name order with them.
-                FamilyCluster is `col-span-full` (a real grid-row break, not
-                just a wider card), so a single sandwiched between two
-                clusters in sort order could never actually share a row with
-                any other single - exactly the "Tequila stranded alone,
-                Absinthe+Mezcal stranded alone" layout bug a live screenshot
-                surfaced. Splitting singles from clusters (each half keeping
-                its own priority/name order from `clusters`) fixes that
-                without changing the sort itself. */}
-            <div className="flex flex-col gap-2">
+            {/* Singles render as one contiguous shelf before any family
+                sub-shelf, not interleaved by priority/name order with them -
+                a single sandwiched between two clusters in sort order could
+                otherwise never share a shelf row with another single (the
+                "Tequila stranded alone" layout bug a live screenshot once
+                surfaced). Each half keeps its own priority/name order. */}
+            <div className="flex flex-col gap-6">
               {clusters.some(({ children }) => children.length === 0) && (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(104px,1fr))] gap-2">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-x-0 gap-y-5">
                   {clusters
                     .filter(({ children }) => children.length === 0)
                     .map(({ parent }) => (
                       // display:"contents" makes this wrapper invisible to
-                      // the grid, so the card and (if expanded) its
+                      // the grid, so the shelf item and (if expanded) its
                       // full-width product panel both participate as direct
-                      // grid items instead of being nested inside one grid
-                      // cell.
+                      // grid items.
                       <div key={parent.id} className="contents">
                         {renderCard(parent, false)}
                         {renderExpanded(parent, { gridColumn: "1 / -1" })}
@@ -395,7 +391,7 @@ export default function MyBarScreen() {
                     parent={parent}
                     children={children}
                     renderCard={renderCard}
-                    renderExpanded={(t) => renderExpanded(t, { width: "100%" })}
+                    renderExpanded={renderExpanded}
                   />
                 ))}
             </div>
