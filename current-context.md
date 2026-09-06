@@ -35,7 +35,9 @@ Each numbered step is a development chunk boundary for this file.
 2. ~~Investigate the recurring "JWT issued at future" startup error~~ - **root cause identified and a scoped fix committed (`65ecc74`), 2026-09-06. See "Earlier chunk" below.** `first open after idle` verification is still **pending** the user's confirmation on a phone - a separate follow-up, does not block the My Bar redesign. Do not mark it done without a real result.
 3. ~~Complete the existing Stage 5~~ (final integration review/regression/docs close-out) for the Cocktail Library + My Bar UX effort (item 16) - **done 2026-09-07, no defects found, feature complete. See "Last completed chunk" below.**
 4. ~~Begin Stage 1 of the approved My Bar UX redesign~~ (item 17) - **done and committed 2026-09-07 (`9afc57c`). All manual mobile checks confirmed passed by the user, 2026-09-07.**
-5. ~~My Bar redesign Stage 2 (shelf visuals + the admin ⋯ header menu)~~ - **built (`bda465a`) + follow-up trigger/visibility fix (`a1a9d84`), 2026-09-07.** Mobile verification pending: the user's first check ran against a **stale preview build older than `bda465a`** (no shelves, no ⋯ menu) - see the Stage 2 chunk's "Follow-up" section. The admin ⋯ shortcut check is recorded **FAILED** until re-checked on a build that includes `bda465a`/`a1a9d84`; the other Stage 2 checks are unreported. **Next session: confirm the user has redeployed, then get the Stage 2 checklist results.** Speed Rack (Stage 3) stays deferred behind the `db push` migration-history mismatch.
+5. ~~My Bar redesign Stage 2 (shelf visuals + the admin ⋯ header menu)~~ - **COMPLETE, 2026-09-07** (`bda465a` + visibility fix `a1a9d84`). Fully mobile-verified by the user on a current build; the earlier "no menu / no shelves" was a stale preview, resolved by a redeploy. See the Stage 2 chunk's "Verification" section.
+
+**My Bar redesign: Stages 1-2 done. The only remaining work is Stage 3 (Speed Rack), which stays deferred behind the `db push` migration-history mismatch - do not start it.** No active task queued.
 
 Separately, still true, none blocking: the cosmetic pluralize-at-save-time item (serving-size Stage 1 chunk below) and the `db push` migration-history mismatch (`docs/my-bar-ux-plan.md` Database dependencies - blocks the My Bar plan's Speed Rack stage) remain untouched.
 
@@ -49,7 +51,7 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 ## Last completed chunk (My Bar redesign Stage 2 - shelf visuals + admin ⋯ header menu)
 
-**Committed `bda465a`, 2026-09-07. Follow-up fix `a1a9d84` (see below). Mobile verification pending the user's iPhone check (checklist below). Stop after this stage - Stage 3 (Speed Rack) stays deferred behind the `db push` migration-history mismatch.**
+**Committed `bda465a`, 2026-09-07. Follow-up fix `a1a9d84` (see below). Stage 2 is COMPLETE - fully mobile-verified by the user 2026-09-07 (see "Verification" below). Stage 3 (Speed Rack) stays deferred behind the `db push` migration-history mismatch - not started.**
 
 ### Follow-up: "admin ⋯ menu missing" investigation (`a1a9d84`, 2026-09-07)
 
@@ -63,7 +65,20 @@ Investigation - the committed code is correct and reachable:
 - `a1a9d84` hardens the trigger so it can't be overlooked once the current build is live: bolder `IconDots` (r 1.5 -> 2), full-contrast `text-tx`, clearer bordered button, `title`. No behaviour change - admins only, page-level, never on a tile, destination `/admin?tab=types`.
 - `origin/main` already contained `bda465a` at the time the user tested (a push happened between turns), so the stale link is the **deploy/preview build step, not git** - it did not rebuild from the current `main`. `git push` run this session too: `origin/main` is now `cd5c2b1` (Stage 2 + the `a1a9d84` fix + docs). **The user needs to trigger a fresh build/redeploy of the preview.**
 
-**Stage 2 mobile checklist status: the admin ⋯ shortcut check is recorded as FAILED (not seen on the tested build) pending the user's re-check on a build that actually includes `bda465a`/`a1a9d84`. The other Stage 2 checks below are unreported.**
+**Resolved: it was a stale preview. Once the user redeployed a current build, the ⋯ menu and shelves appeared and everything checked out - see "Verification" below.**
+
+### Verification (2026-09-07, user, on a current build incl. `bda465a` + `a1a9d84`)
+
+**Stage 2 is fully mobile-verified. All checks passed:**
+
+- Admin ⋯ -> "Edit ingredients" opens Admin -> Ingredient Types directly, on **desktop and mobile**. (Earlier "FAILED" was the stale build only.)
+- Shelf readability / layout - bottles on shelf lines, readable wrapping names, no horizontal overflow, softened family groups.
+- The three actions stay separate and tappable: tap bottle/name -> recipe page, checkmark -> ownership, chevron -> product expansion.
+- Generic vs. product ownership stay independent - no product silently removed, no generic ownership silently added.
+- Back-navigation restores search text, category, expanded rows and scroll position.
+- Add ingredients (plain browse/search grid, no shelves) and Build Your Bar are unchanged.
+
+**My Bar redesign: Stages 1-2 complete. Stage 3 (Speed Rack) deferred, not started.**
 
 ### Approved plan revision (recorded in `docs/my-bar-ux-plan.md`, Decision 5)
 

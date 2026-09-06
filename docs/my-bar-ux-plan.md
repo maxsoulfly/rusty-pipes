@@ -1,6 +1,6 @@
 # My Bar UX Plan — Owned-First Default + Add Ingredients Split
 
-Saved 2026-09-06, approved for next session. **Not started** - planning only, no code changes made under this document. Read `current-context.md`'s "Exact next action" for the order this fits into relative to the still-open Cocktail Library/My Bar UX effort (Stage 5 and its pending mobile checks come first - see "Relationship to the Stage 1-5 effort" below).
+Saved 2026-09-06. **Stages 1 and 2 are done, committed, and mobile-verified (2026-09-07).** Stage 3 (Speed Rack) remains deferred - see "Database dependencies". Engineering detail for each stage is in `current-context.md`.
 
 ## Direction
 
@@ -66,7 +66,7 @@ Not yet built:
 | Stage | Scope | Acceptance criteria | Safe stopping point? |
 |---|---|---|---|
 | **1** ✅ done, committed `9afc57c`, mobile-verified 2026-09-07 | Route split: `/bar` becomes owned-only My ingredients (existing card grid, unchanged visually); new `/bar/add-ingredients` route with category-first browsing; admin pencil removed from the main grid; Build Your Bar's "Find more ingredients" repointed | My ingredients shows exactly the owned set, no inferred parents (Requirement 1 holds); Add ingredients lets you find and toggle any type; admin edit still reachable; scroll/expanded-state preserved per Requirement 2; `test`/`build`/`format` clean | Yes - pure restructuring, no visual risk |
-| **2** ✅ built, committed 2026-09-07, mobile verification pending | Shelf visual reskin of My ingredients only (bottles on subtle shelf lines, softened family grouping); the admin ⋯ header menu from the revised Decision 5. Add ingredients stays a plain browse/search grid - no decorative shelves. | Mobile-verified: short wrapping rows, no horizontal scroll, readable names, touch targets intact, scroll/expanded-state still holds after the visual change; bottle/name view vs. checkmark-own vs. product-expand all still distinct; Build Your Bar unchanged | Yes |
+| **2** ✅ done, committed `bda465a` (+ visibility fix `a1a9d84`), mobile-verified 2026-09-07 | Shelf visual reskin of My ingredients only (bottles on subtle shelf lines, softened family grouping); the admin ⋯ header menu from the revised Decision 5. Add ingredients stays a plain browse/search grid - no decorative shelves. | ✅ Verified: short wrapping rows, no horizontal scroll, readable names, touch targets intact, scroll/expanded-state holds; bottle/name view vs. checkmark-own vs. product-expand all distinct; generic vs. product ownership independent; admin ⋯ -> Ingredient Types works desktop + mobile; Add ingredients + Build Your Bar unchanged | Yes |
 | **3** *(separate, later, not started under this plan)* | Speed Rack: schema + pin/unpin UI, persistence design chosen when this stage starts | New table/column live, RLS tested (admin/member/anon), pin persists and displays in a small top strip | N/A |
 
 Stage 1 and 2 are deliberately separated so a shelf-visual iteration never risks the underlying data/routing logic, and vice versa.
