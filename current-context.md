@@ -36,9 +36,9 @@ Each numbered step is a development chunk boundary for this file.
 3. ~~Complete the existing Stage 5~~ (final integration review/regression/docs close-out) for the Cocktail Library + My Bar UX effort (item 16) - **done 2026-09-07, no defects found, feature complete. See "Last completed chunk" below.**
 4. ~~Begin Stage 1 of the approved My Bar UX redesign~~ (item 17) - **done and committed 2026-09-07 (`9afc57c`). All manual mobile checks confirmed passed by the user, 2026-09-07.**
 5. ~~My Bar redesign Stage 2 (shelf visuals + the admin ⋯ header menu)~~ - **COMPLETE, 2026-09-07** (`bda465a` + visibility fix `a1a9d84`). Fully mobile-verified.
-6. ~~My Bar redesign Stage 3 (Speed Rack)~~ - **built and committed 2026-09-07** (`pinned` column on `user_inventory`, migration `20260906130000` pushed the normal way; pin star on `IngredientDetailScreen`; `SpeedRack` strip on `/bar`). **Mobile verification pending the user's iPhone check** (checklist in "Last completed chunk").
+6. ~~My Bar redesign Stage 3 (Speed Rack)~~ - **built (`77dcb18`) + follow-up bug fix (`207769b`), 2026-09-07.** User mobile-tested: all Speed Rack checks passed **except** the pin star going dead after un-own/re-own - root cause found (optimistic ownership rows never reconciled to their real id), fixed, regression test added. **That one case is FAILED pending the user's retest** on a build with the fix; the other Speed Rack checks are passed. Checklist in "Last completed chunk" -> "Follow-up fix".
 
-**My Bar redesign: all three stages built. Stage 3 mobile check is the only thing outstanding - the plan (`docs/my-bar-ux-plan.md`) is otherwise feature-complete. No further stages. No active task queued.**
+**My Bar redesign: all three stages built; only the Stage 3 pin-lifecycle retest is outstanding. The plan (`docs/my-bar-ux-plan.md`) is otherwise feature-complete. No further stages. No active task queued.**
 
 **Migration-history mismatch: RESOLVED 2026-09-07** (ledger-only `supabase migration repair` - see "Earlier chunk"). All 46 recorded migrations showed `local == remote`; Stage 3's new migration `20260906130000` then pushed cleanly via the normal `db push` workflow (47/47 now).
 
@@ -54,7 +54,35 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 ## Last completed chunk (My Bar redesign Stage 3 - Speed Rack, 2026-09-07)
 
-**Committed 2026-09-07. Mobile verification pending the user's iPhone check (checklist below). This is the last stage of the My Bar redesign - no more stages.**
+**Committed `77dcb18`; follow-up bug fix `207769b` (see "Follow-up" below). This is the last stage of the My Bar redesign - no more stages.**
+
+**Mobile verification status (user, 2026-09-07):** all reported Speed Rack checks PASSED **except** one reproducible bug (now fixed, retest pending): own a type -> pin -> un-own -> re-own -> open its page -> the pin star did nothing. Recorded as **FAILED, pending retest** on a build with `207769b`.
+
+### Follow-up fix: pin star dead after re-owning (`207769b`, 2026-09-07)
+
+**Root cause confirmed (matches the user's hypothesis).** `useInventory`'s optimistic ownership add (`toggleType` / `toggleProduct` / `ownProduct`) inserts a placeholder row with a fake `optimistic-<id>` id and, on success, **never reconciled it with the real server row**. Ownership display only checks that a row for the id exists, so this was invisible - until Speed Rack, which needs the row's real id to `UPDATE pinned`. `setPinnedOnRow` correctly refused to `UPDATE` a fake id (`startsWith("optimistic-")` guard) and returned silently -> "star does nothing". Un-own then re-own is the cleanest repro, but a fresh own-then-pin in the same session (no intervening `load()`) hit it too.
+
+**Fix:**
+
+- `services/inventory.js`: `addIngredientTypeOwnership` / `addProductOwnership` now `.insert(...).select("id, ingredient_type_id, product_id, pinned").single()` and return the inserted row. The trailing SELECT reads the just-inserted own row - allowed by the same `read own` RLS policy every other inventory read uses (the existing RLS suite already exercises `INSERT ... RETURNING` as a member).
+- `useInventory.js`: after a successful add, `setRows(reconcileOptimisticRow(prev, ` optimistic-<id>`, realRow))` swaps the placeholder for the real row (real id, `pinned: false`). No `load()`, so no app-loading-screen flash.
+- New pure module `src/domain/inventoryRows.js` (`isOptimisticId`, `findPinnableRow`, `reconcileOptimisticRow`) - the reconciliation + "is there a real row to pin?" logic, extracted so it is unit-testable without React. `setPinnedOnRow` now calls `findPinnableRow` (keeps the no-op-until-reconciled safety net for the rare sub-second window before an add resolves).
+- **Failed-update handling improved**: a failed pin write now reverts just the one `pinned` flag rather than calling `load()` (which flashed the whole app via `App.jsx`'s `isLoading` gate). Ownership-add failure still uses `load()` - unchanged, pre-existing, rare.
+
+**Regression test** `src/domain/inventoryRows.test.js` (8 cases): the full `own -> pin -> un-own -> re-own -> pin -> unpin` lifecycle for a **generic type** and for a **specific product**, asserting the re-owned row has the new server id (not the stale placeholder) and that pin *and* unpin both work afterward; plus generic-vs-product pin independence, and the helper units.
+
+**Verified 2026-09-07**: `corepack pnpm@10.34.3 test` **201/201** (193 + 8 new). `pnpm build` clean (165 modules, +1 `inventoryRows`). `pnpm format` clean. No schema/RLS change in this fix, so no migration and no advisor re-run needed. UI files untouched. Committed as `207769b`.
+
+**Retest checklist for the fix (normal mobile navigation):**
+
+1. Own a generic ingredient (e.g. Gin) from a shelf / Add ingredients. Open its page -> tap the star -> it appears in Speed Rack.
+2. Un-own it (shelf checkmark) -> gone from Speed Rack. Re-add it. Open its page -> **tap the star -> it responds and re-appears in Speed Rack.** Tap again -> unpins.
+3. Repeat step 2 a second time (un-own / re-own / pin) - still works.
+4. Same sequence for a **specific product**: own the product via its type's expanded product list, un-own, re-own, open the product page, pin -> works; unpin -> works.
+5. Fresh own-then-pin without any reload: own something new, immediately open its page, pin -> works.
+6. Unchanged: generic pin vs. product pin are independent; un-owning a pinned item removes only that pin; shelf view/own/expand, admin menu, search/category/back-nav, Build Your Bar.
+
+### Decision made at stage start (plan Decision 7 left it open)
 
 ### Decision made at stage start (plan Decision 7 left it open)
 
