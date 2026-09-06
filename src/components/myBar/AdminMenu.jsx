@@ -23,9 +23,10 @@ export function AdminMenu({ isAdmin }) {
         onClick={() => setOpen(true)}
         aria-label="Ingredient admin menu"
         aria-haspopup="menu"
-        className="w-11 h-11 rounded-sm border border-bdr bg-surface text-tx2 flex items-center justify-center cursor-pointer shrink-0"
+        title="Ingredient tools"
+        className="w-11 h-11 shrink-0 rounded-sm border border-bdr bg-surface text-tx flex items-center justify-center cursor-pointer active:bg-bg2"
       >
-        <IconDots size={18} />
+        <IconDots size={20} />
       </button>
       <BottomSheet
         open={open}

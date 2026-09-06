@@ -34,7 +34,7 @@ export const IconHeart = I(
 )
 export const IconMenu = I("M4 6H20M4 12H20M4 18H20")
 export const IconDots = I(
-  "M6 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM13.5 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0ZM21 12a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z",
+  "M6.5 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM14 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM21.5 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z",
   { fill: true },
 )
 export const IconSearch = I(
