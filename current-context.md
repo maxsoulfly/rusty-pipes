@@ -34,8 +34,8 @@ Each numbered step is a development chunk boundary for this file.
 1. ~~Present the consolidated Library/My Bar + Sort mobile checklist~~ - **done. The user confirmed all five verification groups passed** (grouped Library + Sort control, ingredient/bottle detail entry points, view-vs-own type-tile controls, back-nav scroll/expanded-state restoration, Build Your Bar no-regression). Nothing outstanding from Stages 2-4 or the Sort control.
 2. ~~Investigate the recurring "JWT issued at future" startup error~~ - **root cause identified and a scoped fix committed (`65ecc74`), 2026-09-06. See "Earlier chunk" below.** `first open after idle` verification is still **pending** the user's confirmation on a phone - a separate follow-up, does not block the My Bar redesign. Do not mark it done without a real result.
 3. ~~Complete the existing Stage 5~~ (final integration review/regression/docs close-out) for the Cocktail Library + My Bar UX effort (item 16) - **done 2026-09-07, no defects found, feature complete. See "Last completed chunk" below.**
-4. ~~Begin Stage 1 of the approved My Bar UX redesign~~ (item 17) - **done and committed 2026-09-07. Mobile verification pending (checklist in "Last completed chunk"). Stop before Stage 2.**
-5. **My Bar redesign Stage 2 (shelf visuals)** - not started, begins only after the user confirms Stage 1's mobile checklist. Speed Rack (Stage 3) stays deferred behind the `db push` migration-history mismatch.
+4. ~~Begin Stage 1 of the approved My Bar UX redesign~~ (item 17) - **done and committed 2026-09-07 (`9afc57c`). All manual mobile checks confirmed passed by the user, 2026-09-07.**
+5. ~~My Bar redesign Stage 2 (shelf visuals + the admin ⋯ header menu)~~ - **done and committed 2026-09-07. Mobile verification pending the user's iPhone check (checklist in "Last completed chunk"). Stop after this stage.** Speed Rack (Stage 3) stays deferred behind the `db push` migration-history mismatch.
 
 Separately, still true, none blocking: the cosmetic pluralize-at-save-time item (serving-size Stage 1 chunk below) and the `db push` migration-history mismatch (`docs/my-bar-ux-plan.md` Database dependencies - blocks the My Bar plan's Speed Rack stage) remain untouched.
 
@@ -47,9 +47,43 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## Last completed chunk (Cocktail Library + My Bar UX Stage 5 close-out + My Bar redesign Stage 1)
+## Last completed chunk (My Bar redesign Stage 2 - shelf visuals + admin ⋯ header menu)
 
-Two things this session: closed out the still-open Stage 5 of the Cocktail Library + My Bar UX effort (item 16), then implemented Stage 1 of the approved My Bar redesign (item 17, `docs/my-bar-ux-plan.md`). Committed separately.
+**Committed `bda465a`, 2026-09-07. Mobile verification pending the user's iPhone check (checklist below). Stop after this stage - Stage 3 (Speed Rack) stays deferred behind the `db push` migration-history mismatch.**
+
+### Approved plan revision (recorded in `docs/my-bar-ux-plan.md`, Decision 5)
+
+Stage 1 put a lightweight admin-only inline `IngredientTypeEditor` on `IngredientDetailScreen`. That is **replaced** by: one admin-only ⋯ menu in the **My Bar** and **Add ingredients** page headers, whose single item **"Edit ingredients"** opens **Admin -> Ingredient Types** directly. No admin menus/pencils on individual tiles. Hidden for non-admins; no permission logic changed.
+
+### Shelf visuals (My ingredients only)
+
+- **New `src/components/myBar/ShelfItem.jsx`** - same handler contract as `TypeCard` (`onCardClick` view / `onToggleOwned` generic-own / `onToggleExpand` products, plus `owned`/`expanded`/`ownedProducts`/`allProducts`/`coveringChildren`), so `MyBarScreen.renderCard` just swaps `<TypeCard>` -> `<ShelfItem>`. Bottle icon + wrapping readable name in one big tap-to-view button; a real 44x44 checkmark and a 36px expand chevron below it (both `stopPropagation`). `border-b-2 border-bdr` on each item + the grid's `gap-x-0` = a continuous shelf line per row; grid stretch + `flex-1` keeps items equal height so lines align however far a name wraps. Grid is `repeat(auto-fill,minmax(88px,1fr))` with `break-words` names -> short wrapping rows, no horizontal overflow (~3 cols on a 360px phone).
+- **`TypeCard.jsx` is untouched** - Add ingredients and Build Your Bar keep the plain grid card. `MyBarScreen` no longer imports `TypeCard`.
+- **`FamilyCluster.jsx` softened** - the bordered `bg-white/2` box is gone; now just a small parent-name label + its own `minmax(88px,1fr)` sub-shelf grid (`contents` wrappers so an expanded product panel still spans full width). `col-span-full` dropped (it isn't inside a grid any more). `MyBarScreen` passes `renderCard`/`renderExpanded` straight through (`renderExpanded(type, {gridColumn:"1 / -1"})` is now called by the cluster itself).
+- **Add ingredients gets no shelves** - stays a plain browse/search grid, unchanged.
+- Preserved and unchanged: bottle/name-vs-checkmark-vs-chevron split, generic-vs-product ownership (type toggles still only write the generic `user_inventory` row; products only via `ExpandedProducts`' `OwnedToggle`), search / category jump / `sessionStorage` back-nav state restoration (the `rootRef` + `.closest(".overflow-y-auto")` scroll capture still sits on `MyBarScreen`'s outer div), Build Your Bar.
+
+### Admin ⋯ header menu
+
+- **New `src/components/myBar/AdminMenu.jsx`** - renders `null` for non-admins (after its hooks). A 44px ⋯ button (`IconDots`, new in `icons.jsx`) opening a `BottomSheet` (same primitive the category picker uses) with one item, "Edit ingredients" -> `navigate("/admin?tab=types")`.
+- **`SearchFilterHeader.jsx`** takes `isAdmin` and renders `<AdminMenu>` beside the search input. **`AddIngredientsScreen.jsx`** puts it in the `TopBar` `right` slot.
+- **`AdminScreen.jsx`** now reads `?tab=` once on mount (via `useSearchParams`) as the initial tab, validated against `visibleTabs`, falling back to Overview - same "read once, don't keep in sync" pattern as its existing `?source=` handling. `/admin` stays gated by `RequireStaff`; the menu only gates its own visibility.
+- **`IngredientDetailScreen.jsx`** reverted to its pre-Stage-1 form (no `IngredientTypeEditor` import, no `editing` state, plain `TopBar`).
+
+**Verified 2026-09-07**: `corepack pnpm@10.34.3 test` 193/193 (no new tests - UI reskin + routing, no new domain logic). `pnpm build` clean (163 modules, +2: `AdminMenu`, `ShelfItem`). `pnpm format` clean. Committed `bda465a`.
+
+**Manual mobile checklist (My Bar redesign Stage 2):**
+
+1. **My Bar** - ingredients read as bottles sitting on subtle shelf lines, grouped by category. Names are readable and wrap onto short rows; nothing scrolls sideways; family groups (e.g. Whiskey) show as a soft label + their own shelf, no heavy box.
+2. Tap a bottle/name -> its recipe page. Tap the checkmark -> removes it from the bar (no navigation). Expand a type with products (chevron) -> product list; tap a product name -> the product's own page. All three still feel distinct and comfortably tappable.
+3. Expanding products still shows the per-product owned toggles; un-owning the generic type vs. a specific product still behave separately (no product silently removed, no generic ownership silently added).
+4. Set a search term / pick a category, expand a type, scroll down, open a recipe page, then back-navigate -> search, category, expanded rows and scroll position all restored.
+5. **Admin only**: a ⋯ button sits in the My Bar header (next to search) and in the Add ingredients top bar. Tap it -> a sheet with **Edit ingredients** -> lands directly on Admin -> Ingredient Types. A non-admin never sees the ⋯ button. No edit pencils anywhere on tiles or the recipe detail page.
+6. **Add ingredients** is unchanged - still plain category tiles + search grid, no shelves. Build Your Bar on Home is unchanged.
+
+## Earlier chunk (Cocktail Library + My Bar UX Stage 5 close-out + My Bar redesign Stage 1)
+
+Two things that session: closed out the still-open Stage 5 of the Cocktail Library + My Bar UX effort (item 16), then implemented Stage 1 of the approved My Bar redesign (item 17, `docs/my-bar-ux-plan.md`). Committed separately. **Stage 1's full manual mobile checklist was confirmed passed by the user, 2026-09-07.**
 
 ### Stage 5 close-out (item 16) - no code, review only
 
@@ -67,7 +101,7 @@ Two things this session: closed out the still-open Stage 5 of the Cocktail Libra
 - **Browsing-state preservation (plan Requirement 2, verified not assumed)** - `MyBarScreen` fully unmounts on navigate to `/bar/type/:id`, so React keeps nothing and `navigate(-1)` only restores the URL. Added `sessionStorage` persistence (`rustyPipes.myIngredients.viewState`, all reads/writes try/caught) of search text, category jump, expanded type rows, and the scroll offset of AppShell's own overflow container (walked to via `rootRef.current.closest(".overflow-y-auto")` since the screen doesn't own that node). Scroll is captured on unmount (via a `scrollerRef` kept fresh each render, because React detaches `rootRef` before the passive cleanup runs) and restored once in a `useLayoutEffect` after data has loaded. Restored-but-since-renamed category clamps back to "All" rather than filtering everything out. **This needs a real device check - flagged in the checklist.**
 - **New `AddIngredientsScreen.jsx`** (`/bar/add-ingredients`) - lands on category tiles; a global search box matches name or alias across the whole catalogue regardless of the selected category; tapping a type toggles generic ownership in place with visible feedback (reuses `TypeCard` with `onCardClick` = `onToggleOwned` = `toggleType`, same tap-to-own pattern as Build Your Bar), no navigation, so several can be added per visit. "Track a specific bottle instead" -> `/bar/add` (unchanged). `?focus=1` autofocuses the search box.
 - **`BuildYourBar.jsx`** - "Find more ingredients" repointed `/bar?focus=1` -> `/bar/add-ingredients?focus=1` (search-focus behavior preserved).
-- **Admin type editing moved off the browsing grid** - `TypeCard` lost its `isStaff`/`onEditType` props and the inline pencil entirely (both real consumers updated; `FamilyCluster` lost its now-unused `editingTypeId`/`renderEditForm` props). `IngredientDetailScreen.jsx` gains an **admin-only** ("Edit type") `TopBar` action that opens the same shared `IngredientTypeEditor` inline. Full type management is unaffected in **Admin -> Ingredient Types** (moderator-visible there too, so gating the new convenience action on `isAdmin` removes no capability).
+- **Admin type editing moved off the browsing grid** - `TypeCard` lost its `isStaff`/`onEditType` props and the inline pencil entirely (both real consumers updated; `FamilyCluster` lost its now-unused `editingTypeId`/`renderEditForm` props). Stage 1 added an admin-only inline `IngredientTypeEditor` to `IngredientDetailScreen.jsx`; **Stage 2 replaced that** with a single admin-only ⋯ header menu on My Bar + Add ingredients that opens Admin -> Ingredient Types directly (see the next chunk). Full type management is unaffected in **Admin -> Ingredient Types**.
 - **Generic vs. product ownership** - unchanged and still explicit: type-level toggles only ever write the generic `user_inventory` row (`useInventory.toggleType`); product ownership is only touched by `ExpandedProducts`' own `OwnedToggle`. Nothing in this stage collapses the two or removes a product as a side effect.
 
 **Verified 2026-09-07**: `corepack pnpm@10.34.3 test` 193/193 (no new tests - pure UI/routing restructuring, no new domain logic, matches the plan's "safe stopping point, no visual risk" framing). `pnpm build` clean (161 modules, +1 new screen). `pnpm format` clean. Committed as `9afc57c`.

@@ -22,7 +22,7 @@ You might revisit this every few months, not every day.
 Fixing the recurring "JWT issued at future" startup error on the first app open of the day.
 
 # Next
-- My Bar redesign (`docs/my-bar-ux-plan.md`): Stage 1 (owned-first "My ingredients" + separate "Add ingredients") done; next is shelf visuals, then Speed Rack.
+- My Bar redesign (`docs/my-bar-ux-plan.md`): Stages 1–2 done (owned-first "My ingredients", "Add ingredients" split, shelf visuals). Speed Rack is the remaining stage, still deferred.
 
 # Backlog
 - Speed Rack — pin favorite bottles to a quick-access strip. Deferred until the migration-history mismatch is sorted.
