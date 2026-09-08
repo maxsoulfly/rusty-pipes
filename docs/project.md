@@ -22,6 +22,7 @@ You might revisit this every few months, not every day.
 Fixing the recurring "JWT issued at future" startup error on the first app open of the day.
 
 # Next
+- Household basics (Ice, Salt, Sugar, Water, Hot Water) don't need to be marked owned — plan approved, see `docs/plans/household-basics-ingredient-forms-preparations.md`.
 - Improve mood/taste discovery.
 
 # Backlog

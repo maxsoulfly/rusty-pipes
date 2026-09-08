@@ -27,9 +27,15 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
 17. My Bar UX redesign (owned-first "My ingredients" default + a separate "Add ingredients" category-first browsing flow; Speed Rack pinning deferred) — **in progress. Stage 1 done and committed 2026-09-07, mobile verification pending.** Full audit-first plan in `docs/my-bar-ux-plan.md`. Stage 1: `/bar` is owned-only, `/bar/add-ingredients` is the new find-and-add screen, `/bar/add` kept for specific bottles, admin type editing moved to an `IngredientDetailScreen` overflow action, browsing state preserved via `sessionStorage`. Grid appearance unchanged (Stage 2 = shelf visuals; Stage 3 = Speed Rack, still blocked on the `db push` mismatch). See "Last completed chunk" for the full change list + mobile checklist.
 
+   (Note: item 17's "Stage 1 done, mobile verification pending" / "admin type editing moved to an `IngredientDetailScreen` overflow action" text predates the My Bar redesign's later stages — see the corrected current state in item 18's plan doc: inline admin edit pencils are gone, editing now goes through Admin → Ingredient Types via the ⋯ menu.)
+
+18. Household basics, ingredient forms, and homemade preparations (new feature) — **planning approved, not started, 2026-09-08.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Household Basics Stages 1–3 are approved next work.** Ingredient Forms and Homemade Preparations are approved as direction only, with technical details and a required pre-stage re-audit (recipe consumers, permissions, dependency-cycle handling) still pending before their stages begin.
+
 Each numbered step is a development chunk boundary for this file.
 
-## Exact next action (paused here, 2026-09-06)
+## Exact next action (paused here, 2026-09-08)
+
+1. **Household basics / ingredient forms / preparations (item 18) — start here.** First action: verify the live catalogue entries for Ice, Sugar, Salt, Water, Hot Water, and Cola/Coke via authorized (logged-in) access to Admin → Ingredient Types — the anon key cannot read this table (RLS-confirmed), and none of these names except one prior "Ice" mention exist anywhere in git history, since the real catalogue was populated by admin batch import, not migrations. Flag anything missing/ambiguous rather than guessing. Then begin Household Basics **Stage 1 only** (schema + admin toggle) per the plan doc — do not start Stage 2/3 or the other two concepts until Stage 1 is committed, pushed, and phone-verified.
 
 1. ~~Present the consolidated Library/My Bar + Sort mobile checklist~~ - **done. The user confirmed all five verification groups passed** (grouped Library + Sort control, ingredient/bottle detail entry points, view-vs-own type-tile controls, back-nav scroll/expanded-state restoration, Build Your Bar no-regression). Nothing outstanding from Stages 2-4 or the Sort control.
 2. ~~Investigate the recurring "JWT issued at future" startup error~~ - **root cause identified and a scoped fix committed (`65ecc74`), 2026-09-06. See "Earlier chunk" below.** `first open after idle` verification is still **pending** the user's confirmation on a phone - a separate follow-up, does not block the My Bar redesign. Do not mark it done without a real result.
@@ -51,6 +57,45 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 3. **Google OAuth's consent screen is still in "Testing" mode, not published** - deliberate, per the user's own choice (see below) - real members are added as test users one at a time, same overhead as generating an invitation. Revisit only if the user decides they want unlimited/unmanaged Google sign-in later (would need a real Privacy Policy/Terms of Service page built first).
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
+
+## Last completed chunk (Household basics / ingredient forms / preparations — planning session, 2026-09-08)
+
+**Planning only — no code, schema, or live data changed.** Full detail lives
+in `docs/plans/household-basics-ingredient-forms-preparations.md`; this is a
+short pointer, not a duplicate.
+
+- Audited the shared availability engine (`resolveOwnedIngredientTypes`/
+  `computeAvail`, one choke point in `App.jsx` feeding every screen), the
+  admin ingredient-type editor, the recipes/recipe_components/
+  recipe_component_alternatives schema, and the Garnish/Juice category split
+  already present in the catalogue.
+- Two rounds of user revision produced the final approved design:
+  household-basic flags satisfy only their own exact type id (no
+  parent/child propagation, a deliberate change from the first draft);
+  ingredient-form conversions (Lemon→Lemon Juice, Lime→Lime Juice) are
+  directional-only and rank between exact availability and an explicit
+  substitution in a defined priority order; homemade preparations reuse the
+  `recipes` table with a `kind` discriminator, cap dependency depth at one
+  level to avoid needing cycle detection, and stay manual-ownership-only for
+  v1.
+- **Corrected two stale claims caught by the user**: My Bar's inline admin
+  edit pencils were removed (editing is Admin → Ingredient Types only now,
+  reached via the ⋯ menu); "no recipe uses Garnish-category ingredients" was
+  a historical note, since contradicted by verified screenshots — current
+  usage must be re-checked live, not assumed either way, when Ingredient
+  Forms' stage actually begins.
+- **Household Basics Stages 1–3 approved as next work.** Ingredient Forms
+  and Homemade Preparations approved as direction only — each has a
+  required pre-stage re-audit called out in the plan doc (every recipe
+  consumer including public sharing/import-export/lists/search/permissions
+  for preparations; whole-graph self-reference + later-edit handling for the
+  dependency guard) that must happen when that stage actually starts, not
+  before.
+- `docs/project.md` got one line: household basics is next, mood/taste
+  discovery stays after it.
+
+**Next action:** see the top of this file — verify live catalogue names,
+then start Household Basics Stage 1 only.
 
 ## Last completed chunk (My Bar redesign Stage 3 - Speed Rack, 2026-09-07)
 
