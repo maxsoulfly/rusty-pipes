@@ -2,11 +2,7 @@ import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { TypeCard } from "@/components/myBar/TypeCard"
 import { Btn } from "@/components/primitives"
-import {
-  BUILD_YOUR_BAR_GROUPS,
-  BUILD_YOUR_BAR_INITIAL_SIX,
-} from "@/data/buildYourBarEssentials"
-import { resolveEssentialsList } from "@/domain/buildYourBar"
+import { resolveOnboardingSelection } from "@/domain/buildYourBar"
 
 // Build Your Bar never shows product-level detail (that's the Add
 // ingredients / My ingredients job, reached via "Find more ingredients") -
@@ -15,38 +11,32 @@ import { resolveEssentialsList } from "@/domain/buildYourBar"
 // the expand chevron when allProducts.length > 0, always empty here).
 const NOOP = () => {}
 
-// Resolves a curated name list against the live catalog, dropping (not
-// crashing on) anything that isn't cleanly resolved - shouldn't happen,
-// every name here was verified live against the real catalog before
-// shipping (see current-context.md), but a future catalog rename/merge
-// could still break one, and a missing tile is a far better failure mode
-// for a member than a blank homepage.
-function resolvedTiles(names, types) {
-  return resolveEssentialsList(names, types)
-    .filter((r) => {
-      if (r.status === "resolved") return true
-      console.error(`Build Your Bar: "${r.name}" is ${r.status} in the catalog`)
-      return false
-    })
-    .map((r) => r.type)
-}
-
 export function BuildYourBar({ catalog, inventory, computed }) {
   const navigate = useNavigate()
   const [expanded, setExpanded] = useState(false)
 
-  const six = useMemo(
-    () => resolvedTiles(BUILD_YOUR_BAR_INITIAL_SIX, catalog.types),
-    [catalog.types],
-  )
-  const groups = useMemo(
+  // The onboarding tile lists come from the admin-curated
+  // onboarding_ingredients table (fetched with the rest of the catalog),
+  // resolved against the live types by a pure function:
+  //   - a row whose type was deleted since seeding just drops out
+  //   - a row whose type is a household basic (assumed_available) is
+  //     excluded from both lists - the engine already treats it as owned
+  //   - `six` backfills up to 6 from the non-initial rows, so a short or
+  //     partly-excluded initial set still fills the grid
+  // catalog is always loaded by the time Home renders (App.jsx gates the
+  // whole Outlet on catalog.loading and shows a blocking error screen if the
+  // first load failed); a later refetch failure keeps the last-good rows. An
+  // empty config resolves to no tiles + empty groups - heading, copy, CTAs
+  // and the makeable-count line still render.
+  const { six, groups } = useMemo(
     () =>
-      Object.entries(BUILD_YOUR_BAR_GROUPS).map(([label, names]) => [
-        label,
-        resolvedTiles(names, catalog.types),
-      ]),
-    [catalog.types],
+      resolveOnboardingSelection(catalog.onboardingIngredients, catalog.types),
+    [catalog.onboardingIngredients, catalog.types],
   )
+
+  // Only the groups that actually have tiles - an empty heading (e.g. every
+  // Mixers row deleted or flagged) would just be noise.
+  const nonEmptyGroups = groups.filter(([, types]) => types.length > 0)
 
   // perfect+good: every required ingredient satisfied - the same tier
   // boundary Home's own "Good Enough" section already uses. Already
@@ -110,7 +100,7 @@ export function BuildYourBar({ catalog, inventory, computed }) {
 
       {expanded ? (
         <div className="flex flex-col gap-4 mb-3">
-          {groups.map(([label, types]) => (
+          {nonEmptyGroups.map(([label, types]) => (
             <div key={label}>
               <div className="text-[11px] font-bold text-tx3 uppercase tracking-[0.06em] mb-1.5 font-display">
                 {label}
@@ -127,12 +117,18 @@ export function BuildYourBar({ catalog, inventory, computed }) {
         </div>
       )}
 
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full py-2.5 min-h-11 bg-transparent border border-bdr rounded-sm cursor-pointer text-tx2 text-[13px] font-display font-semibold mb-4"
-      >
-        {expanded ? "Show fewer" : "Show all essentials"}
-      </button>
+      {/* Only offer the toggle when the expanded view actually holds more
+          than the six already shown - otherwise it just collapses/expands
+          the same tiles. */}
+      {nonEmptyGroups.reduce((n, [, types]) => n + types.length, 0) >
+        six.length && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-full py-2.5 min-h-11 bg-transparent border border-bdr rounded-sm cursor-pointer text-tx2 text-[13px] font-display font-semibold mb-4"
+        >
+          {expanded ? "Show fewer" : "Show all essentials"}
+        </button>
+      )}
 
       <p className="text-xs text-tx3 mb-3">
         <span className="text-tx font-semibold">{makeableCount}</span>{" "}

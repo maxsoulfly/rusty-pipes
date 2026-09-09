@@ -1,93 +1,240 @@
 import { describe, expect, it } from "vitest"
 import {
-  BUILD_YOUR_BAR_GROUPS,
-  BUILD_YOUR_BAR_INITIAL_SIX,
-} from "@/data/buildYourBarEssentials"
-import { resolveEssentialsList } from "./buildYourBar"
+  ONBOARDING_GROUP_LABELS,
+  resolveOnboardingSelection,
+} from "./buildYourBar"
 
+// Catalog fixture. `basic` is a household basic (assumed_available) - the
+// engine already treats it as owned, so the resolver must drop it from both
+// outputs. `deleted` is intentionally NOT here, to exercise a row pointing
+// at a since-deleted type.
 const types = [
-  { id: "type-gin", name: "Gin" },
-  { id: "type-vodka", name: "Vodka" },
-  { id: "type-lime", name: "Lime Juice" },
+  { id: "gin", name: "Gin" },
+  { id: "vodka", name: "Vodka" },
+  { id: "bourbon", name: "Bourbon" },
+  { id: "soda", name: "Soda Water" },
+  { id: "coke", name: "Coke" },
+  { id: "tonic", name: "Tonic Water" },
+  { id: "lemon", name: "Lemon Juice" },
+  { id: "lime", name: "Lime Juice" },
+  { id: "syrup", name: "Simple Syrup" },
+  { id: "ice", name: "Ice", assumed_available: true },
 ]
 
-describe("resolveEssentialsList", () => {
-  it("resolves a matching name, case-insensitive", () => {
-    const result = resolveEssentialsList(["gin"], types)
-    expect(result).toEqual([
-      { status: "resolved", name: "gin", type: types[0] },
+// A representative seeded config: 3 groups, 6 is_initial, position-ordered.
+const rows = [
+  {
+    ingredient_type_id: "gin",
+    position: 1,
+    is_initial: true,
+    group_label: "Spirits",
+  },
+  {
+    ingredient_type_id: "vodka",
+    position: 2,
+    is_initial: true,
+    group_label: "Spirits",
+  },
+  {
+    ingredient_type_id: "bourbon",
+    position: 3,
+    is_initial: false,
+    group_label: "Spirits",
+  },
+  {
+    ingredient_type_id: "soda",
+    position: 8,
+    is_initial: true,
+    group_label: "Mixers",
+  },
+  {
+    ingredient_type_id: "coke",
+    position: 9,
+    is_initial: true,
+    group_label: "Mixers",
+  },
+  {
+    ingredient_type_id: "tonic",
+    position: 10,
+    is_initial: false,
+    group_label: "Mixers",
+  },
+  {
+    ingredient_type_id: "lemon",
+    position: 11,
+    is_initial: true,
+    group_label: "Kitchen basics",
+  },
+  {
+    ingredient_type_id: "lime",
+    position: 12,
+    is_initial: true,
+    group_label: "Kitchen basics",
+  },
+  {
+    ingredient_type_id: "syrup",
+    position: 13,
+    is_initial: false,
+    group_label: "Kitchen basics",
+  },
+]
+
+const names = (list) => list.map((t) => t.name)
+
+describe("resolveOnboardingSelection", () => {
+  it("returns the 3 fixed group labels in fixed order, whatever the row order", () => {
+    const shuffled = [...rows].reverse()
+    const { groups } = resolveOnboardingSelection(shuffled, types)
+    expect(groups.map(([label]) => label)).toEqual(ONBOARDING_GROUP_LABELS)
+  })
+
+  it("buckets survivors by group_label, each bucket sorted by position", () => {
+    const { groups } = resolveOnboardingSelection([...rows].reverse(), types)
+    expect(groups).toEqual([
+      ["Spirits", [types[0], types[1], types[2]]],
+      ["Mixers", [types[3], types[4], types[5]]],
+      ["Kitchen basics", [types[6], types[7], types[8]]],
     ])
   })
 
-  it("preserves input order across multiple names", () => {
-    const result = resolveEssentialsList(["Vodka", "Gin"], types)
-    expect(result.map((r) => r.type.name)).toEqual(["Vodka", "Gin"])
-  })
-
-  it("reports 'missing' explicitly, rather than skipping silently or throwing, for a name no longer in the catalog", () => {
-    const result = resolveEssentialsList(["Absinthe"], types)
-    expect(result).toEqual([{ status: "missing", name: "Absinthe" }])
-  })
-
-  it("reports 'ambiguous' explicitly, rather than picking the first match arbitrarily, when two types share a name", () => {
-    const collidingTypes = [
-      { id: "type-a", name: "Gin" },
-      { id: "type-b", name: "gin" }, // distinct row, DB unique constraint is case-sensitive
-    ]
-    const result = resolveEssentialsList(["Gin"], collidingTypes)
-    expect(result).toEqual([
-      {
-        status: "ambiguous",
-        name: "Gin",
-        candidates: collidingTypes,
-      },
+  it("six = the is_initial rows in overall position order", () => {
+    const { six } = resolveOnboardingSelection(rows, types)
+    expect(names(six)).toEqual([
+      "Gin",
+      "Vodka",
+      "Soda Water",
+      "Coke",
+      "Lemon Juice",
+      "Lime Juice",
     ])
   })
 
-  it("does not consult aliases - only matches the canonical name field", () => {
-    // No aliases param exists at all - a name that only matches via an
-    // alias (not tested further here, aliases aren't part of this
-    // function's input) must resolve as missing, not silently succeed.
-    const result = resolveEssentialsList(["Sec"], types)
-    expect(result).toEqual([{ status: "missing", name: "Sec" }])
-  })
-
-  it("real curated lists: every name in the initial six and the expanded groups resolves against a catalog fixture mirroring the live data verified 2026-09-06", () => {
-    const realFixtureTypes = [
+  it("backfills six from non-initial rows (position order) when fewer than 6 are is_initial", () => {
+    const fewInitial = rows.map((r) => ({
+      ...r,
+      is_initial:
+        r.ingredient_type_id === "gin" || r.ingredient_type_id === "vodka",
+    }))
+    const { six } = resolveOnboardingSelection(fewInitial, types)
+    // Gin + Vodka first (is_initial), then Bourbon, Soda Water, Coke, Tonic
+    // Water by position.
+    expect(names(six)).toEqual([
       "Gin",
       "Vodka",
       "Bourbon",
-      "Dark Rum",
-      "Irish Whiskey",
-      "Rye Whiskey",
-      "Scotch Whiskey",
       "Soda Water",
+      "Coke",
       "Tonic Water",
-      "Lemon Juice",
-      "Lime Juice",
-      "Ice",
-      "Simple Syrup",
-      "Angostura Bitters",
-    ].map((name, i) => ({ id: `type-${i}`, name }))
+    ])
+  })
 
-    const sixResults = resolveEssentialsList(
-      BUILD_YOUR_BAR_INITIAL_SIX,
-      realFixtureTypes,
-    )
-    expect(sixResults.every((r) => r.status === "resolved")).toBe(true)
+  it("does not duplicate an is_initial row when the backfill pass reaches it", () => {
+    const { six } = resolveOnboardingSelection(rows, types)
+    expect(new Set(six.map((t) => t.id)).size).toBe(six.length)
+  })
 
-    Object.values(BUILD_YOUR_BAR_GROUPS).forEach((groupNames) => {
-      const groupResults = resolveEssentialsList(groupNames, realFixtureTypes)
-      expect(groupResults.every((r) => r.status === "resolved")).toBe(true)
-    })
+  it("caps six at the first 6 by position when more than 6 rows are is_initial", () => {
+    const allInitial = rows.map((r) => ({ ...r, is_initial: true }))
+    const { six } = resolveOnboardingSelection(allInitial, types)
+    expect(six).toHaveLength(6)
+    expect(names(six)).toEqual([
+      "Gin",
+      "Vodka",
+      "Bourbon",
+      "Soda Water",
+      "Coke",
+      "Tonic Water",
+    ])
+  })
 
-    // Every name across all three groups combined, deduped, is exactly the
-    // 14-item real essentials set - confirms the expanded view really does
-    // include the six (not eight "extra" items only).
-    const allGroupNames = new Set(Object.values(BUILD_YOUR_BAR_GROUPS).flat())
-    expect(allGroupNames.size).toBe(14)
-    BUILD_YOUR_BAR_INITIAL_SIX.forEach((name) => {
-      expect(allGroupNames.has(name)).toBe(true)
+  it("returns fewer than 6 (no gap, no crash) when fewer than 6 rows are eligible", () => {
+    const shortConfig = rows.slice(0, 3) // Gin, Vodka, Bourbon
+    const { six, groups } = resolveOnboardingSelection(shortConfig, types)
+    expect(names(six)).toEqual(["Gin", "Vodka", "Bourbon"])
+    expect(groups.map(([label]) => label)).toEqual(ONBOARDING_GROUP_LABELS)
+    expect(names(groups[1][1])).toEqual([]) // Mixers empty, still present
+  })
+
+  it("drops a row whose ingredient_type was deleted since seeding, from both outputs", () => {
+    const withDeleted = [
+      ...rows,
+      {
+        ingredient_type_id: "ghost",
+        position: 4,
+        is_initial: true,
+        group_label: "Spirits",
+      },
+    ]
+    const { six, groups } = resolveOnboardingSelection(withDeleted, types)
+    expect(six.some((t) => t.id === "ghost")).toBe(false)
+    expect(groups[0][1].some((t) => t.id === "ghost")).toBe(false)
+    // The deleted is_initial row does not consume a slot - six still fills.
+    expect(six).toHaveLength(6)
+  })
+
+  it("excludes an assumed_available (household basic) type from both outputs", () => {
+    const withIce = [
+      ...rows,
+      {
+        ingredient_type_id: "ice",
+        position: 5,
+        is_initial: true,
+        group_label: "Kitchen basics",
+      },
+    ]
+    const { six, groups } = resolveOnboardingSelection(withIce, types)
+    expect(six.some((t) => t.id === "ice")).toBe(false)
+    expect(groups[2][1].some((t) => t.id === "ice")).toBe(false)
+  })
+
+  it("a flagged (now-excluded) initial member pulls the next backfill candidate up into six", () => {
+    // Same config as the household-basic test, but Bourbon is is_initial and
+    // Ice would have been one of the six. Ice drops -> Bourbon (next by
+    // position) takes the freed slot rather than the grid rendering 5.
+    const cfg = [
+      ...rows.map((r) => ({
+        ...r,
+        is_initial: r.ingredient_type_id === "bourbon" ? true : r.is_initial,
+      })),
+      {
+        ingredient_type_id: "ice",
+        position: 5,
+        is_initial: true,
+        group_label: "Kitchen basics",
+      },
+    ]
+    const { six } = resolveOnboardingSelection(cfg, types)
+    expect(six).toHaveLength(6)
+    expect(six.some((t) => t.id === "ice")).toBe(false)
+    expect(six.some((t) => t.id === "bourbon")).toBe(true)
+  })
+
+  it("every type in six also appears in exactly one groups bucket", () => {
+    const { six, groups } = resolveOnboardingSelection(rows, types)
+    const groupIds = groups.flatMap(([, list]) => list.map((t) => t.id))
+    for (const t of six) {
+      expect(groupIds.filter((id) => id === t.id)).toHaveLength(1)
+    }
+  })
+
+  it("handles an empty config without crashing (no tiles, 3 empty groups)", () => {
+    const { six, groups } = resolveOnboardingSelection([], types)
+    expect(six).toEqual([])
+    expect(groups).toEqual([
+      ["Spirits", []],
+      ["Mixers", []],
+      ["Kitchen basics", []],
+    ])
+  })
+
+  it("tolerates null/undefined rows and types", () => {
+    expect(resolveOnboardingSelection(null, null)).toEqual({
+      six: [],
+      groups: [
+        ["Spirits", []],
+        ["Mixers", []],
+        ["Kitchen basics", []],
+      ],
     })
   })
 })

@@ -33,10 +33,10 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
 Each numbered step is a development chunk boundary for this file.
 
-## Exact next action (paused here, 2026-09-09)
+## Exact next action (paused here, 2026-09-10)
 
 1. **Household Basics Stage 2 is DONE (committed `c1629b9`, mobile-verified 2026-09-09).**
-2. **Household Basics Stage 3: design approved, sub-stage 3a DONE (committed + pushed 2026-09-09).** Next is **3b** — the read service (`fetchOnboardingIngredients`), `useCatalog` fetching it, the pure `resolveOnboardingSelection(rows, types)` in `domain/buildYourBar.js` (+ tests: exclusion of `assumed_available` from both outputs, backfill order, dedupe, < 6 eligible → fewer/no crash, > 6 `is_initial` → first 6, deleted-id row dropped, `six` ⊆ groups), and wiring `BuildYourBar.jsx` to render the 3 grouped headings + the six from the config, then deleting `src/data/buildYourBarEssentials.js` + its name-based tests. Then 3c (admin "Onboarding ingredients" tab + `services/onboarding.js` write fns + `TABS` entry) and 3d (BuildYourBar "Edit list" link + `AdminMenu` item + `isAdmin` through `HomeScreen`). Do not start Ingredient Forms / Homemade Preparations until Household Basics is fully done.
+2. **Household Basics Stage 3: design approved, sub-stages 3a + 3b DONE (both committed + pushed).** 3a `c999e1d` (2026-09-09). 3b (2026-09-10): `services/onboarding.js` `fetchOnboardingIngredients` (read only — write fns land in 3c); `useCatalog` fetches it into `catalog.onboardingIngredients` via the existing `Promise.all`; pure `resolveOnboardingSelection(rows, types)` in `domain/buildYourBar.js` (13 tests — assumed_available excluded from both outputs, backfill order, dedupe, <6 eligible → fewer/no crash, >6 is_initial → first 6 by position, deleted-id row dropped, flagged initial pulls next backfill up, six ⊆ groups, empty/null-safe); `BuildYourBar.jsx` wired to it (3 fixed headings, empty groups hidden, "Show all essentials" toggle only when the expanded view holds more than the six). `resolveEssentialsList` + `src/data/buildYourBarEssentials.js` + their name-based tests deleted. `pnpm test` 223/223, `pnpm build` clean, isolated-LF `oxfmt --check` clean, REST select shape 200. **Mobile verification of 3b held for the user** (see the checklist in the 3b chunk below). Next is **3c** (admin "Onboarding ingredients" tab + `services/onboarding.js` write fns + `TABS` entry), then 3d (BuildYourBar "Edit list" link + `AdminMenu` item + `isAdmin` through `HomeScreen` — `isAdmin` is already in Outlet context). Do not start Ingredient Forms / Homemade Preparations until Household Basics is fully done.
 3. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files (and when a changed file needs reformatting, run `oxfmt` on the isolated LF copy and hand-apply the wrap changes back). Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
 4. **Migration count reconciled 2026-09-09.** 48 migration files on disk, 48 ledger rows, every one `local == remote`, 0 pending. The Speed Rack chunk's "47/47" was correct for its time (46 synced + `20260906130000`); Stage 1's chunk originally said "47/47" which was a **miscount** — with `20260909120000` it is **48/48**. Migration history itself is intact (unique ordered timestamps, no gaps, no dupes) — nothing was repaired, only the recorded count corrected.
 
@@ -61,16 +61,67 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## In-progress chunk (Household Basics Stage 3 — admin-editable onboarding config; design APPROVED, sub-stage 3a DONE, 2026-09-09)
+## In-progress chunk (Household Basics Stage 3 — admin-editable onboarding config; design APPROVED, sub-stages 3a + 3b DONE, 2026-09-10)
 
 Stage 2 is done + mobile-verified. Stage 3 re-scoped: the "Build your bar"
 onboarding lists become an **admin-managed DB table** so future curation needs
 no code / AI / redeploy. **Full approved design (with the user's 8 revisions)
 is in `docs/plans/household-basics-ingredient-forms-preparations.md`'s Stage 3
 section** — read it there. Sub-stages: **3a (flags + schema + seed) — DONE**;
-3b (read service + resolver + BuildYourBar wiring); 3c (admin "Onboarding
-ingredients" tab); 3d (shortcuts). **3b has NOT been started** — stop point
-per the user.
+**3b (read service + resolver + BuildYourBar wiring) — DONE 2026-09-10, mobile
+verification held for the user**; 3c (admin "Onboarding ingredients" tab); 3d
+(shortcuts). **3c has NOT been started** — stop point per the user.
+
+### Sub-stage 3b — DONE 2026-09-10 (committed + pushed; mobile verification pending)
+
+- **`src/services/onboarding.js` (new)** — `fetchOnboardingIngredients()` only:
+  `select("ingredient_type_id, position, is_initial, group_label").order("position")`.
+  Read side of the module; the write helpers (`addOnboardingIngredient`,
+  `removeOnboardingIngredient`, `setOnboardingInitial`, `setOnboardingGroup`,
+  `reorderOnboarding` → `rpc('set_onboarding_order')`) come in 3c.
+- **`src/hooks/useCatalog.js`** — `fetchOnboardingIngredients()` added to the
+  existing `Promise.all`; `onboardingIngredients` added to initial state and
+  the resolved `next`. A fetch failure of this table therefore fails the whole
+  catalog load → App.jsx's existing blocking error screen; a refetch failure
+  keeps the last-good rows (existing functional-setState spread).
+- **`src/domain/buildYourBar.js`** — `resolveEssentialsList` (name-based)
+  **removed**; new pure `resolveOnboardingSelection(rows, types)` →
+  `{ six, groups }`. `groups` is always the 3 fixed labels
+  (`ONBOARDING_GROUP_LABELS = ["Spirits","Mixers","Kitchen basics"]`) in fixed
+  order, each bucket sorted by `position` then `name`. `six` = `is_initial`
+  survivors in overall position order, backfilled from the rest (same order),
+  deduped by id, capped at 6. Drops rows whose type is missing (deleted since
+  seeding), excludes `assumed_available` types from both outputs, defensively
+  filters out-of-range `group_label` so `six ⊆ groups` always holds. Null/
+  undefined `rows`/`types` tolerated.
+- **`src/domain/buildYourBar.test.js`** — rewritten: 13 `resolveOnboardingSelection`
+  tests (fixed label order regardless of row order; per-group position sort;
+  six = is_initial in position order; backfill when <6 initial; no dup when
+  backfill reaches an initial row; cap at first 6 by position when >6 initial;
+  <6 eligible → fewer, no gap/crash, empty group still present; deleted-id row
+  dropped from both, doesn't consume a slot; assumed_available excluded from
+  both; flagged initial pulls next backfill candidate up; six ⊆ groups exactly
+  once each; empty config; null-safe). Old `BUILD_YOUR_BAR_*` fixture import
+  gone.
+- **`src/components/home/BuildYourBar.jsx`** — imports/`resolvedTiles` helper
+  swapped for one `useMemo(resolveOnboardingSelection(catalog.onboardingIngredients,
+  catalog.types))`. Expanded view maps `nonEmptyGroups` (empty headings
+  hidden). "Show all essentials" toggle now only renders when the expanded
+  total exceeds `six.length` (for the normal 14-row seed: 14 > 6, unchanged).
+  Selection/tap, live makeable count, per-visit visibility, nav CTAs all
+  untouched.
+- **`src/data/buildYourBarEssentials.js`** — `git rm`'d. Nothing else imported
+  it (grep-verified before deletion).
+- **Verify:** `corepack pnpm@10.34.3 test` 223/223 (was 216; −6 old name tests,
+  +13 new). `corepack pnpm@10.34.3 build` clean (pre-existing >500 kB chunk
+  warning only). `oxfmt --check` on isolated LF copies of all 5 changed
+  `.js`/`.jsx` files — clean (3 needed reflow, hand-applied: two call/arrow
+  wraps + the test fixture object expansion). REST sanity:
+  `GET /rest/v1/onboarding_ingredients?select=ingredient_type_id,position,is_initial,group_label`
+  → HTTP 200 (anon RLS-denied `[]`, shape valid). Plain column select, no
+  PostgREST embed.
+- **Inert-no-longer:** `BuildYourBar` now reads the live table. Seed = the 14
+  rows from 3a; nothing else changed in the DB.
 
 ### Sub-stage 3a — DONE 2026-09-09 (committed + pushed)
 

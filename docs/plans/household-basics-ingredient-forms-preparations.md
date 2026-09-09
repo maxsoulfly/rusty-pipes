@@ -179,7 +179,7 @@ picking a best guess.
   cycle works.
 - *Safe stop:* ships with exactly one basic live.
 
-**Stage 3 — REVISED 2026-09-09: admin-editable onboarding config. Design APPROVED (with revisions) by the user 2026-09-09. 3a in progress.**
+**Stage 3 — REVISED 2026-09-09: admin-editable onboarding config. Design APPROVED (with revisions) by the user 2026-09-09. 3a + 3b DONE (2026-09-09 / 2026-09-10); 3c (admin tab) is next.**
 
 The original Stage 3 (below, struck) hard-coded the onboarding lists in
 `src/data/buildYourBarEssentials.js` and swapped Ice→Coke by editing that
@@ -360,13 +360,21 @@ cocktails" / "Find more ingredients" nav — all untouched.
   finding cleared). `rls_suite.sql` extended with an `onboarding_ingredients`
   block — full suite passes. `db advisors` no new finding. `pnpm test`
   216/216, `pnpm build` clean. Inert — nothing reads the table yet.
-- **3b — read service + resolver + BuildYourBar wiring.**
-  `fetchOnboardingIngredients` (moved here); `useCatalog` fetches it;
-  `resolveOnboardingSelection` + tests (exclusion from both outputs; a
-  flagged initial member pulls the next backfill candidate up; dedupe;
-  < 6 eligible → fewer, no crash; > 6 is_initial → first 6; deleted-id row
-  dropped; `six` ⊆ groups). `BuildYourBar.jsx` renders groups + six from it.
-  Delete `buildYourBarEssentials.js` + its name-based tests.
+- **3b — read service + resolver + BuildYourBar wiring. DONE 2026-09-10
+  (committed + pushed; mobile verification held for the user).**
+  `src/services/onboarding.js` `fetchOnboardingIngredients` (read only;
+  write fns deferred to 3c); `useCatalog` fetches it into
+  `catalog.onboardingIngredients` via the existing `Promise.all`;
+  `resolveOnboardingSelection(rows, types)` in `domain/buildYourBar.js`
+  (`resolveEssentialsList` removed) + 13 tests (assumed_available excluded
+  from both outputs; flagged initial pulls the next backfill candidate up;
+  dedupe; < 6 eligible → fewer, no crash; > 6 is_initial → first 6 by
+  position; deleted-id row dropped, doesn't consume a slot; `six` ⊆ groups;
+  empty config; null-safe). `BuildYourBar.jsx` reads it (3 fixed headings,
+  empty groups hidden, "Show all essentials" toggle only when the expanded
+  view holds more than the six). `buildYourBarEssentials.js` + its
+  name-based tests deleted. `pnpm test` 223/223, `pnpm build` clean,
+  isolated-LF `oxfmt --check` clean.
 - **3c — admin tab.** `OnboardingTab.jsx` + `services/onboarding.js` write
   fns + `TABS` entry. Mobile-first: 44px group dropdown / ↑ / ↓ / toggle /
   remove, one-thumb; the ≤ 6 initial cap + backfill explainer.
