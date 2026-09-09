@@ -179,7 +179,7 @@ picking a best guess.
   cycle works.
 - *Safe stop:* ships with exactly one basic live.
 
-**Stage 3 — REVISED 2026-09-09: admin-editable onboarding config. Design APPROVED (with revisions) by the user 2026-09-09. 3a + 3b + 3c + 3d all code-complete (2026-09-10); 3c retest PASSED; one mobile confirmation of 3d + drag-to-reorder is the only thing left before Stage 3 is done.**
+**Stage 3 — REVISED 2026-09-09: admin-editable onboarding config. Design APPROVED (with revisions) by the user 2026-09-09. 3a + 3b done; 3c done + retest PASSED; 3d shortcuts + drag-to-reorder code-complete but DRAG FAILED first retest (fix pushed — `data-onboarding-row` was on `<Card>`, which drops unknown DOM props, so drop detection always got null; now on a `<div>` wrapper + window-listener-driven drag). Drag retest + the rest of the 3d checklist pending before Stage 3 is done.**
 
 **2026-09-10 addition to 3d:** drag-to-reorder in the editor — a per-row grip
 handle (Pointer Events; `touch-none` on the handle only so the rest of the row
@@ -431,10 +431,19 @@ cocktails" / "Find more ingredients" nav — all untouched.
   Plus drag-to-reorder in the editor: per-row grip handle, Pointer Events,
   `touch-none` on the handle only, `reorderOnboardingDraft` (pure, +5 tests),
   ↑/↓ retained for keyboard/AT, same draft → atomic save. No migration.
+  **Drag reorder was broken on first retest (mouse + touch): the
+  `data-onboarding-row` drop marker was on `<Card>`, which doesn't forward
+  unknown DOM props, so `elementFromPoint().closest("[data-onboarding-row]")`
+  always returned null. Fix pushed — marker on a `<div>` wrapper; drag now
+  driven by `window` `pointermove`/`pointerup`/`pointercancel` listeners
+  (survive the handle re-rendering mid-reorder); `pointer-events:none` on the
+  dragged row; 4px threshold. No browser/touch automation in the sandbox, so
+  real mouse + iPhone drag is unverified — RETEST PENDING.**
   `pnpm test` 232/232, build clean, isolated-LF `oxfmt --check` clean.
 - Each: `corepack pnpm@10.34.3` test/build, `oxfmt --check` on isolated LF
   copies, commit + push. Mobile verification of 3b–3d held for the user
-  (3b done; 3c done; 3d + drag pending one phone check).
+  (3b done; 3c done; 3d shortcuts + drag pending — drag FAILED once, fix
+  pushed for retest).
 
 ### Permissions summary
 - Read: `is_member()`. Write: `is_admin()`. Shortcut visibility gates on

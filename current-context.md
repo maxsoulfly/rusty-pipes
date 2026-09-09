@@ -36,7 +36,7 @@ Each numbered step is a development chunk boundary for this file.
 ## Exact next action (paused here, 2026-09-10)
 
 1. **Household Basics Stage 2 is DONE (committed `c1629b9`, mobile-verified 2026-09-09).**
-2. **Household Basics Stage 3: 3a + 3b + 3c + 3c-safeupdate-fix + 3d(drag + shortcuts) all CODE COMPLETE and committed/pushed. Awaiting one final mobile confirmation before the feature is marked done.** 3a `c999e1d`. 3b `960aa86` — mobile-verified 2026-09-10 (Coke not Ice; expanded groups; selection / live count / "Show my cocktails"; all three nav links). **Back-nav widget visibility NOT separately confirmed** — unchanged, stays unverified. 3c editor `3a7e29d`; **safeupdate bug** (`DELETE requires a WHERE clause` — `set_onboarding_config`'s bare `delete`; `authenticator` preloads `pg-safeupdate`; RLS suite missed it because `db query --linked` doesn't preload it) **fixed `ab73305`** (migration `20260910130000`, `delete ... where true`; SECURITY INVOKER / RLS / atomicity unchanged; advisors clean; source-level regression guard added to the RLS suite). **3c retested by the user on the real app 2026-09-10 — PASSED:** saving works, reloading persists, replacing ingredients works, and order / group / Initial changes all save. Regular (non-staff) users cannot reach Admin. **Offline-save handling was NOT manually verified — do not mark it done.** **3d + drag-to-reorder (2026-09-10, this chunk):** per-row grip handle (Pointer Events, `touch-none` on the handle only so the rest of the row still scrolls, `tabIndex=-1`), drags within a group via `reorderOnboardingDraft` (pure, in `domain/buildYourBar.js`, 5 tests); ↑/↓ kept for keyboard/AT; reorders flow through the same draft → Save/Discard → atomic save. Admin-only "Edit list" link beside the Build Your Bar heading (`isAdmin` threaded HomeScreen → BuildYourBar); "Onboarding ingredients" item added to `AdminMenu` (My Bar + Add ingredients ⋯), "Edit ingredients" kept. All shortcuts → `/admin?tab=onboarding`; `/admin` still behind `RequireStaff`. `pnpm test` 232/232, build clean, isolated-LF `oxfmt --check` clean. **Stop for the user's mobile confirmation (drag / save+reload / scroll / shortcut destinations) before marking the feature complete.** Do not start Ingredient Forms / Homemade Preparations. `project.md` stays unchanged until close-out.
+2. **Household Basics Stage 3: 3a + 3b + 3c + 3c-safeupdate-fix all done/pushed; 3c retest PASSED. 3d shortcuts + drag-to-reorder code-complete; DRAG REORDER FAILED on first retest, fix pushed, RETEST PENDING.** 3a `c999e1d`. 3b `960aa86` — mobile-verified 2026-09-10. **Back-nav widget visibility NOT separately confirmed.** 3c editor `3a7e29d`; **safeupdate bug fixed `ab73305`** (migration `20260910130000`, `delete ... where true`; advisors clean; RLS-suite regression guard). **3c retest 2026-09-10 (user, real app): PASSED** — saving / reload-persists / replace / order+group+Initial all work; non-staff cannot reach Admin. **Offline-save handling NOT manually verified.** **3d + drag-to-reorder `cec6e81`:** admin-only "Edit list" link beside the Build Your Bar heading (`isAdmin` threaded HomeScreen → BuildYourBar); "Onboarding ingredients" item added to `AdminMenu` (My Bar + Add ingredients ⋯), "Edit ingredients" kept; all → `/admin?tab=onboarding`; `/admin` still behind `RequireStaff`. **Drag reorder was broken in `cec6e81`** — `data-onboarding-row` was on `<Card>`, which drops unknown DOM props, so drop-target detection always got `null` (failed on mouse and touch alike). **Fix pushed (this chunk):** marker moved to a `<div>` wrapper; drag driven by `window` pointer listeners (survives the button re-rendering mid-reorder); `pointer-events:none` on the dragged row so `elementFromPoint` sees underneath; 4px threshold. `pnpm test` 232/232, build clean, `oxfmt --check` clean. **No browser/touch automation or DOM test env in this sandbox — real mouse + iPhone drag is NOT verified here.** **DRAG = FAILED PENDING RETEST; the other latest-checklist items (save+reload after drag, off-handle scroll, shortcut destinations, non-admin gating) remain UNCONFIRMED.** No close-out, no new features. Do not start Ingredient Forms / Homemade Preparations. `project.md` unchanged until close-out.
 3. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files (and when a changed file needs reformatting, run `oxfmt` on the isolated LF copy and hand-apply the wrap changes back). Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
 4. **Migration count (2026-09-10): 53 files on disk, 53 ledger rows, all `local == remote`, 0 pending.** Was 48 after the 2026-09-09 reconcile; +`20260909130000/140000/150000` (3a) +`20260910120000` (3c) +`20260910130000` (3c safeupdate fix) = 53. History intact (unique ordered timestamps, no gaps/dupes). **3d added no migration** — drag + shortcuts are client-only.
 
@@ -63,9 +63,57 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## In-progress chunk (Household Basics Stage 3 — admin-editable onboarding config; 3a–3d all code-complete 2026-09-10; awaiting one final mobile confirmation)
+## In-progress chunk (Household Basics Stage 3 — admin-editable onboarding config; 3a–3d code-complete; drag-to-reorder FAILED once, fix pushed, retest pending)
 
-### Sub-stage 3d + drag-to-reorder — CODE COMPLETE 2026-09-10 (committed + pushed; mobile confirmation pending)
+### Drag-to-reorder BUGFIX — 2026-09-10 (committed + pushed; retest pending)
+
+**Reported:** on `cec6e81`, dragging the grip handle did nothing — **mouse
+and touch both**. **Root cause (proven by inspection, not the unit tests):**
+the drop-target marker `data-onboarding-row={typeId}` was set on `<Card>`, and
+`Card` (`src/components/primitives.jsx`) destructures only
+`{ children, style, className, onClick }` — it does **not** spread unknown
+props, so the `data-*` attribute never reached the DOM. `elementFromPoint(...)
+.closest("[data-onboarding-row]")` therefore always returned `null` →
+`onDragMove` always early-returned → no reorder, on any input device.
+`reorderOnboardingDraft`'s unit tests passed the whole time because the
+function itself was fine; the DOM wiring was the break.
+
+**Fix (`OnboardingTab.jsx`, scope kept tight):**
+- `data-onboarding-row` now lives on a plain `<div>` wrapper around each
+  `<Card>` (real DOM node, attribute actually renders).
+- Drag is now driven from **`window` `pointermove`/`pointerup`/`pointercancel`
+  listeners** added in `startDrag` and removed in `endDrag` — not from props
+  on the handle button. Reordering re-renders and moves that button in the
+  DOM, which can drop pointer capture and stop prop-level `pointermove`;
+  window listeners keep firing regardless of DOM moves. `setPointerCapture`
+  is kept as a best-effort bonus (pointerup-outside-viewport) but nothing
+  depends on it.
+- While a row is being dragged its wrapper gets `pointer-events: none`, so
+  `elementFromPoint` reports the row **under** the cursor, not the dragged
+  row itself.
+- 4px movement threshold before the first reorder (no static-press jitter;
+  drag styling only appears once moving).
+- Handle keeps `touch-none` (browser won't scroll from it) + `tabIndex={-1}`;
+  swiping anywhere else on the row still scrolls. **↑/↓ buttons unchanged**
+  (the keyboard / AT path). Reorders still flow through `draft` → Save /
+  Discard → atomic `set_onboarding_config`. Within-group only.
+- `aria-hidden` dropped from the handle (kept a real `aria-label`).
+
+**Verification limits (honest):** this sandbox has **no browser/touch
+automation** (no Playwright/puppeteer) and **no DOM test env** (vitest
+`environment: "node"`, no jsdom/testing-library) — adding either is outside
+this fix's scope. So the fix is verified by: root-cause proof from source,
+`reorderOnboardingDraft` unit tests (232/232), production build clean,
+isolated-LF `oxfmt --check` clean, and `.touch-none { touch-action:none }`
+confirmed present in the built CSS. **Real mouse + real-iPhone drag is NOT
+verified here — needs the user's retest.**
+
+**Status: drag-to-reorder = FAILED PENDING RETEST.** The other latest-checklist
+items (save+reload after a drag, off-handle scrolling, the three shortcut
+destinations, non-admin gating) also remain **unconfirmed**. No close-out, no
+new features.
+
+### Sub-stage 3d + drag-to-reorder — implemented 2026-09-10 (`cec6e81`; drag reorder broken there, fixed in the bugfix above)
 
 - **`domain/buildYourBar.js` `reorderOnboardingDraft(items, draggedId, targetId)`** —
   pure array-move: splice the dragged row out, re-insert at the target's

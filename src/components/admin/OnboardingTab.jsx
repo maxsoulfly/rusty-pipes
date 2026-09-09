@@ -165,51 +165,71 @@ export function OnboardingTab({ catalog }) {
       return next
     })
 
-  // Drag-to-reorder via the per-row grip handle. Pointer Events (not HTML5
-  // drag) so it works the same on touch; the handle alone carries
-  // `touch-none`, so a swipe anywhere else on the row still scrolls the
-  // page. The ↑/↓ buttons stay for keyboard / assistive tech - the handle
-  // is not in the tab order. Reorders go through the same `draft` state, so
-  // Save / Discard and the atomic save are unchanged. Drag only reorders
-  // inside a group; the group dropdown moves rows between groups.
+  // Drag-to-reorder via the per-row grip handle. Pointer Events, driven from
+  // WINDOW listeners (added on pointerdown, removed on pointerup/cancel) -
+  // not from props on the handle button, because reordering re-renders and
+  // moves that button in the DOM, which drops pointer capture and stops
+  // prop-level pointermove from firing. Window listeners keep receiving
+  // moves regardless. The handle alone carries `touch-none`, so the browser
+  // won't start a scroll from it; a swipe anywhere else on the row scrolls
+  // normally. The ↑/↓ buttons stay as the keyboard / assistive-tech path
+  // (the handle is out of the tab order). Reorders go through the same
+  // `draft` state, so Save / Discard and the atomic save are unchanged.
+  // Drag only reorders inside a group; the group dropdown moves rows
+  // between groups.
   const [draggingId, setDraggingId] = useState(null)
-  const draggingIdRef = useRef(null)
+  // { id, startY, active } while a drag is live, else null.
+  const dragRef = useRef(null)
+
+  const rowIdAtPoint = (x, y) =>
+    document
+      .elementFromPoint(x, y)
+      ?.closest("[data-onboarding-row]")
+      ?.getAttribute("data-onboarding-row") ?? null
+
+  const onWindowPointerMove = useCallback((e) => {
+    const d = dragRef.current
+    if (!d) return
+    // Small threshold so a static press on the handle doesn't jitter or
+    // flash the drag styling.
+    if (!d.active) {
+      if (Math.abs(e.clientY - d.startY) < 4) return
+      d.active = true
+      setDraggingId(d.id)
+    }
+    const overId = rowIdAtPoint(e.clientX, e.clientY)
+    if (!overId || overId === d.id) return
+    setDraft((cur) => reorderOnboardingDraft(cur, d.id, overId))
+  }, [])
+
+  const endDrag = useCallback(() => {
+    if (!dragRef.current) return
+    dragRef.current = null
+    setDraggingId(null)
+    window.removeEventListener("pointermove", onWindowPointerMove)
+    window.removeEventListener("pointerup", endDrag)
+    window.removeEventListener("pointercancel", endDrag)
+  }, [onWindowPointerMove])
+
+  // Safety net: drop any live drag / listeners if the tab unmounts mid-drag.
+  useEffect(() => endDrag, [endDrag])
 
   const startDrag = (e, typeId) => {
     if (saving) return
     e.preventDefault()
-    draggingIdRef.current = typeId
-    setDraggingId(typeId)
+    dragRef.current = { id: typeId, startY: e.clientY, active: false }
     setError(null)
     setSavedOk(false)
+    // Bonus (not relied on): keeps pointerup coming if the pointer is
+    // released outside the viewport. Safe to lose when the button re-renders.
     try {
-      e.currentTarget.setPointerCapture(e.pointerId)
+      e.currentTarget.setPointerCapture?.(e.pointerId)
     } catch {
-      // setPointerCapture can throw if the pointer is already gone; the
-      // drag just won't track, which is harmless.
+      // pointer already gone - window listeners still cover the drag
     }
-  }
-
-  const onDragMove = (e) => {
-    const draggedId = draggingIdRef.current
-    if (!draggedId) return
-    const under = document
-      .elementFromPoint(e.clientX, e.clientY)
-      ?.closest("[data-onboarding-row]")
-    const overId = under?.getAttribute("data-onboarding-row")
-    if (!overId || overId === draggedId) return
-    setDraft((cur) => reorderOnboardingDraft(cur, draggedId, overId))
-  }
-
-  const endDrag = (e) => {
-    if (!draggingIdRef.current) return
-    draggingIdRef.current = null
-    setDraggingId(null)
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId)
-    } catch {
-      // Already released / pointer gone - nothing to do.
-    }
+    window.addEventListener("pointermove", onWindowPointerMove)
+    window.addEventListener("pointerup", endDrag)
+    window.addEventListener("pointercancel", endDrag)
   }
 
   const handleSave = async () => {
@@ -337,99 +357,111 @@ export function OnboardingTab({ catalog }) {
                 const type = typeById.get(it.typeId)
                 const hidden = type?.assumed_available === true
                 return (
-                  <Card
+                  // The drop-target marker lives on a plain <div> - <Card>
+                  // does not forward unknown DOM props, so a data-* attr on
+                  // it never reaches the DOM (that was the original "drag
+                  // does nothing" bug). While this row is the one being
+                  // dragged, pointer-events:none lets elementFromPoint see
+                  // the row *underneath* the cursor.
+                  <div
                     key={it.typeId}
                     data-onboarding-row={it.typeId}
-                    className={clsx(
-                      "p-3 transition-shadow",
-                      draggingId === it.typeId && "opacity-60 ring-2 ring-cyan",
-                    )}
+                    style={
+                      draggingId === it.typeId
+                        ? { pointerEvents: "none" }
+                        : undefined
+                    }
                   >
-                    <div className="flex items-start gap-1.5">
-                      <button
-                        type="button"
-                        tabIndex={-1}
-                        aria-hidden="true"
-                        disabled={groupItems.length < 2}
-                        onPointerDown={(e) => startDrag(e, it.typeId)}
-                        onPointerMove={onDragMove}
-                        onPointerUp={endDrag}
-                        onPointerCancel={endDrag}
-                        title="Drag to reorder"
-                        className="w-11 h-11 shrink-0 -ml-1 rounded-sm text-tx3 flex items-center justify-center touch-none select-none cursor-grab active:cursor-grabbing disabled:opacity-25 disabled:cursor-default"
-                      >
-                        <GripIcon />
-                      </button>
-                      <div className="flex-1 flex flex-col gap-2.5">
-                        <div className="flex items-start gap-2">
-                          <span
-                            className={clsx(
-                              "flex-1 text-[15px] font-display font-bold",
-                              hidden ? "text-tx3 line-through" : "text-tx",
-                            )}
-                          >
-                            {type ? type.name : "(missing ingredient)"}
-                          </span>
-                          {hidden && (
-                            <span className="text-[11px] text-tx3 font-mono shrink-0 mt-1">
-                              Hidden — household basic
+                    <Card
+                      className={clsx(
+                        "p-3 transition-shadow",
+                        draggingId === it.typeId &&
+                          "opacity-60 ring-2 ring-cyan",
+                      )}
+                    >
+                      <div className="flex items-start gap-1.5">
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          aria-label={`Drag to reorder ${type?.name ?? "row"}`}
+                          disabled={groupItems.length < 2}
+                          onPointerDown={(e) => startDrag(e, it.typeId)}
+                          title="Drag to reorder"
+                          className="w-11 h-11 shrink-0 -ml-1 rounded-sm text-tx3 flex items-center justify-center touch-none select-none cursor-grab active:cursor-grabbing disabled:opacity-25 disabled:cursor-default"
+                        >
+                          <GripIcon />
+                        </button>
+                        <div className="flex-1 flex flex-col gap-2.5">
+                          <div className="flex items-start gap-2">
+                            <span
+                              className={clsx(
+                                "flex-1 text-[15px] font-display font-bold",
+                                hidden ? "text-tx3 line-through" : "text-tx",
+                              )}
+                            >
+                              {type ? type.name : "(missing ingredient)"}
                             </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <div className="min-w-[8.5rem]">
-                            <Select
-                              small
-                              value={it.groupLabel}
-                              onChange={(g) => setGroupAt(idx, g)}
-                              options={ONBOARDING_GROUP_LABELS}
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => toggleInitialAt(idx)}
-                            disabled={!it.isInitial && atInitialCap}
-                            aria-pressed={it.isInitial}
-                            className={clsx(
-                              "h-11 px-3 rounded-sm text-xs font-display font-semibold border cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
-                              it.isInitial
-                                ? "bg-cyan/15 border-cyan/40 text-cyan"
-                                : "bg-surface3 border-bdr text-tx2",
+                            {hidden && (
+                              <span className="text-[11px] text-tx3 font-mono shrink-0 mt-1">
+                                Hidden — household basic
+                              </span>
                             )}
-                          >
-                            {it.isInitial ? "★ Initial" : "Initial"}
-                          </button>
-                          <div className="flex-1" />
-                          <button
-                            type="button"
-                            onClick={() => move(idx, -1)}
-                            disabled={posInGroup === 0}
-                            aria-label={`Move ${type?.name ?? "row"} up`}
-                            className="w-11 h-11 rounded-sm bg-surface3 border border-bdr text-tx2 flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                          >
-                            <IconChevD size={16} className="rotate-180" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => move(idx, 1)}
-                            disabled={posInGroup === groupItems.length - 1}
-                            aria-label={`Move ${type?.name ?? "row"} down`}
-                            className="w-11 h-11 rounded-sm bg-surface3 border border-bdr text-tx2 flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                          >
-                            <IconChevD size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeAt(idx)}
-                            aria-label={`Remove ${type?.name ?? "row"}`}
-                            className="w-11 h-11 rounded-sm bg-coral/10 border border-coral/25 text-coral flex items-center justify-center cursor-pointer"
-                          >
-                            <IconTrash size={14} />
-                          </button>
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <div className="min-w-[8.5rem]">
+                              <Select
+                                small
+                                value={it.groupLabel}
+                                onChange={(g) => setGroupAt(idx, g)}
+                                options={ONBOARDING_GROUP_LABELS}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => toggleInitialAt(idx)}
+                              disabled={!it.isInitial && atInitialCap}
+                              aria-pressed={it.isInitial}
+                              className={clsx(
+                                "h-11 px-3 rounded-sm text-xs font-display font-semibold border cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
+                                it.isInitial
+                                  ? "bg-cyan/15 border-cyan/40 text-cyan"
+                                  : "bg-surface3 border-bdr text-tx2",
+                              )}
+                            >
+                              {it.isInitial ? "★ Initial" : "Initial"}
+                            </button>
+                            <div className="flex-1" />
+                            <button
+                              type="button"
+                              onClick={() => move(idx, -1)}
+                              disabled={posInGroup === 0}
+                              aria-label={`Move ${type?.name ?? "row"} up`}
+                              className="w-11 h-11 rounded-sm bg-surface3 border border-bdr text-tx2 flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              <IconChevD size={16} className="rotate-180" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => move(idx, 1)}
+                              disabled={posInGroup === groupItems.length - 1}
+                              aria-label={`Move ${type?.name ?? "row"} down`}
+                              className="w-11 h-11 rounded-sm bg-surface3 border border-bdr text-tx2 flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              <IconChevD size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeAt(idx)}
+                              aria-label={`Remove ${type?.name ?? "row"}`}
+                              className="w-11 h-11 rounded-sm bg-coral/10 border border-coral/25 text-coral flex items-center justify-center cursor-pointer"
+                            >
+                              <IconTrash size={14} />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </Card>
+                    </Card>
+                  </div>
                 )
               })}
             </div>
