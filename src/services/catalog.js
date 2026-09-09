@@ -57,7 +57,7 @@ export async function fetchIngredientTypes() {
   const { data, error } = await supabase
     .from("ingredient_types")
     .select(
-      "id, category_id, parent_type_id, name, color, bar_priority, recommend_by_default, description, shape",
+      "id, category_id, parent_type_id, name, color, bar_priority, recommend_by_default, description, shape, assumed_available",
     )
     .order("name")
   if (error) throw error
@@ -79,7 +79,16 @@ export async function createIngredientTypes(rows) {
 // correct its name/category/parent/color/priority/description again.
 export async function updateIngredientType(
   id,
-  { name, categoryId, parentTypeId, barPriority, color, description, shape },
+  {
+    name,
+    categoryId,
+    parentTypeId,
+    barPriority,
+    color,
+    description,
+    shape,
+    assumedAvailable,
+  },
 ) {
   const { data, error } = await supabase
     .from("ingredient_types")
@@ -91,6 +100,7 @@ export async function updateIngredientType(
       color: color || null,
       description: description || null,
       shape,
+      assumed_available: assumedAvailable,
     })
     .eq("id", id)
     .select()

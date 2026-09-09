@@ -6,6 +6,7 @@ import {
   CategoryPicker,
   ColorSwatchPicker,
   Input,
+  OwnedToggle,
   Select,
 } from "@/components/primitives"
 import { resolveIngredientType } from "@/domain/ingredientResolution"
@@ -44,6 +45,9 @@ export function IngredientTypeEditor({
   const [categoryId, setCategoryId] = useState(type.category_id)
   const [parentTypeId, setParentTypeId] = useState(type.parent_type_id ?? "")
   const [barPriority, setBarPriority] = useState(type.bar_priority)
+  const [assumedAvailable, setAssumedAvailable] = useState(
+    type.assumed_available ?? false,
+  )
   const [color, setColor] = useState(type.color ?? "")
   const [shape, setShape] = useState(type.shape ?? "spirit_bottle")
   const [description] = useState(type.description ?? "")
@@ -135,6 +139,7 @@ export function IngredientTypeEditor({
         color: result.resolved.color,
         description: result.resolved.description,
         shape,
+        assumedAvailable,
       })
       onSaved(updated)
     } catch (err) {
@@ -183,6 +188,23 @@ export function IngredientTypeEditor({
           label: p[0].toUpperCase() + p.slice(1),
         }))}
       />
+      {/* Household basic - a catalogue-wide "assume everyone has this" flag
+          (Ice, Salt, plain Sugar, Water). Sits next to bar_priority because
+          both are catalogue-level availability tuning, distinct from the
+          display fields (color/icon) below. Inert until the availability
+          engine starts reading it. */}
+      <div className="flex items-center justify-between gap-3 py-1">
+        <div>
+          <div className="text-[13px] font-body font-medium text-tx">
+            Household basic
+          </div>
+          <div className="text-xs text-tx3 leading-snug">
+            Assume every member has this. It never shows as missing in a recipe
+            and never drives a Buy Next suggestion.
+          </div>
+        </div>
+        <OwnedToggle owned={assumedAvailable} onChange={setAssumedAvailable} />
+      </div>
       {/* Color and Icon grouped together, right next to each other - both
           are "how this type displays," as distinct from the
           category/hierarchy/priority fields above. */}

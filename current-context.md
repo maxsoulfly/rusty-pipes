@@ -29,13 +29,15 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
    (Note: item 17's "Stage 1 done, mobile verification pending" / "admin type editing moved to an `IngredientDetailScreen` overflow action" text predates the My Bar redesign's later stages — see the corrected current state in item 18's plan doc: inline admin edit pencils are gone, editing now goes through Admin → Ingredient Types via the ⋯ menu.)
 
-18. Household basics, ingredient forms, and homemade preparations (new feature) — **planning approved, not started, 2026-09-08.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Household Basics Stages 1–3 are approved next work.** Ingredient Forms and Homemade Preparations are approved as direction only, with technical details and a required pre-stage re-audit (recipe consumers, permissions, dependency-cycle handling) still pending before their stages begin.
+18. Household basics, ingredient forms, and homemade preparations (new feature) — **in progress. Household Basics Stage 1 committed + pushed 2026-09-09; phone verification of the admin toggle pending.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle) done:** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000` applied to the live DB (ledger 47/47, `local == remote`), `assumed_available` threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` added to `IngredientTypeEditor.jsx`. Nothing reads the column yet — fully inert. **Household Basics Stage 2 (engine wiring, Ice only) is the next work, but do not start it until the user confirms the Stage 1 toggle on a phone.** Stage 3, Ingredient Forms, and Homemade Preparations unchanged from the plan doc: direction only, with required pre-stage re-audits (recipe consumers, permissions, dependency-cycle handling) still pending.
 
 Each numbered step is a development chunk boundary for this file.
 
-## Exact next action (paused here, 2026-09-08)
+## Exact next action (paused here, 2026-09-09)
 
-1. **Household basics / ingredient forms / preparations (item 18) — start here.** First action: verify the live catalogue entries for Ice, Sugar, Salt, Water, Hot Water, and Cola/Coke via authorized (logged-in) access to Admin → Ingredient Types — the anon key cannot read this table (RLS-confirmed), and none of these names except one prior "Ice" mention exist anywhere in git history, since the real catalogue was populated by admin batch import, not migrations. Flag anything missing/ambiguous rather than guessing. Then begin Household Basics **Stage 1 only** (schema + admin toggle) per the plan doc — do not start Stage 2/3 or the other two concepts until Stage 1 is committed, pushed, and phone-verified.
+1. **Household Basics Stage 1 is committed + pushed. Wait for the user's phone confirmation of the admin toggle** (Admin → Ingredient Types → open any type → "Household basic" toggle is a comfortable tap target, flips, Save persists it, reopening the editor shows the saved state; toggling back off also persists). Do not mark Stage 1 fully done until that result is in.
+2. **Then Household Basics Stage 2 (engine wiring, Ice only)** per `docs/plans/household-basics-ingredient-forms-preparations.md`. Stage 2's first action is the live catalogue-name check that was deferred from Stage 1: verify the exact live names/ids for Ice, Sugar, Salt, Water, Hot Water, and Cola/Coke via authorized access to Admin → Ingredient Types (anon key is RLS-blocked; the real catalogue was admin-batch-imported, not migrated, so nothing is confirmable from the repo). Flag anything missing/ambiguous rather than guessing. Stage 2 flags **only Ice** live. Do not start Stage 3 or the other two concepts until Stage 2 ships and is verified.
+3. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files. Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize. No dependency upgrade or repo-wide normalization was done as part of Stage 1.
 
 1. ~~Present the consolidated Library/My Bar + Sort mobile checklist~~ - **done. The user confirmed all five verification groups passed** (grouped Library + Sort control, ingredient/bottle detail entry points, view-vs-own type-tile controls, back-nav scroll/expanded-state restoration, Build Your Bar no-regression). Nothing outstanding from Stages 2-4 or the Sort control.
 2. ~~Investigate the recurring "JWT issued at future" startup error~~ - **root cause identified and a scoped fix committed (`65ecc74`), 2026-09-06. See "Earlier chunk" below.** `first open after idle` verification is still **pending** the user's confirmation on a phone - a separate follow-up, does not block the My Bar redesign. Do not mark it done without a real result.
@@ -57,6 +59,82 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 3. **Google OAuth's consent screen is still in "Testing" mode, not published** - deliberate, per the user's own choice (see below) - real members are added as test users one at a time, same overhead as generating an invitation. Revisit only if the user decides they want unlimited/unmanaged Google sign-in later (would need a real Privacy Policy/Terms of Service page built first).
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
+
+## Last completed chunk (Household Basics Stage 1 — schema + inert admin toggle, 2026-09-09)
+
+**Committed + pushed. Stage 1 is code-complete and live-DB-applied; only the user's phone check of the toggle is outstanding.**
+
+### What shipped
+
+- **Migration `20260909120000_ingredient_types_assumed_available.sql`** — adds
+  `ingredient_types.assumed_available boolean not null default false` + a
+  column comment stating the no-parent/child-propagation rule. No new RLS
+  policy or grant: `ingredient_types` has a blanket table-level UPDATE grant
+  gated by the `ingredient_types: admin update` policy (admin + moderator
+  since `20260825100100`), and there are no column-scoped grants on the
+  table, so the new column rides the same write path as every other field.
+  Not a `SECURITY DEFINER` function, so no `db advisors` re-run required.
+- **`src/services/catalog.js`** — `assumed_available` added to the
+  `fetchIngredientTypes` select; `updateIngredientType` takes `assumedAvailable`
+  and writes `assumed_available`. Plain passthrough, same shape as `shape`.
+- **`src/components/IngredientTypeEditor.jsx`** — `assumedAvailable` state
+  (`useState(type.assumed_available ?? false)`), a "Household basic"
+  `OwnedToggle` row placed right after the bar-priority `Select` (both are
+  catalogue-level availability tuning), passed through in `handleSave`.
+  Explanatory copy: "Assume every member has this. It never shows as missing
+  in a recipe and never drives a Buy Next suggestion."
+- **Nothing reads the column.** `resolveOwnedIngredientTypes`/`computeAvail`
+  are untouched — the flag is fully inert until Stage 2. `IngredientTypeEditor`
+  is shared by Admin → Ingredient Types (My Bar's inline edit pencils are
+  gone), so admins *and* moderators get the toggle.
+
+### Verification (2026-09-09)
+
+- `npx supabase migration list --linked`: 46 prior migrations `local == remote`,
+  `20260909120000` was the only pending one. `db push --dry-run` confirmed
+  only that file, no seeds/roles. `db push` applied it; `migration list` now
+  shows `20260909120000` `local == remote` (47/47).
+- Live column check via `supabase db query`: `boolean`, `is_nullable = NO`,
+  `default false`, comment present; 111 `ingredient_types` rows, **0 flagged**
+  (default applied, nothing flagged — no ingredient flagging in Stage 1, as
+  scoped).
+- Catalogue query shape: a REST call with the exact `fetchIngredientTypes`
+  select string (incl. `assumed_available`, `order=name`) → HTTP 200 (was
+  400 "column does not exist" before the push).
+- `corepack pnpm@10.34.3 test` → **201/201**. `pnpm build` → clean, 165
+  modules. Formatting: **`pnpm format` was NOT run** (oxfmt CRLF bug, below);
+  `oxfmt --check` on isolated LF copies of the two changed files → "correct
+  format".
+- **Not done by me:** authenticated in-browser catalogue load and the
+  toggle save/persist check — no logged-in session available here. Handed to
+  the user as a phone checklist.
+
+### Recovery note — oxfmt 0.2.0 CRLF bug (root-caused this session, separate follow-up)
+
+Earlier this session, `pnpm format` reformatted 118 files (blank line inserted
+after every source line). Root cause, reproduced in isolation: this machine's
+clone has `git config core.autocrlf = true`, so every checked-out file is
+CRLF; `oxfmt` 0.2.0 given CRLF input emits LF output **with a blank line after
+every original line**. Same file as LF → `oxfmt` reports `unchanged`. The
+committed code is correctly oxfmt-clean. Not a version or platform-binary
+issue (all 8 `@oxfmt/*` platform packages incl. `win32-x64` are in the
+lockfile; oxfmt 0.2.0 has no config options at all).
+
+Recovery: a `git stash create` snapshot was tagged `recovery-snapshot`
+(`6aefd03`) + `scratchpad/recovery/working-tree.patch` saved first, then the
+118 files restored from HEAD via `git restore --source=HEAD` (targeted list,
+never `checkout -- .`). A mid-recovery `core.autocrlf=false` +
+`git add --renormalize` attempt was reverted — `core.autocrlf` is back to
+`true` (clone default). `git diff HEAD` verified empty except the Stage 1
+edits; blob-OID equality (HEAD = index = worktree) spot-checked. The
+`recovery-snapshot` tag is being kept for now (delete with
+`git tag -d recovery-snapshot` once satisfied).
+
+**Open follow-up (repo decision, deferred, non-blocking):** resolve so
+`pnpm format` is usable on this machine — either upgrade `oxfmt` past the bug,
+or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
+No dependency upgrade or repo-wide normalization was done in this stage. Until
+then: `oxfmt --check` on isolated LF copies of changed files only.
 
 ## Last completed chunk (Household basics / ingredient forms / preparations — planning session, 2026-09-08)
 

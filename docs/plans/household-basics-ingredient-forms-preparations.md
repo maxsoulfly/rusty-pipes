@@ -1,12 +1,18 @@
 # Household Basics, Ingredient Forms, and Homemade Preparations
 
-**Status (2026-09-08): plan approved.** Household Basics Stages 1–3 are approved
-next work — begin Stage 1 next session, after a live catalogue-name check.
-Ingredient Forms and Homemade Preparations are approved as *direction* only;
-their technical details are subject to review before their stages begin, per
-the pre-stage audits each section calls out.
+**Status (2026-09-09): Household Basics Stage 1 committed + pushed.** Schema
+(`ingredient_types.assumed_available`, migration `20260909120000`, applied to
+the live DB) + inert admin toggle in `IngredientTypeEditor.jsx` are done; the
+column is not read anywhere yet. Phone verification of the toggle is the only
+outstanding Stage 1 item. **Stage 2 (engine wiring, Ice only) is next** — its
+first action is the live catalogue-name check deferred from Stage 1 (Stage 1
+touched no live catalogue data, so the check wasn't needed then). Stage 3,
+Ingredient Forms, and Homemade Preparations are unchanged: direction only,
+subject to the pre-stage re-audits each section calls out.
 
-No code, schema, or live data has changed as part of this planning pass.
+The live catalogue-name check (Ice/Sugar/Salt/Water/Hot Water/Cola) was **not**
+done during Stage 1 and is a prerequisite for Stage 2, not a blocker for the
+Stage 1 commit.
 
 ## Goal
 
@@ -112,15 +118,28 @@ picking a best guess.
 
 ### Stages
 
-**Stage 1 — Schema + admin toggle (inert, no behavior change).**
-- Migration: add `assumed_available boolean not null default false` +
-  column comment stating the no-propagation rule.
-- `fetchIngredientTypes()`/`updateIngredientType()`: thread the field
-  through, same pattern as every existing field.
-- `IngredientTypeEditor.jsx`: add the toggle with explanatory copy.
-- *Tests:* none needed (plain passthrough field, matching `bar_priority`).
-- *Mobile check:* Admin → Ingredient Types on a phone — toggle is a
-  comfortable tap target, saves, persists on reload.
+**Stage 1 — Schema + admin toggle (inert, no behavior change). — DONE 2026-09-09, committed + pushed.**
+- Migration `20260909120000_ingredient_types_assumed_available.sql`: adds
+  `assumed_available boolean not null default false` + column comment stating
+  the no-propagation rule. Applied to the live DB (ledger 47/47,
+  `local == remote`). No new RLS policy/grant — blanket table UPDATE grant +
+  `ingredient_types: admin update` policy (admin + moderator) already cover
+  it; no column-scoped grants on the table. Not a `SECURITY DEFINER`
+  function, so no `db advisors` re-run.
+- `fetchIngredientTypes()` selects `assumed_available`;
+  `updateIngredientType()` threads `assumedAvailable` → `assumed_available`.
+- `IngredientTypeEditor.jsx`: "Household basic" `OwnedToggle` row after the
+  bar-priority `Select`, `assumedAvailable` state + `handleSave` passthrough.
+- *Tests:* none added (plain passthrough field). `pnpm test` 201/201,
+  `pnpm build` clean. Formatting verified via `oxfmt --check` on isolated LF
+  copies — `pnpm format` was **not** run (oxfmt 0.2.0 CRLF bug; see
+  `current-context.md`'s Stage 1 chunk).
+- *Live verification:* column is `boolean NOT NULL DEFAULT false` with the
+  comment; 111 rows, 0 flagged; the exact `fetchIngredientTypes` select
+  string returns HTTP 200 (was 400 before the push).
+- *Outstanding:* phone check — Admin → Ingredient Types → open a type →
+  "Household basic" toggle is a comfortable tap target, flips, Save persists,
+  reopening shows the saved state; toggling back off also persists.
 - *Safe stop:* fully inert; ships and sits with zero effect until Stage 2.
 
 **Stage 2 — Engine wiring, Ice only.**
@@ -362,12 +381,14 @@ not just `fetchRecipes()`:
 
 ## Exact next-session starting action
 
-1. Verify the live catalogue entries for Ice, Sugar, Salt, Water, Hot Water,
+1. Wait for the user's phone confirmation of the Stage 1 admin toggle (see
+   Stage 1's *Outstanding* line). Do not mark Stage 1 fully done without it.
+2. Then **Household Basics Stage 2 (engine wiring, Ice only)**. First action:
+   verify the live catalogue entries for Ice, Sugar, Salt, Water, Hot Water,
    and Cola/Coke using authorized (logged-in) access to Admin → Ingredient
    Types. Record exact names/ids found, and flag anything missing or
-   ambiguous rather than guessing.
-2. Begin **Household Basics Stage 1 only** (schema + admin toggle). Stages 2
-   and 3 follow only after Stage 1 is committed, pushed, and phone-verified.
-3. Ingredient Forms and Homemade Preparations stay in "agreed direction, not
-   started" until Household Basics is done — their pre-stage re-audits
-   (above) happen when their stages actually begin, not before.
+   ambiguous rather than guessing. Stage 2 flags **only Ice** live.
+3. Stage 3 follows only after Stage 2 ships and is verified. Ingredient Forms
+   and Homemade Preparations stay in "agreed direction, not started" until
+   Household Basics is done — their pre-stage re-audits (above) happen when
+   their stages actually begin, not before.
