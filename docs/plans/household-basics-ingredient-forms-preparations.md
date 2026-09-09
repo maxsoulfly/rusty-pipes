@@ -387,8 +387,16 @@ cocktails" / "Find more ingredients" nav — all untouched.
   view holds more than the six). `buildYourBarEssentials.js` + its
   name-based tests deleted. `pnpm test` 223/223, `pnpm build` clean,
   isolated-LF `oxfmt --check` clean.
-- **3c — admin editor. DONE 2026-09-10 (committed + pushed; mobile
-  verification held for the user).** `src/components/admin/OnboardingTab.jsx`
+- **3c — admin editor. CODE COMPLETE 2026-09-10 (committed + pushed);
+  SAVING = FAILED PENDING RETEST.** First real Save raised
+  `DELETE requires a WHERE clause` — the `authenticator` role preloads
+  `pg-safeupdate` and rejected `set_onboarding_config`'s bare whole-list
+  DELETE (the RLS suite missed it: `db query --linked` doesn't preload
+  safeupdate). Fixed in migration `20260910130000` (`delete ... where true`,
+  pg-safeupdate's recommended form; SECURITY INVOKER / RLS / atomicity
+  unchanged). RLS suite got a source-level regression guard. Needs the in-app
+  retest (replace Dark Rum → Rum, Save, reload, persists) before saving is
+  marked verified. `src/components/admin/OnboardingTab.jsx`
   + `AdminScreen` `TABS` entry `{ id: "onboarding", label: "Onboarding
   ingredients", adminOnly: true }` + render guard. **Atomic whole-config
   save** (user override — see the 2026-09-10 note above): migration

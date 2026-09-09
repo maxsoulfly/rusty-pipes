@@ -766,6 +766,25 @@ begin
   exception when insufficient_privilege then
     perform pg_temp.assert(true, 'set_onboarding_config: anon cannot execute it');
   end;
+
+  -- Regression (2026-09-10): set_onboarding_config first shipped with a bare
+  -- `DELETE FROM public.onboarding_ingredients;`. That works from this suite
+  -- (db query --linked connects without session_preload_libraries), but the
+  -- real Data API path runs as `authenticator`, which preloads pg-safeupdate
+  -- - its post_parse_analyze hook rejects a no-WHERE DELETE with
+  -- "DELETE requires a WHERE clause", so every admin Save failed live while
+  -- every check above passed. This suite cannot LOAD safeupdate to fire the
+  -- hook, so guard the function source instead: the whole-list DELETE must
+  -- carry an explicit WHERE (`where true`).
+  perform pg_temp.set_identity('authenticated', f.admin_id);
+  if pg_get_functiondef('public.set_onboarding_config(jsonb)'::regprocedure)
+       ~* 'delete\s+from\s+public\.onboarding_ingredients\s*;' then
+    perform pg_temp.assert(false,
+      'set_onboarding_config: the whole-list DELETE has no WHERE clause - pg-safeupdate rejects it on the real authenticated API path');
+  else
+    perform pg_temp.assert(true,
+      'set_onboarding_config: the whole-list DELETE carries an explicit WHERE (pg-safeupdate safe)');
+  end if;
 end;
 $$;
 

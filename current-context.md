@@ -36,9 +36,9 @@ Each numbered step is a development chunk boundary for this file.
 ## Exact next action (paused here, 2026-09-10)
 
 1. **Household Basics Stage 2 is DONE (committed `c1629b9`, mobile-verified 2026-09-09).**
-2. **Household Basics Stage 3: design approved, sub-stages 3a + 3b + 3c DONE.** 3a `c999e1d`. 3b `960aa86` — mobile-verified 2026-09-10 (six initial tiles show Coke not Ice; expanded groups correct; selection / live count / "Show my cocktails" work; Browse cocktails, Show my cocktails, Find more ingredients all open the expected screens). **Back-navigation widget visibility was NOT separately confirmed** — its per-visit-snapshot behavior is unchanged and stays unverified. 3c (2026-09-10) — admin "Onboarding ingredients" editor; committed + pushed; **mobile verification held for the user**. See the 3c chunk below for the full change list. **Next is 3d** (BuildYourBar admin "Edit list" link + `AdminMenu` "Onboarding ingredients" item + `isAdmin` through `HomeScreen` — `isAdmin` already in Outlet context). Do not start Ingredient Forms / Homemade Preparations until Household Basics is fully done.
+2. **Household Basics Stage 3: design approved, sub-stages 3a + 3b DONE + verified; 3c CODE COMPLETE but SAVING = FAILED PENDING RETEST.** 3a `c999e1d`. 3b `960aa86` — mobile-verified 2026-09-10 (six initial tiles show Coke not Ice; expanded groups correct; selection / live count / "Show my cocktails" work; Browse cocktails, Show my cocktails, Find more ingredients all open the expected screens). **Back-navigation widget visibility was NOT separately confirmed** — its per-visit-snapshot behavior is unchanged and stays unverified. 3c (2026-09-10) — admin "Onboarding ingredients" editor; committed + pushed. **BUG found by the user on the real app: "DELETE requires a WHERE clause" on Save (replace Dark Rum → Rum).** Root cause confirmed: `set_onboarding_config`'s whole-list `delete` had no `WHERE`; the Supabase `authenticator` role preloads `pg-safeupdate` (`session_preload_libraries = supautils, safeupdate`) which rejects a bare DELETE — the RLS suite missed it because `db query --linked` connects without that preload and `SET ROLE` doesn't load it mid-session. **Fix: migration `20260910130000_set_onboarding_config_safeupdate_where` — `delete ... where true`** (pg-safeupdate's own recommended form; check runs at parse-analyze before the constant folds; SECURITY INVOKER / RLS gating / atomicity all unchanged). Pushed; advisors clean. RLS suite extended with a source-level regression guard (the suite can't `LOAD safeupdate` to fire the hook). **`pnpm test` 227/227, build clean. NOT retested in-app — 3c saving stays FAILED until the user confirms replace-and-reload persists.** **Next is 3d** (BuildYourBar admin "Edit list" link + `AdminMenu` "Onboarding ingredients" item + `isAdmin` through `HomeScreen` — `isAdmin` already in Outlet context), but do 3c's in-app retest first. Do not start Ingredient Forms / Homemade Preparations until Household Basics is fully done.
 3. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files (and when a changed file needs reformatting, run `oxfmt` on the isolated LF copy and hand-apply the wrap changes back). Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
-4. **Migration count (2026-09-10): 52 files on disk, 52 ledger rows, all `local == remote`, 0 pending.** Was 48 after the 2026-09-09 reconcile; +`20260909130000/140000/150000` (3a) +`20260910120000` (3c) = 52. History intact (unique ordered timestamps, no gaps/dupes).
+4. **Migration count (2026-09-10): 53 files on disk, 53 ledger rows, all `local == remote`, 0 pending.** Was 48 after the 2026-09-09 reconcile; +`20260909130000/140000/150000` (3a) +`20260910120000` (3c) +`20260910130000` (3c safeupdate fix) = 53. History intact (unique ordered timestamps, no gaps/dupes).
 
 5. **Migration count reconciled 2026-09-09.** 48 migration files on disk, 48 ledger rows, every one `local == remote`, 0 pending. The Speed Rack chunk's "47/47" was correct for its time (46 synced + `20260906130000`); Stage 1's chunk originally said "47/47" which was a **miscount** — with `20260909120000` it is **48/48**. Migration history itself is intact (unique ordered timestamps, no gaps, no dupes) — nothing was repaired, only the recorded count corrected.
 
@@ -75,7 +75,42 @@ mobile-verified**; **3c (admin "Onboarding ingredients" editor) — DONE
 2026-09-10, mobile verification held for the user**; 3d (shortcuts). **3d has
 NOT been started** — stop point per the user.
 
-### Sub-stage 3c — DONE 2026-09-10 (committed + pushed; mobile verification pending)
+### Sub-stage 3c — CODE COMPLETE 2026-09-10 (committed + pushed); SAVING = FAILED PENDING RETEST after the safeupdate bugfix
+
+**Bug + fix (2026-09-10, `20260910130000`).** The user hit
+`DELETE requires a WHERE clause` on the first real Save (remove Dark Rum, add
+Rum). Confirmed by direct inspection, not assumed:
+- The live `set_onboarding_config` body (`pg_get_functiondef`) had a bare
+  `delete from public.onboarding_ingredients;`.
+- `pg_db_role_setting`: the `authenticator` role has
+  `session_preload_libraries = supautils, safeupdate`. Every PostgREST
+  REST/RPC connection is `authenticator`, which then `SET ROLE`s to
+  `authenticated`/`anon` per request — so `pg-safeupdate`'s
+  `post_parse_analyze` hook is active for the RPC, and it rejects a no-WHERE
+  DELETE/UPDATE (`jointree->quals == NULL`).
+- **Why the RLS suite passed:** `supabase db query --linked` connects as a
+  direct login that does *not* preload `safeupdate`, and `SET ROLE` (how the
+  suite simulates identities) does not load `session_preload_libraries`
+  mid-session — those load once at connection start. The hook was never
+  installed for the suite, so its identical call succeeded.
+- **Could not fire the hook from the CLI** to reproduce end-to-end:
+  `LOAD 'safeupdate'` → `access to library "safeupdate" is not allowed`, and
+  there's no admin JWT available to hit the real RPC. Mechanism is nailed by
+  inspection; the definitive check is the in-app retest.
+- **Fix:** `create or replace` the function with
+  `delete from public.onboarding_ingredients where true;` — pg-safeupdate's
+  own recommended form; the guard runs at parse-analyze *before* the planner
+  folds the constant, so `quals` is a non-NULL Const and the DELETE is
+  allowed. safeupdate stays active for everything else. No permission change
+  (still SECURITY INVOKER + `search_path=''` + `revoke public,anon` /
+  `grant authenticated`), no atomicity change (one DELETE + one INSERT in the
+  function's single transaction). `db advisors --type security`: no finding.
+- **Regression coverage:** `rls_suite.sql`'s `onboarding_ingredients` block
+  now asserts (source-level, since it can't `LOAD safeupdate`) that the
+  whole-list DELETE carries an explicit WHERE. Full suite still exit 0.
+- **Status:** `pnpm test` 227/227, `build` clean. **NOT retested through the
+  real app.** 3c saving is FAILED until the user confirms: replace Dark Rum
+  with Rum → Save → reload → change persists.
 
 **User override of the approved 3c design:** instead of per-action write
 helpers (`addOnboardingIngredient` / `setOnboardingInitial` / … each = write +
