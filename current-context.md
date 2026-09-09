@@ -35,8 +35,8 @@ Each numbered step is a development chunk boundary for this file.
 
 ## Exact next action (paused here, 2026-09-09)
 
-1. **Household Basics Stage 2 is committed + pushed. Wait for the user's phone confirmation** (see the Stage 2 chunk below for the checklist: a recipe needing only Ice + owned items reads "Perfect", the Ice row shows "Household basic" with a green dot and its real quantity, Ice is absent from Buy Next, My Bar still shows Ice unowned, Library availability groups/counts agree). Do not mark Stage 2 fully done until that result is in.
-2. **Then Household Basics Stage 3 (remaining confirmed basics + onboarding cleanup)** per `docs/plans/household-basics-ingredient-forms-preparations.md`. Stage 3's first action is the live catalogue-name check deferred from earlier: verify exact live names/ids for Sugar, Salt, Water, Hot Water, and Cola/Coke via authorized access to Admin → Ingredient Types. Flag anything missing/ambiguous rather than guessing. Do not start Ingredient Forms / Homemade Preparations until Household Basics is fully done.
+1. **Household Basics Stage 2 is DONE (committed `c1629b9`, mobile-verified 2026-09-09).**
+2. **Household Basics Stage 3 has been re-scoped to an admin-editable onboarding config — the revised plan is awaiting the user's review.** Do NOT make code / schema / `assumed_available` changes until the user approves the revised Stage 3 design in `docs/plans/household-basics-ingredient-forms-preparations.md`. One open question for the user: OK to drop the 3 expanded-view group headings (Spirits / Mixers / Kitchen basics) in favour of one flat ordered list? Once approved, start sub-stage 3a (flag reconciliation: un-flag Simple Syrup; then the `onboarding_ingredients` migration + name-resolved seed with Coke for Ice). Do not start Ingredient Forms / Homemade Preparations until Household Basics is fully done.
 3. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files (and when a changed file needs reformatting, run `oxfmt` on the isolated LF copy and hand-apply the wrap changes back). Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
 4. **Migration count reconciled 2026-09-09.** 48 migration files on disk, 48 ledger rows, every one `local == remote`, 0 pending. The Speed Rack chunk's "47/47" was correct for its time (46 synced + `20260906130000`); Stage 1's chunk originally said "47/47" which was a **miscount** — with `20260909120000` it is **48/48**. Migration history itself is intact (unique ordered timestamps, no gaps, no dupes) — nothing was repaired, only the recorded count corrected.
 
@@ -61,12 +61,39 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## In-progress chunk (Household Basics Stage 3 — catalogue check done, BLOCKED on two decisions, 2026-09-09)
+## In-progress chunk (Household Basics Stage 3 — REVISED to admin-editable onboarding config, plan pending user review, 2026-09-09)
 
-**No code or flag changes made yet.** Stage 2 is done + mobile-verified (see
-below). Stage 3's live catalogue check surfaced drift and two out-of-scope
-flags that need the user's call before flagging work or the onboarding code
-change proceeds.
+**No code, schema, or flag changes made — awaiting plan approval.** Stage 2 is
+done + mobile-verified (see below). The user has re-scoped Stage 3: instead of
+editing the hard-coded `src/data/buildYourBarEssentials.js`, the "Build your
+bar" onboarding lists become an **admin-managed DB table** so future curation
+needs no code / AI / redeploy. **Full revised design is in
+`docs/plans/household-basics-ingredient-forms-preparations.md`'s Stage 3
+section** — read it there, this is a pointer.
+
+Shape: new `onboarding_ingredients (ingredient_type_id uuid pk fk on delete
+cascade, position int, is_initial bool)`, RLS member-read / admin-write,
+name-resolved seed of the current 14 with **Coke instead of Ice**. One
+ordered list (drops the 3 expanded-view group headings — the one UX change
+needing sign-off); the initial six = `is_initial` rows backfilled from the
+rest, `assumed_available` types excluded from both lists dynamically. New
+"Onboarding ingredients" admin tab (admin-only) + a page-level "Edit list"
+link on Build Your Bar + an entry in the My Bar ⋯ `AdminMenu` (reachable when
+onboarding is hidden). Pure `resolveOnboardingSelection` in
+`domain/buildYourBar.js` replaces `resolveEssentialsList`. Sub-stages 3a
+(flags + schema + seed), 3b (resolver + wiring), 3c (admin tab), 3d
+(shortcuts).
+
+**Flag decisions confirmed by the user 2026-09-09:** keep Ice, Salt, Water,
+White Sugar, **and Black Pepper** flagged; **un-flag Simple Syrup**; skip the
+nonexistent "Hot Water". These are applied in sub-stage 3a, not yet done.
+
+### Stage 3 work already done (to preserve): NONE beyond docs
+
+The only Stage 3 output so far is the live catalogue check (table below) and
+this planning — recorded in commit `11be941` (docs-only) and this revision.
+No source, schema, migration, or `assumed_available` change has been made in
+Stage 3. Nothing to revert.
 
 ### Live `assumed_available` set at Stage 3 start (drifted since Stage 2, which verified "Ice only")
 

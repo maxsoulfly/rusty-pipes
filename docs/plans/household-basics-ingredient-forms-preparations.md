@@ -179,25 +179,168 @@ picking a best guess.
   cycle works.
 - *Safe stop:* ships with exactly one basic live.
 
-**Stage 3 — Remaining entries + onboarding cleanup.**
-- Flag the remaining confirmed names (data entry only, no code, instantly
-  reversible per item).
-- Replace Ice with **Cola/Coke** in `BUILD_YOUR_BAR_INITIAL_SIX` (Soda Water
-  already occupies its own slot in the six and is untouched).
-- `resolveEssentialsList`/`BuildYourBar.jsx`: filter out any type with
-  `assumed_available = true` from **both** the initial six and the expanded
-  groups, dynamically — not a hand-maintained list. Add a simple top-up
-  fallback: if filtering drops the initial six below six, backfill from the
-  next unused name in the expanded groups' existing order, so a future flag
-  change can only ever shrink gracefully — never duplicate a tile, never
-  leave a gap.
-- *Tests:* extend the essentials-resolution test — flagging a type
-  currently in the six pulls the next candidate up (not a shrink to five);
-  flagging a type that's only in the expanded groups just removes it there;
-  flagging everything degrades to whatever's left, not a crash.
-- *Mobile check:* Build Your Bar widget still shows six tiles with no gap;
-  Cola/Coke behaves like any other tap target; the expanded "all essentials"
-  view no longer lists any flagged basic.
+**Stage 3 — REVISED 2026-09-09: admin-editable onboarding config (pending user review).**
+
+The original Stage 3 (below, struck) hard-coded the onboarding lists in
+`src/data/buildYourBarEssentials.js` and swapped Ice→Coke by editing that
+file. The user instead wants the "Build your bar" lists to be **admin-managed
+data**, so future curation needs no code / AI / redeploy. Revised design:
+
+*Flag decisions confirmed by the user 2026-09-09:* keep Ice, Salt, Water,
+White Sugar, **and Black Pepper** flagged `assumed_available`; **un-flag
+Simple Syrup**; "Hot Water" has no catalogue row — skipped, not created.
+
+### New table (ID-referenced, one ordered list + an initial flag)
+
+```sql
+create table public.onboarding_ingredients (
+  ingredient_type_id uuid primary key
+    references public.ingredient_types(id) on delete cascade,
+  position integer not null,
+  is_initial boolean not null default false
+);
+alter table public.onboarding_ingredients enable row level security;
+create policy "onboarding_ingredients: members read"
+  on public.onboarding_ingredients for select using (public.is_member());
+create policy "onboarding_ingredients: admin writes"
+  on public.onboarding_ingredients for all
+  using (public.is_admin()) with check (public.is_admin());
+```
+
+- **One list, not two.** The expanded "Show all essentials" list *is* the
+  table, ordered by `position`. The "initial six" is the `is_initial = true`
+  subset, shown in the same order, **backfilled** from the non-initial rows
+  (also in `position` order) up to six. Only one order to maintain.
+- **This drops the 3 fixed expanded-view group headings** (Spirits / Mixers /
+  Kitchen basics) — the one visible UX change, needs the user's OK. If groups
+  must stay: add a nullable `group_label text` + fixed heading order (heavier
+  admin UI). *Recommendation: drop the headings.*
+- `on delete cascade` + ID references → renaming an ingredient never breaks
+  the list; deleting one auto-removes its row.
+- `position`: plain integers, gaps allowed; admin ↑/↓ swaps two rows'
+  `position`. Order by `position`, then `ingredient_types.name` as tiebreak.
+- **RLS:** members read (BuildYourBar renders for everyone), `is_admin()`
+  writes — matches `liquid_colors`/`glasses`. Moderators excluded for now.
+- **Seed in the same migration, name-resolved:** the current 14 essentials
+  with **Coke instead of Ice**, `is_initial = true` for Gin / Vodka / Soda
+  Water / Lemon Juice / Lime Juice / Coke. `insert ... select id,
+  row_number() over (...), <initial?> from ingredient_types where name in
+  (...)` — names absent from the target catalogue are skipped (admin adds
+  them via the UI later). After seed, every change is UI-only.
+- **Never read by `recommendations.js`** — stays fully separate from
+  `bar_priority` / Buy Next.
+
+### Resolver — `resolveOnboardingSelection(rows, types)` (pure, `domain/buildYourBar.js`)
+
+Returns `{ six: type[], expanded: type[] }`:
+1. Resolve each `ingredient_type_id` to its type; drop rows whose type is
+   missing.
+2. **Exclude any type with `assumed_available === true`** from both lists,
+   every render.
+3. `expanded` = survivors in `position` order.
+4. `six` = `is_initial` survivors in `position` order, then backfilled from
+   the remaining `expanded` entries in `position` order until length 6;
+   dedupe by id; fewer than 6 eligible → return what exists (no gap, no
+   crash).
+5. Invariant: every item in `six` is also in `expanded`.
+
+`resolveEssentialsList` (name-based) and `src/data/buildYourBarEssentials.js`
+are **removed** — nothing else imports them (verified).
+
+### Admin UI — "Onboarding ingredients" tab
+
+- `AdminScreen.jsx` `TABS`: `{ id: "onboarding", label: "Onboarding
+  ingredients", adminOnly: true }`, in the catalog-curation group.
+- `src/components/admin/OnboardingTab.jsx`: one ordered list. Each row —
+  ingredient name, an **"In initial six"** `OwnedToggle`, **↑ / ↓** (44×44),
+  **remove**. A row whose type is `assumed_available` renders dimmed with a
+  "Hidden — household basic" note. Below: a **"+ Add ingredient"** searchable
+  type picker (reuse `TypesTab`'s search pattern), excluding types already
+  listed. A "6 of N marked initial" counter; soft note if the initial count
+  ≠ 6 (still allowed — backfill/truncate covers both).
+- `services/onboarding.js`: `fetchOnboardingIngredients`,
+  `addOnboardingIngredient(typeId)` (position = max+1),
+  `removeOnboardingIngredient(typeId)`, `setOnboardingInitial(typeId, bool)`,
+  `moveOnboardingIngredient(typeId, dir)` (swap `position` with the adjacent
+  row). Each action = immediate write + `catalog.refetch()`, matching
+  `NamedRowManager`.
+- `useCatalog` gains `onboardingIngredients` in its existing `Promise.all`,
+  shared via Outlet context (honours "call the catalog hook once in
+  AppShell").
+
+### Shortcuts
+
+- **Page-level:** an admin-only "Edit list" link by the "Build your bar"
+  heading → `/admin?tab=onboarding`. `HomeScreen` adds `isAdmin` to its
+  context destructure and passes it to `BuildYourBar`.
+- **Reachable when the bar is non-empty (widget hidden):** a second item
+  **"Onboarding ingredients"** in the My Bar / Add-ingredients **⋯
+  `AdminMenu`** (`src/components/myBar/AdminMenu.jsx`) → `/admin?tab=onboarding`.
+  That menu sits on always-reachable headers. (The Admin side-nav entry is
+  also always available to staff.)
+
+### Edge cases (explicit answers)
+
+- **Configured ingredient deleted:** `on delete cascade` drops its row. It
+  vanishes from both lists; backfill fills the six from the next eligible
+  `expanded` entry. No dangling ref, no error. (Strictly better than the old
+  name list, where a delete produced a dropped tile + a console error.)
+- **Configured ingredient later flagged `assumed_available`:** the row
+  **stays** in the table (independent systems), but the resolver excludes it
+  from both rendered lists every render; if it was `is_initial`, backfill
+  fills the slot. Un-flagging later makes it reappear in its configured
+  position. The admin tab shows it dimmed ("Hidden — household basic") so the
+  exclusion is visible and the admin can remove or park it. (This is exactly
+  what happens to Ice today.)
+- **Fewer than six eligible:** the grid shows however many exist — no
+  placeholder, no crash. "Show all essentials" toggle still renders.
+- **Empty config:** heading, copy, CTAs and the makeable-count line render;
+  no tiles. Seed prevents this in practice; it's the safe floor.
+
+### Preserved
+
+Per-visit visibility snapshot (`HomeScreen`, reads `inventory` not the
+config), tap-to-own selection, the live "N cocktails" count, "Show my
+cocktails" / "Find more ingredients" nav — all untouched.
+
+### Sub-stages
+
+- **3a — flag reconciliation + schema + seed (DB + migration).**
+  `UPDATE ingredient_types SET assumed_available = false` for Simple Syrup
+  (`594e9b87-…`); confirm Ice/Salt/Water/White Sugar/Black Pepper stay `true`.
+  Then the `onboarding_ingredients` migration + RLS + name-resolved seed.
+  Verify: `migration list` local == remote, RLS with admin/member/anon
+  identities, seed row count + `is_initial` set. Inert.
+- **3b — resolver + BuildYourBar wiring.** `resolveOnboardingSelection` +
+  tests (exclusion from both lists; flagged initial member pulls next
+  expanded candidate up; dedupe; < 6 eligible → fewer, no crash; deleted-id
+  row dropped; `six ⊆ expanded`). `useCatalog` fetches the config.
+  `BuildYourBar.jsx` renders from it. Delete `buildYourBarEssentials.js` +
+  its name-based tests.
+- **3c — admin tab.** `OnboardingTab.jsx` + `services/onboarding.js` +
+  `TABS` entry. Mobile-first: 44px ↑/↓/toggle/remove, one-thumb.
+- **3d — shortcuts.** BuildYourBar "Edit list" link + `AdminMenu` item; wire
+  `isAdmin` into `HomeScreen` → `BuildYourBar`.
+- Each: `corepack pnpm@10.34.3` test/build, `oxfmt --check` on isolated LF
+  copies, commit + push. Mobile verification of 3b–3d held for the user.
+
+### Permissions summary
+- Read: `is_member()`. Write: `is_admin()`. Shortcut visibility gates on
+  `isAdmin`; `/admin` stays behind `RequireStaff`; the table's RLS is the
+  real boundary.
+
+---
+
+**Original Stage 3 (superseded by the revision above, kept for context):**
+- ~~Flag the remaining confirmed names (data entry only, no code).~~
+- ~~Replace Ice with Cola/Coke in `BUILD_YOUR_BAR_INITIAL_SIX`.~~
+- ~~`resolveEssentialsList`/`BuildYourBar.jsx`: filter out `assumed_available`
+  types from both the initial six and the expanded groups dynamically; top-up
+  backfill from the expanded groups' existing order.~~
+- ~~Tests: flagging a six member pulls the next candidate up; flagging an
+  expanded-only type just removes it; flagging everything degrades cleanly.~~
+- ~~Mobile check: six tiles no gap; Cola/Coke taps like any tile; expanded
+  view lists no flagged basic.~~
 
 ---
 
