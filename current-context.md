@@ -29,7 +29,7 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
    (Note: item 17's "Stage 1 done, mobile verification pending" / "admin type editing moved to an `IngredientDetailScreen` overflow action" text predates the My Bar redesign's later stages — see the corrected current state in item 18's plan doc: inline admin edit pencils are gone, editing now goes through Admin → Ingredient Types via the ⋯ menu.)
 
-18. Household basics, ingredient forms, and homemade preparations (new feature) — **in progress. Household Basics Stage 1 + Stage 2 committed + pushed 2026-09-09; Stage 2 mobile verification pending.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000` applied to the live DB, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Toggle phone-verified by the user (ON/OFF both persist). **Stage 2 (engine wiring, Ice only):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds` from `catalog.types` and feeds both; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set (comment added). **Ice is the only flagged type live.** **Stage 3 (remaining basics + onboarding cleanup) is next, but do not start it until the user confirms Stage 2 on a phone.** Ingredient Forms and Homemade Preparations unchanged: direction only, with required pre-stage re-audits still pending.
+18. Household basics, ingredient forms, and homemade preparations (new feature) — **in progress. Household Basics Stage 1 + Stage 2 committed + pushed + mobile-verified 2026-09-09. Stage 3 in progress (blocked on a live-flag reconciliation — see the Stage 3 chunk).** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000` applied to the live DB, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Toggle phone-verified by the user (ON/OFF both persist). **Stage 2 (engine wiring, Ice only):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds` from `catalog.types` and feeds both; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set (comment added). **Ice is the only flagged type live.** **Stage 3 (remaining basics + onboarding cleanup) is next, but do not start it until the user confirms Stage 2 on a phone.** Ingredient Forms and Homemade Preparations unchanged: direction only, with required pre-stage re-audits still pending.
 
 Each numbered step is a development chunk boundary for this file.
 
@@ -61,9 +61,63 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
+## In-progress chunk (Household Basics Stage 3 — catalogue check done, BLOCKED on two decisions, 2026-09-09)
+
+**No code or flag changes made yet.** Stage 2 is done + mobile-verified (see
+below). Stage 3's live catalogue check surfaced drift and two out-of-scope
+flags that need the user's call before flagging work or the onboarding code
+change proceeds.
+
+### Live `assumed_available` set at Stage 3 start (drifted since Stage 2, which verified "Ice only")
+
+| Type | id | category | Stage 3 verdict |
+|---|---|---|---|
+| Ice | `d949c9b0-ba2b-4389-995c-55c6e29b101e` | Other | keep — expected |
+| Salt | `ab935424-b79e-43bc-945a-599bbccc9237` | Garnish | keep — matches target (plain salt) |
+| Water | `1ddbc38b-1f3b-4dc2-a8b5-7e49bba95245` | Other | keep — matches target |
+| White Sugar | `7f9e3634-165a-4ef4-8da2-c2323ee2b549` | Sweetener | keep — this **is** the plain-sugar target (no plain "Sugar" row exists) |
+| **Simple Syrup** | `594e9b87-3774-4671-a73b-11a5e69a267c` | Sweetener | **DECISION NEEDED** — contradicts "no syrups" + Concept 3 (Simple Syrup is a preparation, not a basic) |
+| **Black Pepper** | `d690dace-da45-4f09-a811-4b0c21a877de` | Other | **DECISION NEEDED** — not in the Stage 3 target list, never discussed |
+
+### Other catalogue facts
+
+- **"Hot Water" does not exist** as an ingredient_type. Cannot be flagged
+  (creating types is out of scope). Reported missing.
+- Plain **"Sugar"** does not exist — `White Sugar`, `Brown Sugar`,
+  `Sugar Cube` are distinct rows. `White Sugar` is the plain-sugar target;
+  the other two are not flagged.
+- Flavored salt: **"Celery Salt"** `128dc7ef-7ce8-4cb5-af0f-59d160088b39`
+  (Other) — distinct from `Salt`, not flagged. Good.
+- Onboarding "Cola": the real type is **"Coke"**
+  `8423a555-569d-4eff-a4ed-a3c58e85c20c` (Mixer, not flagged). This is the
+  exact name to put in `BUILD_YOUR_BAR_INITIAL_SIX` in place of "Ice".
+- Not flagged and staying that way: Soda Water, Tonic Water, Coke, and every
+  flavored syrup (Cinnamon/Honey/Orgeat/…).
+
+### Remaining Stage 3 work (once the two decisions are in)
+
+1. Reconcile live flags to the agreed set (un-flag Simple Syrup / Black
+   Pepper if the user says so; confirm the rest). Via `supabase db query`
+   `UPDATE ingredient_types SET assumed_available = … WHERE id = …` or the
+   admin UI.
+2. `BUILD_YOUR_BAR_INITIAL_SIX`: "Ice" → "Coke". Add "Coke" to
+   `BUILD_YOUR_BAR_GROUPS.Mixers` so the six stays a subset of the expanded
+   14.
+3. New pure fn in `domain/buildYourBar.js` composing `resolveEssentialsList`
+   + dynamic `assumed_available` exclusion (both the six and the groups) +
+   top-up backfill from the expanded groups' declared order (skip
+   already-shown, no dupes) + graceful under-six. `BuildYourBar.jsx` calls
+   it instead of its inline `resolvedTiles`.
+4. Tests in `buildYourBar.test.js`: exclusion from six + groups; a flagged
+   member of the six pulls the next expanded candidate up (not a shrink);
+   dedupe; fewer than six eligible → returns what exists, no crash.
+5. `corepack pnpm@10.34.3` test/build; `oxfmt --check` on isolated LF copies.
+6. Commit + push; production/mobile checklist; leave mobile verification
+   pending the user.
+
 ## Last completed chunk (Household Basics Stage 2 — engine wiring, Ice only, 2026-09-09)
 
-**Committed + pushed. Code-complete and live; Stage 2 mobile verification pending the user.**
+**Committed + pushed (`c1629b9`). Mobile-verified by the user 2026-09-09 — a recipe needing only Ice reads "Perfect" with the Ice row showing "Household basic" + green dot, Ice absent from Buy Next, My Bar still shows Ice unowned, Library groups/counts agree, the un-flag/re-flag revert cycle works. Stage 2 DONE.**
 
 ### What shipped
 

@@ -2,14 +2,16 @@
 
 **Status (2026-09-09): Household Basics Stage 1 + Stage 2 committed + pushed.**
 Stage 1 (schema + admin toggle) is phone-verified. Stage 2 (engine wiring,
-Ice only) is code-complete, live, and unit-tested; **Stage 2 mobile
-verification is pending the user.** Ice is the only flagged type live
-(confirmed against the DB: id `d949c9b0-ba2b-4389-995c-55c6e29b101e`, category
-`Other`, no parent/children, `assumed_available = true`). **Stage 3 (remaining
-basics + onboarding cleanup) is next**, starting with the live name check for
-Sugar/Salt/Water/Hot Water/Cola. Ingredient Forms and Homemade Preparations
-are unchanged: direction only, subject to the pre-stage re-audits each section
-calls out.
+Ice only) is committed (`c1629b9`) and **mobile-verified by the user
+2026-09-09** (recipe reads "Perfect", Ice row shows "Household basic", absent
+from Buy Next, My Bar unaffected, Library groups agree, revert cycle works).
+**Stage 3 (remaining basics + onboarding cleanup) is in progress but blocked
+on a live-flag reconciliation** — the live `assumed_available` set has drifted
+since Stage 2 (now Ice + Salt + Water + White Sugar + Simple Syrup + Black
+Pepper); Simple Syrup and Black Pepper are outside the Stage 3 scope and need
+a decision before flagging work proceeds. Ingredient Forms and Homemade
+Preparations are unchanged: direction only, subject to the pre-stage
+re-audits each section calls out.
 
 ## Goal
 
@@ -138,7 +140,7 @@ picking a best guess.
   ON and OFF both persist after Save + reopen.
 - *Safe stop:* fully inert; ships and sits with zero effect until Stage 2.
 
-**Stage 2 — Engine wiring, Ice only. — DONE 2026-09-09, committed + pushed. Mobile verification pending.**
+**Stage 2 — Engine wiring, Ice only. — DONE 2026-09-09, committed (`c1629b9`) + pushed + mobile-verified by the user.**
 - `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds`,
   unioned in **after** the ancestor walk and never itself walked → exact id
   only, no propagation up or down. Kept a separate arg, not folded into
@@ -169,11 +171,12 @@ picking a best guess.
   `ingredientRecipeMatches.test.js` — viewing an unrelated ingredient never
   surfaces an Ice-using recipe. `pnpm build` clean. Formatting via
   `oxfmt --check` on isolated LF copies (`pnpm format` not run — CRLF bug).
-- *Mobile check (pending user):* a recipe needing only Ice (+ already-owned
-  items) reads "Perfect," not "Almost"; its Ice row shows "Household basic"
-  with the real quantity/prep and a green dot; it's absent from Buy Next; My
-  Bar still shows Ice unowned (no checkmark, no inventory row); Library
-  availability groups/counts agree. Un-flagging Ice reverts all of it.
+- *Mobile check — PASSED (user, 2026-09-09):* a recipe needing only Ice
+  (+ already-owned items) reads "Perfect," not "Almost"; its Ice row shows
+  "Household basic" with the real quantity/prep and a green dot; it's absent
+  from Buy Next; My Bar still shows Ice unowned (no checkmark, no inventory
+  row); Library availability groups/counts agree; un-flag/re-flag revert
+  cycle works.
 - *Safe stop:* ships with exactly one basic live.
 
 **Stage 3 — Remaining entries + onboarding cleanup.**
@@ -389,15 +392,33 @@ not just `fetchRecipes()`:
 
 ## Exact next-session starting action
 
-1. Wait for the user's phone confirmation of Stage 2 (see Stage 2's *Mobile
-   check* line). Do not mark Stage 2 fully done without it.
-2. Then **Household Basics Stage 3 (remaining basics + onboarding cleanup)**.
-   First action: verify the live catalogue entries for Sugar, Salt, Water,
-   Hot Water, and Cola/Coke using authorized (logged-in) access to Admin →
-   Ingredient Types. Record exact names/ids, flag anything missing or
-   ambiguous rather than guessing. Then flag the confirmed ones (data entry,
-   no code) and do the onboarding-list filter + top-up fallback per the
-   Stage 3 spec below.
+1. **Stage 3 is blocked on a live-flag reconciliation.** The live
+   `assumed_available` set drifted since Stage 2 (verified then: Ice only).
+   As of the Stage 3 catalogue check (2026-09-09) it is:
+   - **Ice** `d949c9b0-…` (Other) — expected, keep.
+   - **Salt** `ab935424-…` (Garnish) — matches Stage 3 target (plain salt;
+     "Celery Salt" `128dc7ef-…` is the flavored one, not flagged). Keep.
+   - **Water** `1ddbc38b-…` (Other) — matches Stage 3 target. Keep.
+   - **White Sugar** `7f9e3634-…` (Sweetener) — this IS the plain-sugar
+     target; no plain "Sugar" row exists ("Brown Sugar", "Sugar Cube" are
+     distinct, not flagged). Keep.
+   - **Simple Syrup** `594e9b87-…` (Sweetener) — **contradicts** the Stage 3
+     instruction ("do not include syrups") AND Concept 3 (Simple Syrup is a
+     *homemade preparation*, not a household basic). Needs a decision:
+     un-flag, or keep?
+   - **Black Pepper** `d690dace-…` (Other) — **not in the Stage 3 target
+     list** and never discussed. Kitchen staple, but the user didn't name it.
+     Needs a decision: keep, or un-flag?
+   - **"Hot Water"** — **no such ingredient_type exists.** Cannot be flagged
+     (creating catalogue types is out of scope; members can't). Reported
+     missing.
+   - Onboarding "Cola": the real type is **"Coke"** `8423a555-…` (Mixer, not
+     flagged) — use this exact name when replacing Ice in the initial six.
+2. Once the two decisions are in (Simple Syrup, Black Pepper) and Hot Water is
+   resolved: reconcile the live flags to the agreed set, then do the code
+   half — `BUILD_YOUR_BAR_INITIAL_SIX` Ice→Coke, dynamic `assumed_available`
+   exclusion from the six + expanded groups, top-up backfill from the
+   expanded order, dedupe, graceful under-six — plus tests.
 3. Ingredient Forms and Homemade Preparations stay in "agreed direction, not
    started" until Household Basics is done — their pre-stage re-audits
    (above) happen when their stages actually begin, not before.
