@@ -36,7 +36,7 @@ Each numbered step is a development chunk boundary for this file.
 ## Exact next action (paused here, 2026-09-09)
 
 1. **Household Basics Stage 2 is DONE (committed `c1629b9`, mobile-verified 2026-09-09).**
-2. **Household Basics Stage 3 has been re-scoped to an admin-editable onboarding config — the revised plan is awaiting the user's review.** Do NOT make code / schema / `assumed_available` changes until the user approves the revised Stage 3 design in `docs/plans/household-basics-ingredient-forms-preparations.md`. One open question for the user: OK to drop the 3 expanded-view group headings (Spirits / Mixers / Kitchen basics) in favour of one flat ordered list? Once approved, start sub-stage 3a (flag reconciliation: un-flag Simple Syrup; then the `onboarding_ingredients` migration + name-resolved seed with Coke for Ice). Do not start Ingredient Forms / Homemade Preparations until Household Basics is fully done.
+2. **Household Basics Stage 3: design approved, sub-stage 3a DONE (committed + pushed 2026-09-09).** Next is **3b** — the read service (`fetchOnboardingIngredients`), `useCatalog` fetching it, the pure `resolveOnboardingSelection(rows, types)` in `domain/buildYourBar.js` (+ tests: exclusion of `assumed_available` from both outputs, backfill order, dedupe, < 6 eligible → fewer/no crash, > 6 `is_initial` → first 6, deleted-id row dropped, `six` ⊆ groups), and wiring `BuildYourBar.jsx` to render the 3 grouped headings + the six from the config, then deleting `src/data/buildYourBarEssentials.js` + its name-based tests. Then 3c (admin "Onboarding ingredients" tab + `services/onboarding.js` write fns + `TABS` entry) and 3d (BuildYourBar "Edit list" link + `AdminMenu` item + `isAdmin` through `HomeScreen`). Do not start Ingredient Forms / Homemade Preparations until Household Basics is fully done.
 3. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files (and when a changed file needs reformatting, run `oxfmt` on the isolated LF copy and hand-apply the wrap changes back). Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
 4. **Migration count reconciled 2026-09-09.** 48 migration files on disk, 48 ledger rows, every one `local == remote`, 0 pending. The Speed Rack chunk's "47/47" was correct for its time (46 synced + `20260906130000`); Stage 1's chunk originally said "47/47" which was a **miscount** — with `20260909120000` it is **48/48**. Migration history itself is intact (unique ordered timestamps, no gaps, no dupes) — nothing was repaired, only the recorded count corrected.
 
@@ -61,39 +61,67 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## In-progress chunk (Household Basics Stage 3 — REVISED to admin-editable onboarding config, plan pending user review, 2026-09-09)
+## In-progress chunk (Household Basics Stage 3 — admin-editable onboarding config; design APPROVED, sub-stage 3a DONE, 2026-09-09)
 
-**No code, schema, or flag changes made — awaiting plan approval.** Stage 2 is
-done + mobile-verified (see below). The user has re-scoped Stage 3: instead of
-editing the hard-coded `src/data/buildYourBarEssentials.js`, the "Build your
-bar" onboarding lists become an **admin-managed DB table** so future curation
-needs no code / AI / redeploy. **Full revised design is in
-`docs/plans/household-basics-ingredient-forms-preparations.md`'s Stage 3
-section** — read it there, this is a pointer.
+Stage 2 is done + mobile-verified. Stage 3 re-scoped: the "Build your bar"
+onboarding lists become an **admin-managed DB table** so future curation needs
+no code / AI / redeploy. **Full approved design (with the user's 8 revisions)
+is in `docs/plans/household-basics-ingredient-forms-preparations.md`'s Stage 3
+section** — read it there. Sub-stages: **3a (flags + schema + seed) — DONE**;
+3b (read service + resolver + BuildYourBar wiring); 3c (admin "Onboarding
+ingredients" tab); 3d (shortcuts). **3b has NOT been started** — stop point
+per the user.
 
-Shape: new `onboarding_ingredients (ingredient_type_id uuid pk fk on delete
-cascade, position int, is_initial bool)`, RLS member-read / admin-write,
-name-resolved seed of the current 14 with **Coke instead of Ice**. One
-ordered list (drops the 3 expanded-view group headings — the one UX change
-needing sign-off); the initial six = `is_initial` rows backfilled from the
-rest, `assumed_available` types excluded from both lists dynamically. New
-"Onboarding ingredients" admin tab (admin-only) + a page-level "Edit list"
-link on Build Your Bar + an entry in the My Bar ⋯ `AdminMenu` (reachable when
-onboarding is hidden). Pure `resolveOnboardingSelection` in
-`domain/buildYourBar.js` replaces `resolveEssentialsList`. Sub-stages 3a
-(flags + schema + seed), 3b (resolver + wiring), 3c (admin tab), 3d
-(shortcuts).
+### Sub-stage 3a — DONE 2026-09-09 (committed + pushed)
 
-**Flag decisions confirmed by the user 2026-09-09:** keep Ice, Salt, Water,
-White Sugar, **and Black Pepper** flagged; **un-flag Simple Syrup**; skip the
-nonexistent "Hot Water". These are applied in sub-stage 3a, not yet done.
+**Flag reconciliation (live DB, not a migration — catalogue is admin data):**
+`update ingredient_types set assumed_available = false where id =
+'594e9b87-3774-4671-a73b-11a5e69a267c'` (Simple Syrup). Flagged set is now
+exactly **Black Pepper, Ice, Salt, Water, White Sugar** (count 5) — matches
+the user's decisions (keep those 5, un-flag Simple Syrup, skip nonexistent
+"Hot Water").
 
-### Stage 3 work already done (to preserve): NONE beyond docs
+**Migrations (3, all `local == remote`):**
+- `20260909130000_onboarding_ingredients.sql` — table `onboarding_ingredients
+  (ingredient_type_id uuid pk references ingredient_types on delete cascade,
+  position int not null, is_initial bool not null default false, group_label
+  text not null check in ('Spirits','Mixers','Kitchen basics'))`. RLS enabled.
+  `set_onboarding_order(uuid[])` — SECURITY INVOKER, one-statement whole-list
+  position reassignment (atomic reorder), `revoke execute from public, anon` +
+  `grant to authenticated`. Asserting name-resolved seed: 14 rows, aborts if
+  any name fails to resolve to exactly one `ingredient_types` row.
+- `20260909140000_onboarding_ingredients_policy_role_scope.sql` — the two
+  policies were written `to public` (same slip as
+  `20260823150000_liquid_colors`); `alter policy ... to authenticated` on
+  both. RLS suite caught it (`permission denied for function is_member` for
+  anon). Same fix as `20260823160000_liquid_colors_policy_role_scope`.
+- `20260909150000_set_onboarding_order_search_path.sql` — `db advisors`
+  flagged `function_search_path_mutable` on `set_onboarding_order` (only
+  function in the schema without a pinned path); `alter function ... set
+  search_path = ''`. Finding cleared.
 
-The only Stage 3 output so far is the live catalogue check (table below) and
-this planning — recorded in commit `11be941` (docs-only) and this revision.
-No source, schema, migration, or `assumed_available` change has been made in
-Stage 3. Nothing to revert.
+**Seed verified live:** 14 rows — Spirits 7, Mixers 3, Kitchen basics 4;
+`is_initial` = Gin, Vodka, Soda Water, Coke, Lemon Juice, Lime Juice (6);
+Ice **not** seeded (replaced by Coke); Simple Syrup seeded (Kitchen basics,
+no longer a household basic). All 14 seed names verified to resolve uniquely
+against the live catalogue before writing the migration (no missing/ambiguous).
+
+**Verification:** migration ledger — `20260909130000/140000/150000` all
+`local == remote`. `rls_suite.sql` extended with an `onboarding_ingredients`
+block (member read / admin write / anon denied / `group_label` check /
+`set_onboarding_order` admin-reorders + member-noop + anon-no-EXECUTE) —
+full suite passes (exit 0, no FAIL). `db advisors --type security` — no new
+finding (search_path cleared; baseline SECURITY DEFINER + auth warnings
+unchanged). `corepack pnpm@10.34.3 test` 216/216 (no JS changed).
+`pnpm build` clean. No `.js`/`.jsx` touched → no `oxfmt` run needed.
+
+**Inert:** nothing reads `onboarding_ingredients` yet — `BuildYourBar.jsx`
+still uses the hard-coded `buildYourBarEssentials.js`. 3b wires it.
+
+### Stage 3 work already done (to preserve)
+
+3a as above. The earlier live catalogue check (table below) and the plan
+revision. All in git (`11be941`, `9e5f97d`, and this 3a commit).
 
 ### Live `assumed_available` set at Stage 3 start (drifted since Stage 2, which verified "Ice only")
 

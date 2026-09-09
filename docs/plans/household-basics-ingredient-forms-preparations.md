@@ -179,25 +179,50 @@ picking a best guess.
   cycle works.
 - *Safe stop:* ships with exactly one basic live.
 
-**Stage 3 — REVISED 2026-09-09: admin-editable onboarding config (pending user review).**
+**Stage 3 — REVISED 2026-09-09: admin-editable onboarding config. Design APPROVED (with revisions) by the user 2026-09-09. 3a in progress.**
 
 The original Stage 3 (below, struck) hard-coded the onboarding lists in
 `src/data/buildYourBarEssentials.js` and swapped Ice→Coke by editing that
 file. The user instead wants the "Build your bar" lists to be **admin-managed
 data**, so future curation needs no code / AI / redeploy. Revised design:
 
+*User revisions to the approved design (2026-09-09):*
+1. **Keep the Spirits / Mixers / Kitchen basics headings** in the expanded
+   view — via a `group_label text` column (fixed 3-value check), not a
+   custom group-management feature.
+2. Admin picks a row's group from a **simple dropdown**, defaulting from the
+   ingredient's catalogue category where possible (app logic, 3c).
+3. **Ordering is preserved within each group** (`position`, filtered per
+   group); the initial tiles use the **overall** `position` order.
+4. **At most six** rows may be `is_initial = true` — enforced in the service
+   + admin UI (the resolver also caps at 6 defensively). The admin tab shows
+   the count and explains empty slots are backfilled.
+5. **Reorder is atomic** — a `set_onboarding_order(uuid[])` function does the
+   whole-list `position` reassignment in one statement, so a ↑/↓ can never
+   persist half a swap.
+6. **Seed names must resolve uniquely.** The migration asserts all 14 names
+   map to exactly one `ingredient_types` row and **aborts** otherwise
+   (missing or ambiguous, especially an initial-six name) rather than
+   seeding a partial list.
+7. **Permission tests** — extend `supabase/tests/rls_suite.sql`: member can
+   read, only admin can write; anon denied.
+8. The **read service** (`fetchOnboardingIngredients`) moves to **3b**, when
+   Build Your Bar is wired — 3a is DB-only.
+
 *Flag decisions confirmed by the user 2026-09-09:* keep Ice, Salt, Water,
 White Sugar, **and Black Pepper** flagged `assumed_available`; **un-flag
 Simple Syrup**; "Hot Water" has no catalogue row — skipped, not created.
 
-### New table (ID-referenced, one ordered list + an initial flag)
+### New table (ID-referenced, one ordered list + a group label + an initial flag)
 
 ```sql
 create table public.onboarding_ingredients (
   ingredient_type_id uuid primary key
     references public.ingredient_types(id) on delete cascade,
   position integer not null,
-  is_initial boolean not null default false
+  is_initial boolean not null default false,
+  group_label text not null
+    check (group_label in ('Spirits', 'Mixers', 'Kitchen basics'))
 );
 alter table public.onboarding_ingredients enable row level security;
 create policy "onboarding_ingredients: members read"
@@ -205,68 +230,87 @@ create policy "onboarding_ingredients: members read"
 create policy "onboarding_ingredients: admin writes"
   on public.onboarding_ingredients for all
   using (public.is_admin()) with check (public.is_admin());
+
+-- Atomic whole-list reorder (revision 5). One statement, SECURITY INVOKER -
+-- the admin-write policy still gates it; a non-admin call updates 0 rows.
+create function public.set_onboarding_order(p_type_ids uuid[])
+returns void language sql as $$
+  update public.onboarding_ingredients o set position = v.ord
+  from (select id, ordinality::int as ord
+        from unnest(p_type_ids) with ordinality as t(id, ordinality)) v
+  where o.ingredient_type_id = v.id;
+$$;
+revoke execute on function public.set_onboarding_order(uuid[]) from public, anon;
+grant execute on function public.set_onboarding_order(uuid[]) to authenticated;
 ```
 
-- **One list, not two.** The expanded "Show all essentials" list *is* the
-  table, ordered by `position`. The "initial six" is the `is_initial = true`
-  subset, shown in the same order, **backfilled** from the non-initial rows
-  (also in `position` order) up to six. Only one order to maintain.
-- **This drops the 3 fixed expanded-view group headings** (Spirits / Mixers /
-  Kitchen basics) — the one visible UX change, needs the user's OK. If groups
-  must stay: add a nullable `group_label text` + fixed heading order (heavier
-  admin UI). *Recommendation: drop the headings.*
+- **Expanded view** = every row grouped by `group_label` (3 fixed headings,
+  fixed order Spirits → Mixers → Kitchen basics), within each group ordered
+  by `position`. **Initial tiles** = the `is_initial` rows in overall
+  `position` order, **backfilled** from the remaining rows (overall
+  `position` order) up to six; ≤ 6 rows may be `is_initial`.
 - `on delete cascade` + ID references → renaming an ingredient never breaks
   the list; deleting one auto-removes its row.
-- `position`: plain integers, gaps allowed; admin ↑/↓ swaps two rows'
-  `position`. Order by `position`, then `ingredient_types.name` as tiebreak.
+- `position`: plain integers, gaps allowed. Reorder goes through
+  `set_onboarding_order()` (atomic). Order by `position`, then
+  `ingredient_types.name` as a stable tiebreak.
 - **RLS:** members read (BuildYourBar renders for everyone), `is_admin()`
   writes — matches `liquid_colors`/`glasses`. Moderators excluded for now.
-- **Seed in the same migration, name-resolved:** the current 14 essentials
-  with **Coke instead of Ice**, `is_initial = true` for Gin / Vodka / Soda
-  Water / Lemon Juice / Lime Juice / Coke. `insert ... select id,
-  row_number() over (...), <initial?> from ingredient_types where name in
-  (...)` — names absent from the target catalogue are skipped (admin adds
-  them via the UI later). After seed, every change is UI-only.
+  Covered by a new `onboarding_ingredients` block in
+  `supabase/tests/rls_suite.sql`.
+- **Seed in the same migration, name-resolved with a hard assertion:** the
+  current 14 essentials with **Coke instead of Ice**, `is_initial = true`
+  for Gin / Vodka / Soda Water / Coke / Lemon Juice / Lime Juice. A
+  `do $$ … $$` block resolves all 14 names case-insensitively and
+  `raise exception` if the resolved count ≠ 14 (a missing or ambiguous name)
+  — a partial list is never written. After seed, every change is UI-only.
 - **Never read by `recommendations.js`** — stays fully separate from
   `bar_priority` / Buy Next.
 
-### Resolver — `resolveOnboardingSelection(rows, types)` (pure, `domain/buildYourBar.js`)
+### Resolver — `resolveOnboardingSelection(rows, types)` (pure, `domain/buildYourBar.js`, built in 3b)
 
-Returns `{ six: type[], expanded: type[] }`:
+Returns `{ six: type[], groups: [label, type[]][] }`:
 1. Resolve each `ingredient_type_id` to its type; drop rows whose type is
    missing.
-2. **Exclude any type with `assumed_available === true`** from both lists,
+2. **Exclude any type with `assumed_available === true`** from both outputs,
    every render.
-3. `expanded` = survivors in `position` order.
-4. `six` = `is_initial` survivors in `position` order, then backfilled from
-   the remaining `expanded` entries in `position` order until length 6;
-   dedupe by id; fewer than 6 eligible → return what exists (no gap, no
-   crash).
-5. Invariant: every item in `six` is also in `expanded`.
+3. `groups` = survivors bucketed by `group_label` into the 3 fixed headings
+   in fixed order, each bucket sorted by `position` (then name).
+4. `six` = `is_initial` survivors in **overall** `position` order, then
+   backfilled from the remaining survivors (overall `position` order) until
+   length 6; dedupe by id; fewer than 6 eligible → return what exists (no
+   gap, no crash); more than 6 `is_initial` → first 6 by position.
+5. Invariant: every item in `six` also appears in some `groups` bucket.
 
 `resolveEssentialsList` (name-based) and `src/data/buildYourBarEssentials.js`
-are **removed** — nothing else imports them (verified).
+are **removed** in 3b — nothing else imports them (verified).
 
 ### Admin UI — "Onboarding ingredients" tab
 
 - `AdminScreen.jsx` `TABS`: `{ id: "onboarding", label: "Onboarding
   ingredients", adminOnly: true }`, in the catalog-curation group.
-- `src/components/admin/OnboardingTab.jsx`: one ordered list. Each row —
-  ingredient name, an **"In initial six"** `OwnedToggle`, **↑ / ↓** (44×44),
-  **remove**. A row whose type is `assumed_available` renders dimmed with a
-  "Hidden — household basic" note. Below: a **"+ Add ingredient"** searchable
-  type picker (reuse `TypesTab`'s search pattern), excluding types already
-  listed. A "6 of N marked initial" counter; soft note if the initial count
-  ≠ 6 (still allowed — backfill/truncate covers both).
-- `services/onboarding.js`: `fetchOnboardingIngredients`,
-  `addOnboardingIngredient(typeId)` (position = max+1),
-  `removeOnboardingIngredient(typeId)`, `setOnboardingInitial(typeId, bool)`,
-  `moveOnboardingIngredient(typeId, dir)` (swap `position` with the adjacent
-  row). Each action = immediate write + `catalog.refetch()`, matching
-  `NamedRowManager`.
-- `useCatalog` gains `onboardingIngredients` in its existing `Promise.all`,
-  shared via Outlet context (honours "call the catalog hook once in
-  AppShell").
+- `src/components/admin/OnboardingTab.jsx`: rows grouped under the 3 fixed
+  headings. Each row — ingredient name, a **group dropdown** (Spirits /
+  Mixers / Kitchen basics), an **"Initial"** `OwnedToggle`, **↑ / ↓**
+  (44×44), **remove**. The toggle is disabled once 6 rows are `is_initial`
+  (and the block is explained: "6 selected — extra tiles are backfilled
+  automatically"). A row whose type is `assumed_available` renders dimmed
+  with a "Hidden — household basic" note. Below: a **"+ Add ingredient"**
+  searchable type picker (reuse `TypesTab`'s search pattern), excluding
+  types already listed; new rows default their group from the ingredient's
+  catalogue category (Spirit→Spirits, Mixer→Mixers, else Kitchen basics).
+- `services/onboarding.js` (**write side in 3c**):
+  `addOnboardingIngredient(typeId, group)` (position = max+1),
+  `removeOnboardingIngredient(typeId)`, `setOnboardingInitial(typeId, bool)`
+  (rejects a 7th), `setOnboardingGroup(typeId, group)`,
+  `reorderOnboarding(orderedTypeIds)` → `supabase.rpc('set_onboarding_order', …)`
+  (atomic). Each action = write + `catalog.refetch()`, matching
+  `NamedRowManager`. The **read** fn `fetchOnboardingIngredients` is added in
+  **3b** (moved earlier per revision 8) so Build Your Bar can fetch its
+  config when wired.
+- `useCatalog` gains `onboardingIngredients` in its existing `Promise.all`
+  (in **3b**), shared via Outlet context (honours "call the catalog hook
+  once in AppShell").
 
 ### Shortcuts
 
@@ -305,22 +349,30 @@ cocktails" / "Find more ingredients" nav — all untouched.
 
 ### Sub-stages
 
-- **3a — flag reconciliation + schema + seed (DB + migration).**
-  `UPDATE ingredient_types SET assumed_available = false` for Simple Syrup
-  (`594e9b87-…`); confirm Ice/Salt/Water/White Sugar/Black Pepper stay `true`.
-  Then the `onboarding_ingredients` migration + RLS + name-resolved seed.
-  Verify: `migration list` local == remote, RLS with admin/member/anon
-  identities, seed row count + `is_initial` set. Inert.
-- **3b — resolver + BuildYourBar wiring.** `resolveOnboardingSelection` +
-  tests (exclusion from both lists; flagged initial member pulls next
-  expanded candidate up; dedupe; < 6 eligible → fewer, no crash; deleted-id
-  row dropped; `six ⊆ expanded`). `useCatalog` fetches the config.
-  `BuildYourBar.jsx` renders from it. Delete `buildYourBarEssentials.js` +
-  its name-based tests.
-- **3c — admin tab.** `OnboardingTab.jsx` + `services/onboarding.js` +
-  `TABS` entry. Mobile-first: 44px ↑/↓/toggle/remove, one-thumb.
-- **3d — shortcuts.** BuildYourBar "Edit list" link + `AdminMenu` item; wire
-  `isAdmin` into `HomeScreen` → `BuildYourBar`.
+- **3a — flag reconciliation + schema + seed. DONE 2026-09-09 (committed + pushed).**
+  Simple Syrup un-flagged (live `UPDATE`, not a migration); flagged set now
+  Black Pepper / Ice / Salt / Water / White Sugar. Migrations
+  `20260909130000_onboarding_ingredients` (table + `group_label` check + RLS +
+  `set_onboarding_order()` INVOKER fn + asserting name-resolved 14-row seed,
+  Coke for Ice, 6 `is_initial`), `20260909140000_..._policy_role_scope`
+  (`alter policy ... to authenticated` — RLS suite caught the `to public`
+  slip), `20260909150000_set_onboarding_order_search_path` (`db advisors`
+  finding cleared). `rls_suite.sql` extended with an `onboarding_ingredients`
+  block — full suite passes. `db advisors` no new finding. `pnpm test`
+  216/216, `pnpm build` clean. Inert — nothing reads the table yet.
+- **3b — read service + resolver + BuildYourBar wiring.**
+  `fetchOnboardingIngredients` (moved here); `useCatalog` fetches it;
+  `resolveOnboardingSelection` + tests (exclusion from both outputs; a
+  flagged initial member pulls the next backfill candidate up; dedupe;
+  < 6 eligible → fewer, no crash; > 6 is_initial → first 6; deleted-id row
+  dropped; `six` ⊆ groups). `BuildYourBar.jsx` renders groups + six from it.
+  Delete `buildYourBarEssentials.js` + its name-based tests.
+- **3c — admin tab.** `OnboardingTab.jsx` + `services/onboarding.js` write
+  fns + `TABS` entry. Mobile-first: 44px group dropdown / ↑ / ↓ / toggle /
+  remove, one-thumb; the ≤ 6 initial cap + backfill explainer.
+- **3d — shortcuts.** BuildYourBar admin "Edit list" link + `AdminMenu`
+  "Onboarding ingredients" item; wire `isAdmin` into `HomeScreen` →
+  `BuildYourBar`.
 - Each: `corepack pnpm@10.34.3` test/build, `oxfmt --check` on isolated LF
   copies, commit + push. Mobile verification of 3b–3d held for the user.
 

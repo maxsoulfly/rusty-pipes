@@ -605,6 +605,112 @@ begin
   perform pg_temp.test_lookup_table('ingredient_aliases', 'ingredient_type_id, alias', v_vals, 'alias', 'RLS_TEST alias renamed');
 end $$;
 
+-- ── onboarding_ingredients ───────────────────────────────────────────────
+-- Admin-curated "Build your bar" config (20260909130000). "member read,
+-- admin write" like the lookup tables above, but a different shape (PK is
+-- ingredient_type_id, no `id`/`name` column) so it can't reuse
+-- test_lookup_table(). Also exercises set_onboarding_order() - a plain
+-- SECURITY INVOKER helper: authenticated may execute it, but the UPDATE
+-- inside is still gated by the admin-write policy, so a non-admin's call
+-- changes nothing; anon has no EXECUTE grant at all.
+
+do $$
+declare
+  f record;
+  v_type_id uuid;
+  v_id_a uuid;
+  v_id_b uuid;
+  n int;
+  affected int;
+  pos_before int;
+begin
+  select * into f from rls_fixture_ids;
+
+  -- Still the real connecting role here: pick a type not already seeded into
+  -- onboarding_ingredients (PK is ingredient_type_id), and grab two that ARE
+  -- seeded for the reorder checks.
+  select id into v_type_id from public.ingredient_types
+    where id not in (select ingredient_type_id from public.onboarding_ingredients)
+    limit 1;
+  perform pg_temp.assert(v_type_id is not null, 'fixture: an ingredient type not already in onboarding_ingredients exists');
+  select ingredient_type_id into v_id_a from public.onboarding_ingredients order by position asc limit 1;
+  select ingredient_type_id into v_id_b from public.onboarding_ingredients order by position desc limit 1;
+  perform pg_temp.assert(v_id_a is not null and v_id_b is not null and v_id_a <> v_id_b, 'fixture: onboarding_ingredients has at least two seeded rows');
+
+  -- read
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  select count(*) into n from public.onboarding_ingredients;
+  perform pg_temp.assert(n > 0, 'onboarding_ingredients: an ordinary member can read');
+
+  perform pg_temp.set_identity('anon', null);
+  select count(*) into n from public.onboarding_ingredients;
+  perform pg_temp.assert(n = 0, 'onboarding_ingredients: anon cannot read');
+
+  -- member write denied
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  begin
+    insert into public.onboarding_ingredients (ingredient_type_id, position, is_initial, group_label)
+    values (v_type_id, 999, false, 'Spirits');
+    perform pg_temp.assert(false, 'onboarding_ingredients: an ordinary member inserting should be denied');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'onboarding_ingredients: an ordinary member cannot insert');
+  end;
+
+  update public.onboarding_ingredients set is_initial = not is_initial where ingredient_type_id = v_id_a;
+  get diagnostics affected = row_count;
+  perform pg_temp.assert(affected = 0, 'onboarding_ingredients: an ordinary member cannot update');
+
+  delete from public.onboarding_ingredients where ingredient_type_id = v_id_a;
+  get diagnostics affected = row_count;
+  perform pg_temp.assert(affected = 0, 'onboarding_ingredients: an ordinary member cannot delete');
+
+  -- admin write allowed
+  perform pg_temp.set_identity('authenticated', f.admin_id);
+  insert into public.onboarding_ingredients (ingredient_type_id, position, is_initial, group_label)
+  values (v_type_id, 999, false, 'Kitchen basics');
+  perform pg_temp.assert(true, 'onboarding_ingredients: admin can insert');
+
+  update public.onboarding_ingredients set group_label = 'Mixers' where ingredient_type_id = v_type_id;
+  get diagnostics affected = row_count;
+  perform pg_temp.assert(affected = 1, 'onboarding_ingredients: admin can update');
+
+  delete from public.onboarding_ingredients where ingredient_type_id = v_type_id;
+  get diagnostics affected = row_count;
+  perform pg_temp.assert(affected = 1, 'onboarding_ingredients: admin can delete');
+
+  -- group_label check constraint
+  begin
+    insert into public.onboarding_ingredients (ingredient_type_id, position, is_initial, group_label)
+    values (v_type_id, 999, false, 'Not A Real Group');
+    perform pg_temp.assert(false, 'onboarding_ingredients: an unknown group_label should be rejected');
+  exception when check_violation then
+    perform pg_temp.assert(true, 'onboarding_ingredients: group_label is constrained to the 3 fixed headings');
+  end;
+
+  -- set_onboarding_order(): admin call actually reorders
+  perform pg_temp.set_identity('authenticated', f.admin_id);
+  perform public.set_onboarding_order(array[v_id_b, v_id_a]);
+  select position into n from public.onboarding_ingredients where ingredient_type_id = v_id_b;
+  perform pg_temp.assert(n = 1, 'set_onboarding_order: an admin call reassigns position atomically');
+
+  -- member may execute the function, but the UPDATE inside is RLS-gated -> no-op
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  select position into pos_before from public.onboarding_ingredients where ingredient_type_id = v_id_a;
+  perform public.set_onboarding_order(array[v_id_a, v_id_b]);
+  select position into n from public.onboarding_ingredients where ingredient_type_id = v_id_a;
+  perform pg_temp.assert(n = pos_before, 'set_onboarding_order: a member call changes nothing (admin-write policy still gates the UPDATE)');
+
+  -- anon has no EXECUTE grant at all
+  perform pg_temp.set_identity('anon', null);
+  begin
+    perform public.set_onboarding_order(array[v_id_a]);
+    perform pg_temp.assert(false, 'set_onboarding_order: anon should have no EXECUTE grant');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'set_onboarding_order: anon cannot execute it');
+  end;
+end;
+$$;
+
 -- ── products ─────────────────────────────────────────────────────────────
 -- Shared catalog: any member can read and insert (their own created_by),
 -- but only admin can update/delete - unlike the lookup tables, ordinary
