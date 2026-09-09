@@ -179,7 +179,19 @@ picking a best guess.
   cycle works.
 - *Safe stop:* ships with exactly one basic live.
 
-**Stage 3 — REVISED 2026-09-09: admin-editable onboarding config. Design APPROVED (with revisions) by the user 2026-09-09. 3a + 3b DONE (2026-09-09 / 2026-09-10); 3c (admin tab) is next.**
+**Stage 3 — REVISED 2026-09-09: admin-editable onboarding config. Design APPROVED (with revisions) by the user 2026-09-09. 3a + 3b + 3c DONE (2026-09-09 / 2026-09-10 / 2026-09-10); 3d (shortcuts) is next.**
+
+**2026-09-10 design change for 3c (user override):** the admin editor holds a
+**local draft** and saves the **whole config atomically in one call** —
+additions, removals, group changes, initial flags and order together — rather
+than the per-action write helpers described below. The 3a reorder-only
+`set_onboarding_order` does not cover a full save, so a new
+`set_onboarding_config(p_rows jsonb)` function (SECURITY INVOKER, one-txn
+delete+insert, `search_path=''`, revoke/grant, RLS-gated) was added in
+migration `20260910120000`. `set_onboarding_order` is kept (shipped, RLS-suite-
+covered) but the app no longer calls it. `services/onboarding.js` exposes
+`saveOnboardingConfig(rows)` only (position derived from array order); the
+`add/remove/setInitial/setGroup/reorder` helpers below were **not** built.
 
 The original Stage 3 (below, struck) hard-coded the onboarding lists in
 `src/data/buildYourBarEssentials.js` and swapped Ice→Coke by editing that
@@ -375,9 +387,26 @@ cocktails" / "Find more ingredients" nav — all untouched.
   view holds more than the six). `buildYourBarEssentials.js` + its
   name-based tests deleted. `pnpm test` 223/223, `pnpm build` clean,
   isolated-LF `oxfmt --check` clean.
-- **3c — admin tab.** `OnboardingTab.jsx` + `services/onboarding.js` write
-  fns + `TABS` entry. Mobile-first: 44px group dropdown / ↑ / ↓ / toggle /
-  remove, one-thumb; the ≤ 6 initial cap + backfill explainer.
+- **3c — admin editor. DONE 2026-09-10 (committed + pushed; mobile
+  verification held for the user).** `src/components/admin/OnboardingTab.jsx`
+  + `AdminScreen` `TABS` entry `{ id: "onboarding", label: "Onboarding
+  ingredients", adminOnly: true }` + render guard. **Atomic whole-config
+  save** (user override — see the 2026-09-10 note above): migration
+  `20260910120000_set_onboarding_config.sql` (SECURITY INVOKER plpgsql,
+  validate array / ≤6 initial / no dup id, then delete-all + insert-all in
+  one txn; `search_path=''`; `revoke ... from public, anon` +
+  `grant ... to authenticated`; advisors clean), `services/onboarding.js`
+  `saveOnboardingConfig(rows)`. Editor: flat grouped-invariant draft, dirty
+  diff vs. last-saved snapshot, `Save changes` / `Discard`, `N/6 initial`
+  counter + backfill explainer at the cap, group `Select`, `★ Initial` toggle
+  (disabled OFF→ON at 6), 44×44 ↑/↓ (swap within group) + remove, searchable
+  "Add ingredient" picker (name+alias, excludes listed, capped 20, group
+  defaulted via `defaultOnboardingGroup`), household-basic rows dimmed +
+  struck + "Hidden — household basic". Save failure keeps the draft + shows
+  `err.message`; success → `catalog.refetch()`. `rls_suite.sql` extended
+  (admin replace; >6 rejected + config intact; member denied + config intact;
+  anon no EXECUTE) — full suite passes. `pnpm test` 227/227, build clean,
+  isolated-LF `oxfmt --check` clean.
 - **3d — shortcuts.** BuildYourBar admin "Edit list" link + `AdminMenu`
   "Onboarding ingredients" item; wire `isAdmin` into `HomeScreen` →
   `BuildYourBar`.

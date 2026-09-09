@@ -623,6 +623,8 @@ declare
   n int;
   affected int;
   pos_before int;
+  v_grp text;
+  v_payload jsonb;
 begin
   select * into f from rls_fixture_ids;
 
@@ -707,6 +709,62 @@ begin
     perform pg_temp.assert(false, 'set_onboarding_order: anon should have no EXECUTE grant');
   exception when insufficient_privilege then
     perform pg_temp.assert(true, 'set_onboarding_order: anon cannot execute it');
+  end;
+
+  -- set_onboarding_config(): atomic whole-list replace behind the admin
+  -- "Onboarding ingredients" editor. SECURITY INVOKER like the reorder
+  -- helper - the admin-write policy still gates every statement inside, and
+  -- the delete + insert run in one transaction so a rejected payload leaves
+  -- the live config exactly as it was (never partial, never empty).
+
+  -- admin: a valid payload replaces the whole config in one call
+  perform pg_temp.set_identity('authenticated', f.admin_id);
+  perform public.set_onboarding_config(jsonb_build_array(
+    jsonb_build_object('ingredient_type_id', v_id_a, 'position', 1, 'is_initial', true,  'group_label', 'Spirits'),
+    jsonb_build_object('ingredient_type_id', v_id_b, 'position', 2, 'is_initial', false, 'group_label', 'Mixers')
+  ));
+  select count(*) into n from public.onboarding_ingredients;
+  perform pg_temp.assert(n = 2, 'set_onboarding_config: an admin call replaces the entire list in one shot');
+  select group_label into v_grp from public.onboarding_ingredients where ingredient_type_id = v_id_b;
+  perform pg_temp.assert(v_grp = 'Mixers', 'set_onboarding_config: an admin call writes each row''s group_label');
+
+  -- admin: more than 6 initial rows is rejected and the previous config stands
+  select jsonb_agg(jsonb_build_object(
+           'ingredient_type_id', t.id, 'position', t.rn,
+           'is_initial', true, 'group_label', 'Spirits'))
+    into v_payload
+    from (select id, row_number() over (order by id) as rn
+          from public.ingredient_types limit 7) t;
+  begin
+    perform public.set_onboarding_config(v_payload);
+    perform pg_temp.assert(false, 'set_onboarding_config: a payload with more than 6 initial rows should be rejected');
+  exception when raise_exception then
+    perform pg_temp.assert(true, 'set_onboarding_config: rejects a payload with more than 6 initial rows');
+  end;
+  select count(*) into n from public.onboarding_ingredients;
+  perform pg_temp.assert(n = 2, 'set_onboarding_config: a rejected payload leaves the previous config intact');
+
+  -- member: EXECUTE is granted to authenticated, but the insert inside trips
+  -- the admin-write WITH CHECK and the whole call rolls back
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  begin
+    perform public.set_onboarding_config(jsonb_build_array(
+      jsonb_build_object('ingredient_type_id', v_id_a, 'position', 1, 'is_initial', false, 'group_label', 'Spirits')
+    ));
+    perform pg_temp.assert(false, 'set_onboarding_config: a member call should be denied by RLS');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'set_onboarding_config: a member cannot write the config (admin-write WITH CHECK)');
+  end;
+  select count(*) into n from public.onboarding_ingredients;
+  perform pg_temp.assert(n = 2, 'set_onboarding_config: a denied member call leaves the config intact (the delete rolls back too)');
+
+  -- anon has no EXECUTE grant at all
+  perform pg_temp.set_identity('anon', null);
+  begin
+    perform public.set_onboarding_config('[]'::jsonb);
+    perform pg_temp.assert(false, 'set_onboarding_config: anon should have no EXECUTE grant');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'set_onboarding_config: anon cannot execute it');
   end;
 end;
 $$;

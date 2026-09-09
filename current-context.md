@@ -36,9 +36,11 @@ Each numbered step is a development chunk boundary for this file.
 ## Exact next action (paused here, 2026-09-10)
 
 1. **Household Basics Stage 2 is DONE (committed `c1629b9`, mobile-verified 2026-09-09).**
-2. **Household Basics Stage 3: design approved, sub-stages 3a + 3b DONE (both committed + pushed).** 3a `c999e1d` (2026-09-09). 3b (2026-09-10): `services/onboarding.js` `fetchOnboardingIngredients` (read only — write fns land in 3c); `useCatalog` fetches it into `catalog.onboardingIngredients` via the existing `Promise.all`; pure `resolveOnboardingSelection(rows, types)` in `domain/buildYourBar.js` (13 tests — assumed_available excluded from both outputs, backfill order, dedupe, <6 eligible → fewer/no crash, >6 is_initial → first 6 by position, deleted-id row dropped, flagged initial pulls next backfill up, six ⊆ groups, empty/null-safe); `BuildYourBar.jsx` wired to it (3 fixed headings, empty groups hidden, "Show all essentials" toggle only when the expanded view holds more than the six). `resolveEssentialsList` + `src/data/buildYourBarEssentials.js` + their name-based tests deleted. `pnpm test` 223/223, `pnpm build` clean, isolated-LF `oxfmt --check` clean, REST select shape 200. **Mobile verification of 3b held for the user** (see the checklist in the 3b chunk below). Next is **3c** (admin "Onboarding ingredients" tab + `services/onboarding.js` write fns + `TABS` entry), then 3d (BuildYourBar "Edit list" link + `AdminMenu` item + `isAdmin` through `HomeScreen` — `isAdmin` is already in Outlet context). Do not start Ingredient Forms / Homemade Preparations until Household Basics is fully done.
+2. **Household Basics Stage 3: design approved, sub-stages 3a + 3b + 3c DONE.** 3a `c999e1d`. 3b `960aa86` — mobile-verified 2026-09-10 (six initial tiles show Coke not Ice; expanded groups correct; selection / live count / "Show my cocktails" work; Browse cocktails, Show my cocktails, Find more ingredients all open the expected screens). **Back-navigation widget visibility was NOT separately confirmed** — its per-visit-snapshot behavior is unchanged and stays unverified. 3c (2026-09-10) — admin "Onboarding ingredients" editor; committed + pushed; **mobile verification held for the user**. See the 3c chunk below for the full change list. **Next is 3d** (BuildYourBar admin "Edit list" link + `AdminMenu` "Onboarding ingredients" item + `isAdmin` through `HomeScreen` — `isAdmin` already in Outlet context). Do not start Ingredient Forms / Homemade Preparations until Household Basics is fully done.
 3. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files (and when a changed file needs reformatting, run `oxfmt` on the isolated LF copy and hand-apply the wrap changes back). Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
-4. **Migration count reconciled 2026-09-09.** 48 migration files on disk, 48 ledger rows, every one `local == remote`, 0 pending. The Speed Rack chunk's "47/47" was correct for its time (46 synced + `20260906130000`); Stage 1's chunk originally said "47/47" which was a **miscount** — with `20260909120000` it is **48/48**. Migration history itself is intact (unique ordered timestamps, no gaps, no dupes) — nothing was repaired, only the recorded count corrected.
+4. **Migration count (2026-09-10): 52 files on disk, 52 ledger rows, all `local == remote`, 0 pending.** Was 48 after the 2026-09-09 reconcile; +`20260909130000/140000/150000` (3a) +`20260910120000` (3c) = 52. History intact (unique ordered timestamps, no gaps/dupes).
+
+5. **Migration count reconciled 2026-09-09.** 48 migration files on disk, 48 ledger rows, every one `local == remote`, 0 pending. The Speed Rack chunk's "47/47" was correct for its time (46 synced + `20260906130000`); Stage 1's chunk originally said "47/47" which was a **miscount** — with `20260909120000` it is **48/48**. Migration history itself is intact (unique ordered timestamps, no gaps, no dupes) — nothing was repaired, only the recorded count corrected.
 
 1. ~~Present the consolidated Library/My Bar + Sort mobile checklist~~ - **done. The user confirmed all five verification groups passed** (grouped Library + Sort control, ingredient/bottle detail entry points, view-vs-own type-tile controls, back-nav scroll/expanded-state restoration, Build Your Bar no-regression). Nothing outstanding from Stages 2-4 or the Sort control.
 2. ~~Investigate the recurring "JWT issued at future" startup error~~ - **root cause identified and a scoped fix committed (`65ecc74`), 2026-09-06. See "Earlier chunk" below.** `first open after idle` verification is still **pending** the user's confirmation on a phone - a separate follow-up, does not block the My Bar redesign. Do not mark it done without a real result.
@@ -61,18 +63,95 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## In-progress chunk (Household Basics Stage 3 — admin-editable onboarding config; design APPROVED, sub-stages 3a + 3b DONE, 2026-09-10)
+## In-progress chunk (Household Basics Stage 3 — admin-editable onboarding config; design APPROVED, sub-stages 3a + 3b + 3c DONE, 2026-09-10)
 
 Stage 2 is done + mobile-verified. Stage 3 re-scoped: the "Build your bar"
 onboarding lists become an **admin-managed DB table** so future curation needs
 no code / AI / redeploy. **Full approved design (with the user's 8 revisions)
 is in `docs/plans/household-basics-ingredient-forms-preparations.md`'s Stage 3
 section** — read it there. Sub-stages: **3a (flags + schema + seed) — DONE**;
-**3b (read service + resolver + BuildYourBar wiring) — DONE 2026-09-10, mobile
-verification held for the user**; 3c (admin "Onboarding ingredients" tab); 3d
-(shortcuts). **3c has NOT been started** — stop point per the user.
+**3b (read service + resolver + BuildYourBar wiring) — DONE 2026-09-10,
+mobile-verified**; **3c (admin "Onboarding ingredients" editor) — DONE
+2026-09-10, mobile verification held for the user**; 3d (shortcuts). **3d has
+NOT been started** — stop point per the user.
 
-### Sub-stage 3b — DONE 2026-09-10 (committed + pushed; mobile verification pending)
+### Sub-stage 3c — DONE 2026-09-10 (committed + pushed; mobile verification pending)
+
+**User override of the approved 3c design:** instead of per-action write
+helpers (`addOnboardingIngredient` / `setOnboardingInitial` / … each = write +
+refetch), the editor holds a **local draft** and saves the **entire config
+atomically in one call** — adds, removes, group changes, initial flags and
+order together. `set_onboarding_order` (the 3a reorder-only helper) doesn't
+cover that, so a new function was added.
+
+- **Migration `20260910120000_set_onboarding_config.sql`** — `set_onboarding_config(p_rows jsonb)`,
+  `language plpgsql`, **SECURITY INVOKER**, `set search_path = ''`,
+  `revoke execute from public, anon` + `grant to authenticated` (same shape as
+  `set_onboarding_order`). Body: validate `p_rows` is a jsonb array; reject
+  `> 6` `is_initial`; reject a duplicated `ingredient_type_id`; then
+  `delete from onboarding_ingredients` + `insert` the payload — **one
+  transaction**, so any failure (bad group_label CHECK, bad FK, RLS WITH
+  CHECK) rolls the delete back too and the live list is never partial/empty.
+  A non-admin's DELETE hits 0 rows (RLS `using is_admin()`), and a non-empty
+  payload trips the INSERT's WITH CHECK → whole call rolls back. Pushed
+  (`db push --linked`), ledger `local == remote`, `db advisors --type security`
+  **no new finding** (search_path pinned; baseline SECURITY DEFINER + auth
+  warnings unchanged).
+- **`set_onboarding_order` is kept** (shipped, still RLS-suite-covered) but the
+  app no longer calls it — `set_onboarding_config` supersedes it for this UI.
+- **`services/onboarding.js`** — `saveOnboardingConfig(rows)`: maps the draft
+  (display order) to `{ ingredient_type_id, position: i+1, is_initial,
+  group_label }` and `supabase.rpc("set_onboarding_config", { p_rows })`.
+  `position` is derived from array order, callers never track it. Errors
+  propagate unchanged.
+- **`src/components/admin/OnboardingTab.jsx`** (new) — takes `catalog`. Draft
+  is one flat array with a **grouped invariant** (all Spirits rows, then
+  Mixers, then Kitchen basics; stable within a group) via `regroup()`, so
+  grouped rendering and position-from-index are trivial. `dirty` = serialized
+  draft ≠ last-saved snapshot; a `dirtyRef` stops the catalog-sync effect from
+  clobbering an in-progress edit. Per row: name (dimmed + struck + "Hidden —
+  household basic" when the type is `assumed_available`), group `Select`
+  (3 fixed labels), `★ Initial` toggle (disabled OFF→ON once 6 are initial),
+  44×44 ↑/↓ (swap within the group only, disabled at group ends), 44×44
+  remove. Header: intro copy, `Save changes` / `Discard` (both disabled unless
+  dirty), `N/6 initial` counter, backfill explainer at the cap, inline
+  `err.message` on failure (draft preserved), "Saved." on success.
+  "Add ingredient" = search `Input` + capped (20) result list of catalog
+  types not already listed, matched on name or alias; a new row defaults its
+  group from the ingredient's category via `defaultOnboardingGroup`. On
+  successful save → `catalog.refetch()` so Home reflects it with no redeploy.
+- **`domain/buildYourBar.js`** — `defaultOnboardingGroup(categoryName)`:
+  contains "spirit" → `Spirits`, "mixer" → `Mixers`, else `Kitchen basics`.
+  Null/empty-safe. + 4 tests (227 total).
+- **`src/screens/AdminScreen.jsx`** — `OnboardingTab` import;
+  `{ id: "onboarding", label: "Onboarding ingredients", adminOnly: true }` in
+  `TABS` right after Ingredient Types; render
+  `{tab === "onboarding" && isAdmin && <OnboardingTab catalog={catalog} />}`.
+  Deep-link `?tab=onboarding` works through the existing `useSearchParams`
+  initial-tab logic. Moderators never see it (`adminOnly`).
+- **`supabase/tests/rls_suite.sql`** — `onboarding_ingredients` block extended
+  with `set_onboarding_config` checks: admin replaces the whole list in one
+  call (count + per-row `group_label`); `> 6` initial rejected **and the prior
+  config still stands**; a member call is denied by RLS **and leaves the
+  config intact** (the delete rolls back too); anon has no EXECUTE. Full suite
+  re-run against the linked project — exit 0, no FAIL.
+- **Verify:** `corepack pnpm@10.34.3 test` 227/227; `build` clean; isolated-LF
+  `oxfmt --check` clean on all 5 changed `.js`/`.jsx` (OnboardingTab reflowed
+  by the formatter, taken as-is). `project.md` untouched.
+- **Not done (3d, per the user):** the BuildYourBar "Edit list" link and the
+  `AdminMenu` "Onboarding ingredients" item — the editor is reachable now only
+  via Admin → Onboarding ingredients (tab + `?tab=onboarding`).
+
+### Sub-stage 3b — DONE 2026-09-10 (`960aa86`, committed + pushed; mobile-verified 2026-09-10)
+
+**Mobile verification result (2026-09-10):** six initial tiles include Coke
+instead of Ice; expanded groups (Spirits / Mixers / Kitchen basics) display
+correctly; tile selection, live makeable count, and "Show my cocktails" work;
+all three nav links (Browse cocktails → `/library`, Show my cocktails →
+`/library?sort=availability`, Find more ingredients → `/bar/add-ingredients`)
+open the expected screens. **Back-navigation widget visibility was not
+separately confirmed** — the per-visit snapshot behavior is unchanged from
+before 3b and remains unverified; do not mark it done.
 
 - **`src/services/onboarding.js` (new)** — `fetchOnboardingIngredients()` only:
   `select("ingredient_type_id, position, is_initial, group_label").order("position")`.

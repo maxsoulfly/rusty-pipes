@@ -21,6 +21,17 @@
 // `group_label` CHECK constraint on onboarding_ingredients.
 export const ONBOARDING_GROUP_LABELS = ["Spirits", "Mixers", "Kitchen basics"]
 
+// Default group for a newly added onboarding row, guessed from the
+// ingredient's catalogue category name so the admin usually doesn't have to
+// touch the dropdown. Anything that isn't clearly a spirit or a mixer falls
+// to "Kitchen basics" (juices, syrups, bitters, garnishes, ...).
+export function defaultOnboardingGroup(categoryName) {
+  const c = (categoryName ?? "").toLowerCase()
+  if (c.includes("spirit")) return "Spirits"
+  if (c.includes("mixer")) return "Mixers"
+  return "Kitchen basics"
+}
+
 // The initial grid holds at most this many tiles - is_initial rows first,
 // then backfilled from the rest so a short is_initial set still fills the
 // grid. Fewer eligible rows than this just render fewer tiles.

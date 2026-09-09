@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  defaultOnboardingGroup,
   ONBOARDING_GROUP_LABELS,
   resolveOnboardingSelection,
 } from "./buildYourBar"
@@ -236,5 +237,31 @@ describe("resolveOnboardingSelection", () => {
         ["Kitchen basics", []],
       ],
     })
+  })
+})
+
+describe("defaultOnboardingGroup", () => {
+  it("maps a spirit category to Spirits", () => {
+    expect(defaultOnboardingGroup("Base Spirit")).toBe("Spirits")
+    expect(defaultOnboardingGroup("Spirits")).toBe("Spirits")
+  })
+
+  it("maps a mixer category to Mixers", () => {
+    expect(defaultOnboardingGroup("Mixer")).toBe("Mixers")
+    expect(defaultOnboardingGroup("Carbonated Mixers")).toBe("Mixers")
+  })
+
+  it("falls back to Kitchen basics for anything else, including null/empty", () => {
+    expect(defaultOnboardingGroup("Juice")).toBe("Kitchen basics")
+    expect(defaultOnboardingGroup("Bitters")).toBe("Kitchen basics")
+    expect(defaultOnboardingGroup("")).toBe("Kitchen basics")
+    expect(defaultOnboardingGroup(null)).toBe("Kitchen basics")
+    expect(defaultOnboardingGroup(undefined)).toBe("Kitchen basics")
+  })
+
+  it("always returns one of the three fixed labels", () => {
+    for (const name of ["Spirit", "Mixer", "Whatever", ""]) {
+      expect(ONBOARDING_GROUP_LABELS).toContain(defaultOnboardingGroup(name))
+    }
   })
 })

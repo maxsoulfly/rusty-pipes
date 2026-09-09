@@ -40,6 +40,7 @@ import { ClassicRecipesTab } from "@/components/admin/ClassicRecipesTab"
 import { ImportTab } from "@/components/admin/ImportTab"
 import { InvitesTab } from "@/components/admin/InvitesTab"
 import { ModerationTab } from "@/components/admin/ModerationTab"
+import { OnboardingTab } from "@/components/admin/OnboardingTab"
 import { OverviewTab } from "@/components/admin/OverviewTab"
 import { RequestsTab } from "@/components/admin/RequestsTab"
 import { TypesTab } from "@/components/admin/TypesTab"
@@ -60,6 +61,7 @@ const TABS = [
   { id: "moderation", label: "Moderation" },
   { id: "catalog", label: "Catalog" },
   { id: "types", label: "Ingredient Types" },
+  { id: "onboarding", label: "Onboarding ingredients", adminOnly: true },
   { id: "import", label: "Batch Import" },
   { id: "requests", label: "Requests" },
   { id: "users", label: "Users", adminOnly: true },
@@ -811,6 +813,8 @@ export default function AdminScreen() {
         )}
 
         {tab === "catalog" && <CatalogTab catalog={catalog} />}
+
+        {tab === "onboarding" && isAdmin && <OnboardingTab catalog={catalog} />}
 
         {tab === "types" && (
           <TypesTab
