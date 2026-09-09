@@ -267,4 +267,219 @@ describe("resolveOwnedIngredientTypes", () => {
     })
     expect(owned.has("gin")).toBe(false)
   })
+
+  it("includes an assumed-available type with no real ownership at all", () => {
+    const owned = resolveOwnedIngredientTypes({
+      ownedTypeIds: new Set(),
+      ownedProductIds: new Set(),
+      products: [],
+      ingredientTypes: types,
+      assumedAvailableTypeIds: new Set(["gin"]),
+    })
+    expect(owned.has("gin")).toBe(true)
+  })
+
+  it("does not propagate an assumed-available type upward to its ancestors", () => {
+    const owned = resolveOwnedIngredientTypes({
+      ownedTypeIds: new Set(),
+      ownedProductIds: new Set(),
+      products: [],
+      ingredientTypes: types,
+      assumedAvailableTypeIds: new Set(["london-dry-gin"]),
+    })
+    expect(owned.has("london-dry-gin")).toBe(true)
+    expect(owned.has("gin")).toBe(false)
+    expect(owned.has("spirit")).toBe(false)
+  })
+
+  it("does not propagate an assumed-available type downward to its children", () => {
+    const owned = resolveOwnedIngredientTypes({
+      ownedTypeIds: new Set(),
+      ownedProductIds: new Set(),
+      products: [],
+      ingredientTypes: types,
+      assumedAvailableTypeIds: new Set(["gin"]),
+    })
+    expect(owned.has("gin")).toBe(true)
+    expect(owned.has("london-dry-gin")).toBe(false)
+  })
+
+  it("does not let an assumed-available type leak across unrelated branches", () => {
+    const owned = resolveOwnedIngredientTypes({
+      ownedTypeIds: new Set(),
+      ownedProductIds: new Set(),
+      products: [],
+      ingredientTypes: types,
+      assumedAvailableTypeIds: new Set(["gin"]),
+    })
+    expect(owned.has("vodka")).toBe(false)
+  })
+
+  it("still applies the real ancestor walk to genuinely owned types when assumed ids are also passed", () => {
+    const owned = resolveOwnedIngredientTypes({
+      ownedTypeIds: new Set(["london-dry-gin"]),
+      ownedProductIds: new Set(),
+      products: [],
+      ingredientTypes: types,
+      assumedAvailableTypeIds: new Set(["vodka"]),
+    })
+    // owned child still walks up
+    expect(owned.has("gin")).toBe(true)
+    expect(owned.has("spirit")).toBe(true)
+    // assumed id is exact-only, no walk
+    expect(owned.has("vodka")).toBe(true)
+  })
+
+  it("produces the exact same set as before when no assumed ids are passed", () => {
+    const args = {
+      ownedTypeIds: new Set(["london-dry-gin"]),
+      ownedProductIds: new Set(),
+      products: [],
+      ingredientTypes: types,
+    }
+    const before = resolveOwnedIngredientTypes(args)
+    const withUndefined = resolveOwnedIngredientTypes({
+      ...args,
+      assumedAvailableTypeIds: undefined,
+    })
+    expect([...withUndefined].sort()).toEqual([...before].sort())
+    expect([...before].sort()).toEqual(
+      ["london-dry-gin", "gin", "spirit"].sort(),
+    )
+  })
+})
+
+describe("computeAvail — household basics (Concept 1)", () => {
+  it("an assumed basic alone satisfies its exact component (no inventory row)", () => {
+    const cocktail = {
+      ings: [
+        component({ ingId: "gin", role: "required" }),
+        component({ ingId: "ice", role: "required" }),
+      ],
+    }
+    const result = computeAvail(
+      cocktail,
+      new Set(["gin"]),
+      undefined,
+      new Set(["ice"]),
+    )
+    expect(result.avail).toBe("perfect")
+    expect(result.missingRequired).toEqual([])
+    expect(result.householdBasics).toEqual({ ice: { name: "ice" } })
+  })
+
+  it("a recipe missing only a flagged basic is not 'almost' and reports nothing missing (Buy Next never sees it)", () => {
+    const cocktail = {
+      ings: [
+        component({ ingId: "gin", role: "required" }),
+        component({ ingId: "ice", role: "required" }),
+      ],
+    }
+    const result = computeAvail(
+      cocktail,
+      new Set(["gin"]),
+      undefined,
+      new Set(["ice"]),
+    )
+    expect(result.avail).not.toBe("almost")
+    expect(result.missingRequiredIds).toEqual([])
+  })
+
+  it("does not tag a component whose own id is not a flagged basic", () => {
+    const cocktail = {
+      ings: [component({ ingId: "gin", role: "required" })],
+    }
+    const result = computeAvail(
+      cocktail,
+      new Set(["gin"]),
+      undefined,
+      new Set(["ice"]),
+    )
+    expect(result.householdBasics).toEqual({})
+  })
+
+  it("never cross-satisfies a different type: a flagged basic only covers its own exact id", () => {
+    // "ice" is flagged; a component that needs "crushed-ice" is unrelated and
+    // has no alternativeIds - it must still read as missing.
+    const cocktail = {
+      ings: [
+        component({ ingId: "gin", role: "required" }),
+        component({
+          ingId: "crushed-ice",
+          role: "required",
+          alternativeIds: [],
+        }),
+      ],
+    }
+    const result = computeAvail(
+      cocktail,
+      new Set(["gin"]),
+      undefined,
+      new Set(["ice"]),
+    )
+    expect(result.avail).toBe("almost")
+    expect(result.missingRequiredIds).toEqual(["crushed-ice"])
+    expect(result.householdBasics).toEqual({})
+  })
+
+  it("a flagged basic participates in an EXISTING authored alternative exactly like ownership would - and reads as a substitution, not a household basic", () => {
+    const cocktail = {
+      ings: [
+        component({ ingId: "gin", role: "required" }),
+        component({
+          ingId: "crushed-ice",
+          role: "required",
+          alternativeIds: ["ice"],
+        }),
+      ],
+    }
+    const result = computeAvail(
+      cocktail,
+      new Set(["gin"]),
+      (id) => id,
+      new Set(["ice"]),
+    )
+    expect(result.avail).toBe("perfect")
+    expect(result.substitutions).toEqual({
+      "crushed-ice": { matchedId: "ice", matchedName: "ice" },
+    })
+    expect(result.householdBasics).toEqual({})
+  })
+
+  it("omitting householdBasicIds reproduces the pre-Stage-2 output exactly", () => {
+    const cocktail = {
+      ings: [
+        component({ ingId: "gin", role: "required" }),
+        component({ ingId: "ice", role: "required" }),
+      ],
+    }
+    const withArg = computeAvail(
+      cocktail,
+      new Set(["gin"]),
+      undefined,
+      new Set(),
+    )
+    const withoutArg = computeAvail(cocktail, new Set(["gin"]))
+    expect(withoutArg.avail).toBe("almost")
+    expect(withoutArg.missingRequiredIds).toEqual(["ice"])
+    expect(withoutArg.householdBasics).toEqual({})
+    expect(withArg).toEqual(withoutArg)
+  })
+
+  it("normal ownership is unchanged when a basics set is also supplied", () => {
+    const cocktail = {
+      ings: [
+        component({ ingId: "gin", role: "required" }),
+        component({ ingId: "vermouth", role: "required" }),
+      ],
+    }
+    const result = computeAvail(
+      cocktail,
+      new Set(["gin", "vermouth"]),
+      undefined,
+      new Set(["ice"]),
+    )
+    expect(result.avail).toBe("perfect")
+    expect(result.householdBasics).toEqual({})
+  })
 })

@@ -81,6 +81,12 @@ export function findRecipesUsingIngredient(
   viewing,
   { types, products },
 ) {
+  // No `assumedAvailableTypeIds` here, deliberately. This lookup is
+  // ownership-blind (viewing != owning) - it answers "which recipes use the
+  // one thing I'm looking at", so its "satisfied" set must contain ONLY that
+  // thing (and the ancestors it genuinely satisfies). Feeding household
+  // basics in would make every recipe that needs Ice show up under every
+  // unrelated ingredient's detail page. Keep it omitted.
   const satisfiedIds = resolveOwnedIngredientTypes({
     ownedTypeIds: new Set(viewing.typeId ? [viewing.typeId] : []),
     ownedProductIds: new Set(viewing.productId ? [viewing.productId] : []),

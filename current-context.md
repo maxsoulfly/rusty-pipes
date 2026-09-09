@@ -29,15 +29,16 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
    (Note: item 17's "Stage 1 done, mobile verification pending" / "admin type editing moved to an `IngredientDetailScreen` overflow action" text predates the My Bar redesign's later stages — see the corrected current state in item 18's plan doc: inline admin edit pencils are gone, editing now goes through Admin → Ingredient Types via the ⋯ menu.)
 
-18. Household basics, ingredient forms, and homemade preparations (new feature) — **in progress. Household Basics Stage 1 committed + pushed 2026-09-09; phone verification of the admin toggle pending.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle) done:** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000` applied to the live DB (ledger 47/47, `local == remote`), `assumed_available` threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` added to `IngredientTypeEditor.jsx`. Nothing reads the column yet — fully inert. **Household Basics Stage 2 (engine wiring, Ice only) is the next work, but do not start it until the user confirms the Stage 1 toggle on a phone.** Stage 3, Ingredient Forms, and Homemade Preparations unchanged from the plan doc: direction only, with required pre-stage re-audits (recipe consumers, permissions, dependency-cycle handling) still pending.
+18. Household basics, ingredient forms, and homemade preparations (new feature) — **in progress. Household Basics Stage 1 + Stage 2 committed + pushed 2026-09-09; Stage 2 mobile verification pending.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000` applied to the live DB, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Toggle phone-verified by the user (ON/OFF both persist). **Stage 2 (engine wiring, Ice only):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds` from `catalog.types` and feeds both; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set (comment added). **Ice is the only flagged type live.** **Stage 3 (remaining basics + onboarding cleanup) is next, but do not start it until the user confirms Stage 2 on a phone.** Ingredient Forms and Homemade Preparations unchanged: direction only, with required pre-stage re-audits still pending.
 
 Each numbered step is a development chunk boundary for this file.
 
 ## Exact next action (paused here, 2026-09-09)
 
-1. **Household Basics Stage 1 is committed + pushed. Wait for the user's phone confirmation of the admin toggle** (Admin → Ingredient Types → open any type → "Household basic" toggle is a comfortable tap target, flips, Save persists it, reopening the editor shows the saved state; toggling back off also persists). Do not mark Stage 1 fully done until that result is in.
-2. **Then Household Basics Stage 2 (engine wiring, Ice only)** per `docs/plans/household-basics-ingredient-forms-preparations.md`. Stage 2's first action is the live catalogue-name check that was deferred from Stage 1: verify the exact live names/ids for Ice, Sugar, Salt, Water, Hot Water, and Cola/Coke via authorized access to Admin → Ingredient Types (anon key is RLS-blocked; the real catalogue was admin-batch-imported, not migrated, so nothing is confirmable from the repo). Flag anything missing/ambiguous rather than guessing. Stage 2 flags **only Ice** live. Do not start Stage 3 or the other two concepts until Stage 2 ships and is verified.
-3. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files. Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize. No dependency upgrade or repo-wide normalization was done as part of Stage 1.
+1. **Household Basics Stage 2 is committed + pushed. Wait for the user's phone confirmation** (see the Stage 2 chunk below for the checklist: a recipe needing only Ice + owned items reads "Perfect", the Ice row shows "Household basic" with a green dot and its real quantity, Ice is absent from Buy Next, My Bar still shows Ice unowned, Library availability groups/counts agree). Do not mark Stage 2 fully done until that result is in.
+2. **Then Household Basics Stage 3 (remaining confirmed basics + onboarding cleanup)** per `docs/plans/household-basics-ingredient-forms-preparations.md`. Stage 3's first action is the live catalogue-name check deferred from earlier: verify exact live names/ids for Sugar, Salt, Water, Hot Water, and Cola/Coke via authorized access to Admin → Ingredient Types. Flag anything missing/ambiguous rather than guessing. Do not start Ingredient Forms / Homemade Preparations until Household Basics is fully done.
+3. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files (and when a changed file needs reformatting, run `oxfmt` on the isolated LF copy and hand-apply the wrap changes back). Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
+4. **Migration count reconciled 2026-09-09.** 48 migration files on disk, 48 ledger rows, every one `local == remote`, 0 pending. The Speed Rack chunk's "47/47" was correct for its time (46 synced + `20260906130000`); Stage 1's chunk originally said "47/47" which was a **miscount** — with `20260909120000` it is **48/48**. Migration history itself is intact (unique ordered timestamps, no gaps, no dupes) — nothing was repaired, only the recorded count corrected.
 
 1. ~~Present the consolidated Library/My Bar + Sort mobile checklist~~ - **done. The user confirmed all five verification groups passed** (grouped Library + Sort control, ingredient/bottle detail entry points, view-vs-own type-tile controls, back-nav scroll/expanded-state restoration, Build Your Bar no-regression). Nothing outstanding from Stages 2-4 or the Sort control.
 2. ~~Investigate the recurring "JWT issued at future" startup error~~ - **root cause identified and a scoped fix committed (`65ecc74`), 2026-09-06. See "Earlier chunk" below.** `first open after idle` verification is still **pending** the user's confirmation on a phone - a separate follow-up, does not block the My Bar redesign. Do not mark it done without a real result.
@@ -60,9 +61,89 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
+## Last completed chunk (Household Basics Stage 2 — engine wiring, Ice only, 2026-09-09)
+
+**Committed + pushed. Code-complete and live; Stage 2 mobile verification pending the user.**
+
+### What shipped
+
+- **`src/domain/availability.js`**
+  - `resolveOwnedIngredientTypes()` gains optional `assumedAvailableTypeIds`
+    (Set). Unioned into the result **after** the ancestor walk and never
+    itself walked → a flagged type satisfies only its own exact id, never a
+    parent, never a child. Separate arg (not folded into `ownedTypeIds`) so
+    ownership-only callers just omit it.
+  - `computeAvail()` gains optional 4th arg `householdBasicIds` (Set). Uses
+    `isAvailable(id) = owned.has(id) || basics.has(id)` for matching, so it's
+    correct even if a caller forgot to also union upstream. Returns a new
+    `householdBasics` map (same shape/keying as `substitutions`): a component
+    whose own ingId is directly satisfied and is a flagged basic. A basic
+    reached only via an explicit `alternativeIds` entry stays in
+    `substitutions` instead (authored relationship, different thing).
+  - Neither change alters the four `avail` tiers' meaning; omitting the new
+    args reproduces pre-Stage-2 output exactly (regression-tested).
+- **`src/App.jsx`** — `householdBasicTypeIds = new Set(catalog.types.filter(t
+  => t.assumed_available).map(t => t.id))`, memoized on `catalog.types`, fed
+  into both `resolveOwnedIngredientTypes` (as `assumedAvailableTypeIds`) and
+  `computeAvail` (4th arg). `resolvedOwned` (Outlet context `owned`) now
+  includes flagged basics.
+- **`src/components/detail/IngredientsSection.jsx`** + **`DetailScreen.jsx`**
+  — new `householdBasics` prop; a satisfied basic gets the green dot and a
+  "Household basic" sub-label (rendered in the same slot as "Substituting:
+  X", never both — they're mutually exclusive by construction).
+- **`src/domain/ingredientRecipeMatches.js`** — comment only: it deliberately
+  does **not** pass `assumedAvailableTypeIds` to `resolveOwnedIngredientTypes`
+  (viewing ≠ owning; a basic must not surface every Ice recipe under every
+  unrelated ingredient's detail page).
+
+### Downstream surfaces — verified consistent, no code needed
+
+All read `computed[].avail` / `missing*Ids` from `computeAvail`, so they
+follow automatically once Ice is treated as satisfied:
+- Availability badges, Library grouped view + Sort + counts + filters
+  (`LibraryScreen` uses `computed`, `.avail`).
+- Home "Almost There" (`rankAlmostThere` filters `avail === "almost"`).
+- Buy Next (`rankPurchaseRecommendations` keys off `avail === "almost"` &&
+  `missingRequiredIds` — a recipe missing only Ice is neither, so Ice can
+  never be a candidate; covered by a new integration test).
+- My Bar / Speed Rack read raw `inventory.*`, not context `owned` — a flagged
+  basic never shows as owned/checked and can't be pinned (confirmed by grep:
+  only `DetailScreen` consumes context `owned`).
+- `recipeShareText.js` (Copy Recipe) only imports `formatAmount` — untouched.
+
+### Live catalogue check (Ice)
+
+`supabase db query` on the linked project: one word-boundary "Ice" type —
+`d949c9b0-ba2b-4389-995c-55c6e29b101e`, name `Ice`, category `Other`,
+`parent_type_id` null (no parent, no children), **`assumed_available = true`**.
+It is the **only** flagged type (111 types total). No ambiguous
+"Crushed Ice"/"Cubed Ice" siblings exist. The flag was already ON from the
+user's Stage 1 toggle testing — note the user's Stage 1 message said "Ice is
+currently OFF", which did **not** match the live row; left ON since Stage 2
+requires exactly that. No migration/seed change — the flag is admin-UI data,
+per the catalogue's import model.
+
+### Verification (2026-09-09)
+
+- `corepack pnpm@10.34.3 test` → **216/216** (201 prior + 15 new):
+  `availability.test.js` — assumed basic alone satisfies its exact component;
+  no upward/downward propagation; no cross-branch leak; real ancestor walk
+  still applies alongside assumed ids; omitting the arg == unchanged output;
+  `householdBasics` map contents; a basic used as an authored `alternativeIds`
+  entry reads as a substitution not a basic; normal ownership unchanged with
+  a basics set present. `recommendations.test.js` — end-to-end: a recipe
+  missing only flagged Ice yields no purchase recommendation.
+  `ingredientRecipeMatches.test.js` — viewing an unrelated ingredient never
+  surfaces an Ice-using recipe.
+- `pnpm build` → clean, 165 modules.
+- Formatting: `oxfmt --check` on isolated LF copies of all 8 changed files →
+  clean (two test files needed wrap fixes; done by running `oxfmt` on the
+  isolated copy and hand-applying). `pnpm format` **not** run (CRLF bug).
+- **Not done by me:** the in-app mobile check — handed to the user.
+
 ## Last completed chunk (Household Basics Stage 1 — schema + inert admin toggle, 2026-09-09)
 
-**Committed + pushed. Stage 1 is code-complete and live-DB-applied; only the user's phone check of the toggle is outstanding.**
+**Committed + pushed. DONE — the user phone-verified the toggle 2026-09-09 (ON and OFF both persist after save + reopen). Stage 2 continues from here.**
 
 ### What shipped
 
@@ -90,10 +171,12 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 ### Verification (2026-09-09)
 
-- `npx supabase migration list --linked`: 46 prior migrations `local == remote`,
+- `npx supabase migration list --linked`: 47 prior migrations `local == remote`,
   `20260909120000` was the only pending one. `db push --dry-run` confirmed
   only that file, no seeds/roles. `db push` applied it; `migration list` now
-  shows `20260909120000` `local == remote` (47/47).
+  shows `20260909120000` `local == remote` — **48/48** (this chunk first
+  recorded "47/47", a miscount; see the reconciliation note near the top of
+  this file).
 - Live column check via `supabase db query`: `boolean`, `is_nullable = NO`,
   `default false`, comment present; 111 `ingredient_types` rows, **0 flagged**
   (default applied, nothing flagged — no ingredient flagging in Stage 1, as

@@ -177,6 +177,7 @@ export default function DetailScreen() {
         <IngredientsSection
           ings={c.ings}
           substitutions={c.substitutions}
+          householdBasics={c.householdBasics}
           missingOptional={c.missingOptional}
           owned={owned}
           unit={unit}

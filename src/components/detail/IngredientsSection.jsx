@@ -13,6 +13,7 @@ import { scaleIngredientAmount } from "@/domain/servings"
 export function IngredientsSection({
   ings,
   substitutions,
+  householdBasics,
   missingOptional,
   owned,
   unit,
@@ -95,7 +96,11 @@ export function IngredientsSection({
             )}
             {roleIngs.map((ri) => {
               const substitution = substitutions[ri.ingId]
-              const isOwned = owned.has(ri.ingId) || Boolean(substitution)
+              const householdBasic = householdBasics?.[ri.ingId]
+              const isOwned =
+                owned.has(ri.ingId) ||
+                Boolean(substitution) ||
+                Boolean(householdBasic)
               const ratio = ratioByIng?.get(ri)
               const amountText =
                 ratio != null
@@ -123,10 +128,16 @@ export function IngredientsSection({
                     <span className="text-sm text-tx font-body">
                       {ri.name ?? ri.ingId}
                     </span>
-                    {substitution && (
+                    {substitution ? (
                       <span className="block text-[11px] text-tx3">
                         Substituting: {substitution.matchedName}
                       </span>
+                    ) : (
+                      householdBasic && (
+                        <span className="block text-[11px] text-tx3">
+                          Household basic
+                        </span>
+                      )
                     )}
                   </span>
                   <span className="text-[13px] font-mono text-tx2 whitespace-nowrap">

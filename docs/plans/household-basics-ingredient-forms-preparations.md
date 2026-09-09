@@ -1,18 +1,15 @@
 # Household Basics, Ingredient Forms, and Homemade Preparations
 
-**Status (2026-09-09): Household Basics Stage 1 committed + pushed.** Schema
-(`ingredient_types.assumed_available`, migration `20260909120000`, applied to
-the live DB) + inert admin toggle in `IngredientTypeEditor.jsx` are done; the
-column is not read anywhere yet. Phone verification of the toggle is the only
-outstanding Stage 1 item. **Stage 2 (engine wiring, Ice only) is next** — its
-first action is the live catalogue-name check deferred from Stage 1 (Stage 1
-touched no live catalogue data, so the check wasn't needed then). Stage 3,
-Ingredient Forms, and Homemade Preparations are unchanged: direction only,
-subject to the pre-stage re-audits each section calls out.
-
-The live catalogue-name check (Ice/Sugar/Salt/Water/Hot Water/Cola) was **not**
-done during Stage 1 and is a prerequisite for Stage 2, not a blocker for the
-Stage 1 commit.
+**Status (2026-09-09): Household Basics Stage 1 + Stage 2 committed + pushed.**
+Stage 1 (schema + admin toggle) is phone-verified. Stage 2 (engine wiring,
+Ice only) is code-complete, live, and unit-tested; **Stage 2 mobile
+verification is pending the user.** Ice is the only flagged type live
+(confirmed against the DB: id `d949c9b0-ba2b-4389-995c-55c6e29b101e`, category
+`Other`, no parent/children, `assumed_available = true`). **Stage 3 (remaining
+basics + onboarding cleanup) is next**, starting with the live name check for
+Sugar/Salt/Water/Hot Water/Cola. Ingredient Forms and Homemade Preparations
+are unchanged: direction only, subject to the pre-stage re-audits each section
+calls out.
 
 ## Goal
 
@@ -137,36 +134,47 @@ picking a best guess.
 - *Live verification:* column is `boolean NOT NULL DEFAULT false` with the
   comment; 111 rows, 0 flagged; the exact `fetchIngredientTypes` select
   string returns HTTP 200 (was 400 before the push).
-- *Outstanding:* phone check — Admin → Ingredient Types → open a type →
-  "Household basic" toggle is a comfortable tap target, flips, Save persists,
-  reopening shows the saved state; toggling back off also persists.
+- *Verified:* phone check passed (user, 2026-09-09) — toggle taps cleanly,
+  ON and OFF both persist after Save + reopen.
 - *Safe stop:* fully inert; ships and sits with zero effect until Stage 2.
 
-**Stage 2 — Engine wiring, Ice only.**
-- `resolveOwnedIngredientTypes()`: union assumed-available ids in
-  post-ancestor-walk (no propagation either direction).
-- `computeAvail()`: add the `householdBasics` output map; wire the
-  "Household basic" label into `IngredientsSection.jsx`.
-- Flag only Ice live, to verify the full loop before touching the rest.
-- *Tests (`availability.test.js`):*
-  - An assumed-available type alone (no real ownership) satisfies its exact
-    component.
-  - No upward propagation (assumed child does not satisfy its parent).
-  - No downward propagation (assumed parent does not satisfy its child).
-  - **Leak guard, per explicit instruction:** an assumed-available type must
-    never satisfy a *different* ingredient type's component except through
-    an already-existing, explicitly-authored `recipe_component_alternatives`
-    row for that exact component — i.e., assumed-availability participates
-    in existing substitution relationships exactly like real ownership
-    would, but never creates a new one and never cross-satisfies an
-    unrelated sibling/cousin type via any hierarchy coincidence.
-  - Omitting the new input entirely reproduces today's exact output
-    (regression guard for every existing call site).
-- *Mobile check:* a recipe needing only Ice (+ already-owned items) reads
-  "Perfect," not "Almost"; its Ice row shows "Household basic"; it's absent
-  from Buy Next; My Bar still shows Ice unowned (no checkmark, no inventory
-  row). Un-flagging Ice reverts all of that immediately.
-- *Safe stop:* ships with exactly one basic live and fully verified.
+**Stage 2 — Engine wiring, Ice only. — DONE 2026-09-09, committed + pushed. Mobile verification pending.**
+- `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds`,
+  unioned in **after** the ancestor walk and never itself walked → exact id
+  only, no propagation up or down. Kept a separate arg, not folded into
+  `ownedTypeIds`.
+- `computeAvail()` takes optional 4th arg `householdBasicIds`; matching uses
+  `owned.has(id) || basics.has(id)`; returns a `householdBasics` map (same
+  shape as `substitutions`). A basic reached only via an explicit
+  `alternativeIds` entry stays in `substitutions` instead.
+- `App.jsx` derives `householdBasicTypeIds` from `catalog.types` and feeds it
+  to both functions. `IngredientsSection.jsx` renders a green dot + a
+  "Household basic" sub-label (same slot as "Substituting: X", never both).
+- `ingredientRecipeMatches.js` deliberately does **not** receive the assumed
+  set (comment added) — ingredient/bottle discovery stays ownership-blind.
+- **Ice is the only flagged type live** — id
+  `d949c9b0-ba2b-4389-995c-55c6e29b101e`, category `Other`, no parent/children.
+  No migration/seed (the flag is admin-UI data). Downstream surfaces
+  (badges, Library groups/counts/filters, Home "Almost There", Buy Next, My
+  Bar/Speed Rack, Copy Recipe) verified consistent with no code change — they
+  read `computed[].avail`/`missing*Ids` or raw `inventory.*`.
+- *Tests:* `corepack pnpm@10.34.3 test` 216/216 (+15). `availability.test.js`
+  covers: assumed basic alone satisfies its exact component; no up/down
+  propagation; no cross-branch leak; real ancestor walk still applies with
+  assumed ids present; omitting the arg == unchanged output; `householdBasics`
+  map contents; a basic used as an authored `alternativeIds` entry reads as a
+  substitution (not a basic); normal ownership unchanged.
+  `recommendations.test.js` — a recipe missing only flagged Ice yields no Buy
+  Next candidate (end-to-end through `computeAvail`).
+  `ingredientRecipeMatches.test.js` — viewing an unrelated ingredient never
+  surfaces an Ice-using recipe. `pnpm build` clean. Formatting via
+  `oxfmt --check` on isolated LF copies (`pnpm format` not run — CRLF bug).
+- *Mobile check (pending user):* a recipe needing only Ice (+ already-owned
+  items) reads "Perfect," not "Almost"; its Ice row shows "Household basic"
+  with the real quantity/prep and a green dot; it's absent from Buy Next; My
+  Bar still shows Ice unowned (no checkmark, no inventory row); Library
+  availability groups/counts agree. Un-flagging Ice reverts all of it.
+- *Safe stop:* ships with exactly one basic live.
 
 **Stage 3 — Remaining entries + onboarding cleanup.**
 - Flag the remaining confirmed names (data entry only, no code, instantly
@@ -381,14 +389,15 @@ not just `fetchRecipes()`:
 
 ## Exact next-session starting action
 
-1. Wait for the user's phone confirmation of the Stage 1 admin toggle (see
-   Stage 1's *Outstanding* line). Do not mark Stage 1 fully done without it.
-2. Then **Household Basics Stage 2 (engine wiring, Ice only)**. First action:
-   verify the live catalogue entries for Ice, Sugar, Salt, Water, Hot Water,
-   and Cola/Coke using authorized (logged-in) access to Admin → Ingredient
-   Types. Record exact names/ids found, and flag anything missing or
-   ambiguous rather than guessing. Stage 2 flags **only Ice** live.
-3. Stage 3 follows only after Stage 2 ships and is verified. Ingredient Forms
-   and Homemade Preparations stay in "agreed direction, not started" until
-   Household Basics is done — their pre-stage re-audits (above) happen when
-   their stages actually begin, not before.
+1. Wait for the user's phone confirmation of Stage 2 (see Stage 2's *Mobile
+   check* line). Do not mark Stage 2 fully done without it.
+2. Then **Household Basics Stage 3 (remaining basics + onboarding cleanup)**.
+   First action: verify the live catalogue entries for Sugar, Salt, Water,
+   Hot Water, and Cola/Coke using authorized (logged-in) access to Admin →
+   Ingredient Types. Record exact names/ids, flag anything missing or
+   ambiguous rather than guessing. Then flag the confirmed ones (data entry,
+   no code) and do the onboarding-list filter + top-up fallback per the
+   Stage 3 spec below.
+3. Ingredient Forms and Homemade Preparations stay in "agreed direction, not
+   started" until Household Basics is done — their pre-stage re-audits
+   (above) happen when their stages actually begin, not before.

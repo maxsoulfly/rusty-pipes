@@ -177,6 +177,18 @@ function AppShell({ profile, session }) {
     [catalog.types],
   )
 
+  // Household basics (Concept 1): catalogue-wide "assume every member has
+  // this" types. Fed into resolveOwnedIngredientTypes/computeAvail below so
+  // recipes treat them as satisfied without any inventory row. Deliberately
+  // NOT passed to findRecipesUsingIngredient - see ingredientRecipeMatches.js.
+  const householdBasicTypeIds = useMemo(
+    () =>
+      new Set(
+        catalog.types.filter((t) => t.assumed_available).map((t) => t.id),
+      ),
+    [catalog.types],
+  )
+
   const resolvedOwned = useMemo(
     () =>
       resolveOwnedIngredientTypes({
@@ -184,12 +196,14 @@ function AppShell({ profile, session }) {
         ownedProductIds: inventory.ownedProductIds,
         products: catalog.products,
         ingredientTypes: catalog.types,
+        assumedAvailableTypeIds: householdBasicTypeIds,
       }),
     [
       inventory.ownedTypeIds,
       inventory.ownedProductIds,
       catalog.products,
       catalog.types,
+      householdBasicTypeIds,
     ],
   )
 
@@ -201,9 +215,10 @@ function AppShell({ profile, session }) {
           r,
           resolvedOwned,
           (id) => ingredientTypesById.get(id)?.name ?? id,
+          householdBasicTypeIds,
         ),
       })),
-    [recipes, resolvedOwned, ingredientTypesById],
+    [recipes, resolvedOwned, ingredientTypesById, householdBasicTypeIds],
   )
 
   const isAdmin = profile?.role === "admin"

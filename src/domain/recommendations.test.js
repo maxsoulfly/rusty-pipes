@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { computeAvail } from "./availability"
 import { rankPurchaseRecommendations } from "./recommendations"
 
 function recipe(overrides) {
@@ -252,5 +253,38 @@ describe("rankPurchaseRecommendations", () => {
       wantToMakeIds: new Set(),
     })
     expect(result[0].reason).toBe("Unlocks 1 classic")
+  })
+
+  it("never recommends a flagged household basic (Concept 1) - a recipe missing only Ice is not a candidate", () => {
+    const cocktail = {
+      id: "r1",
+      name: "Gin on the Rocks",
+      source: "classic",
+      ings: [
+        { ingId: "gin", role: "required", alternativeIds: [] },
+        { ingId: "ice", role: "required", alternativeIds: [] },
+      ],
+    }
+    // Run through the real engine with Ice flagged assumed-available.
+    const computed = [
+      {
+        ...cocktail,
+        ...computeAvail(
+          cocktail,
+          new Set(["gin"]),
+          (id) => id,
+          new Set(["ice"]),
+        ),
+      },
+    ]
+    const result = rankPurchaseRecommendations({
+      computed,
+      ingredientTypesById: new Map([
+        ["ice", { name: "Ice", bar_priority: "common" }],
+      ]),
+      favoriteIds: new Set(),
+      wantToMakeIds: new Set(),
+    })
+    expect(result).toEqual([])
   })
 })

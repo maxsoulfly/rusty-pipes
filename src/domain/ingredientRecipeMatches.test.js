@@ -181,6 +181,25 @@ describe("findRecipesUsingIngredient", () => {
     expect(results).toHaveLength(0)
   })
 
+  it("stays ownership-blind to household basics: viewing an unrelated ingredient never surfaces a recipe just because it also uses a flagged basic (Concept 1)", () => {
+    // "ice" is a household basic elsewhere in the app, but this lookup takes
+    // no assumed-available set - viewing Vodka must not pull in an Ice recipe.
+    const typesWithIce = [
+      ...types,
+      { id: "ice", name: "Ice", parent_type_id: null },
+    ]
+    const ginAndIce = recipe("gin-rocks", "Gin on the Rocks", "perfect", [
+      component("gin", "Gin", "required"),
+      component("ice", "Ice", "required"),
+    ])
+    const results = findRecipesUsingIngredient(
+      [ginAndIce],
+      { typeId: "vodka" },
+      { types: typesWithIce, products },
+    )
+    expect(results).toHaveLength(0)
+  })
+
   it("never mutates its inputs - frozen computed/types/products still work, proving no write is ever attempted", () => {
     const frozenComponent = Object.freeze(component("gin", "Gin", "required"))
     const frozenRecipe = Object.freeze(

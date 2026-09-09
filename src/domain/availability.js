@@ -7,15 +7,30 @@
  * @param {Set<string>} owned - satisfied ingredient type ids; build with resolveOwnedIngredientTypes()
  *   so product-mapping and parent/child hierarchy are already accounted for before this runs.
  * @param {(id: string) => string} [resolveIngredientName] - id -> display name; defaults to the id itself
+ * @param {Set<string>} [householdBasicIds] - ingredient type ids flagged "assumed available"
+ *   (Concept 1). Treated as satisfying their own exact id - never a parent, never a child - so a
+ *   caller that forgot to also union these into `owned` still gets correct availability, and the
+ *   only components tagged in the returned `householdBasics` map are ones satisfied *because of*
+ *   the flag. Passing this never changes the four avail tiers' meaning, only which components count.
  */
-export function computeAvail(cocktail, owned, resolveIngredientName) {
+export function computeAvail(
+  cocktail,
+  owned,
+  resolveIngredientName,
+  householdBasicIds,
+) {
   const resolveName = resolveIngredientName ?? ((id) => id)
+  const basics = householdBasicIds ?? new Set()
+  const isAvailable = (id) => owned.has(id) || basics.has(id)
 
   // The id that actually satisfies a component: its own ingId, the first
-  // owned substitution alternative, or null if nothing is owned.
+  // owned (or household-basic) substitution alternative, or null if nothing
+  // covers it.
   const matchedIdFor = (component) => {
-    if (owned.has(component.ingId)) return component.ingId
-    return (component.alternativeIds ?? []).find((id) => owned.has(id)) ?? null
+    if (isAvailable(component.ingId)) return component.ingId
+    return (
+      (component.alternativeIds ?? []).find((id) => isAvailable(id)) ?? null
+    )
   }
   const isSatisfied = (component) => matchedIdFor(component) !== null
 
@@ -48,6 +63,23 @@ export function computeAvail(cocktail, owned, resolveIngredientName) {
     }
   })
 
+  // Components satisfied directly by their own ingId where that ingId is a
+  // flagged household basic (Concept 1). Same shape/keying as `substitutions`
+  // so the ingredient list can render a "Household basic" note the same way.
+  // A component reached only through an explicit alternativeIds entry that
+  // happens to be a basic falls into `substitutions` above instead - that's
+  // an authored substitution relationship, a different thing from "everyone
+  // just has this".
+  const householdBasics = {}
+  cocktail.ings.forEach((component) => {
+    if (
+      matchedIdFor(component) === component.ingId &&
+      basics.has(component.ingId)
+    ) {
+      householdBasics[component.ingId] = { name: resolveName(component.ingId) }
+    }
+  })
+
   return {
     avail,
     missingRequired,
@@ -55,6 +87,7 @@ export function computeAvail(cocktail, owned, resolveIngredientName) {
     missingRequiredIds,
     missingOptionalIds,
     substitutions,
+    householdBasics,
   }
 }
 
@@ -102,6 +135,7 @@ export function formatAmount(recipeIng, unit) {
  *   ownedProductIds: Set<string>,
  *   products: { id: string, ingredient_type_id: string }[],
  *   ingredientTypes: { id: string, parent_type_id: string|null }[],
+ *   assumedAvailableTypeIds?: Set<string>,
  * }} args
  * @returns {Set<string>}
  */
@@ -110,6 +144,7 @@ export function resolveOwnedIngredientTypes({
   ownedProductIds,
   products,
   ingredientTypes,
+  assumedAvailableTypeIds,
 }) {
   const typesById = new Map(ingredientTypes.map((t) => [t.id, t]))
 
@@ -126,5 +161,17 @@ export function resolveOwnedIngredientTypes({
       current = typesById.get(current.parent_type_id)
     }
   })
+
+  // Household basics (Concept 1): flagged type ids are unioned in AFTER the
+  // ancestor walk and are never themselves walked - so a flagged type
+  // satisfies only its own exact id, never a parent (not walked from here),
+  // never a child (children were never added). Kept a separate argument
+  // rather than folded into ownedTypeIds so callers that must stay
+  // ownership-only - findRecipesUsingIngredient's synthetic "what am I
+  // viewing" set - simply omit it and are structurally unaffected.
+  if (assumedAvailableTypeIds) {
+    assumedAvailableTypeIds.forEach((id) => expanded.add(id))
+  }
+
   return expanded
 }
