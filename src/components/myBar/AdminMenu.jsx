@@ -4,9 +4,10 @@ import { IconDots } from "@/components/icons"
 import { BottomSheet } from "@/components/primitives"
 
 // Admin-only ⋯ menu for the My Bar / Add ingredients headers (My Bar
-// redesign Stage 2). One item for now - "Edit ingredients" jumps straight
-// to Admin -> Ingredient Types, the real management view. Renders nothing
-// for non-admins; it gates only its own visibility - `/admin` stays behind
+// redesign Stage 2). "Edit ingredients" jumps to Admin -> Ingredient Types;
+// "Onboarding ingredients" (added Stage 3d) jumps to Admin -> Onboarding
+// ingredients, the "Build your bar" list editor. Renders nothing for
+// non-admins; it gates only its own visibility - `/admin` stays behind
 // RequireStaff and every underlying write keeps its own RLS/role check.
 export function AdminMenu({ isAdmin }) {
   const navigate = useNavigate()
@@ -14,6 +15,13 @@ export function AdminMenu({ isAdmin }) {
   const [open, setOpen] = useState(false)
 
   if (!isAdmin) return null
+
+  const go = (to) => {
+    setOpen(false)
+    navigate(to)
+  }
+  const itemClass =
+    "w-full text-left py-2.5 px-3 rounded-sm text-[13px] text-tx bg-surface border border-bdr cursor-pointer"
 
   return (
     <>
@@ -34,16 +42,22 @@ export function AdminMenu({ isAdmin }) {
         title="Ingredient admin"
         anchorRef={triggerRef}
       >
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(false)
-            navigate("/admin?tab=types")
-          }}
-          className="w-full text-left py-2.5 px-3 rounded-sm text-[13px] text-tx bg-surface border border-bdr cursor-pointer"
-        >
-          Edit ingredients
-        </button>
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => go("/admin?tab=types")}
+            className={itemClass}
+          >
+            Edit ingredients
+          </button>
+          <button
+            type="button"
+            onClick={() => go("/admin?tab=onboarding")}
+            className={itemClass}
+          >
+            Onboarding ingredients
+          </button>
+        </div>
       </BottomSheet>
     </>
   )

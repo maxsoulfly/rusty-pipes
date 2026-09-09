@@ -179,7 +179,14 @@ picking a best guess.
   cycle works.
 - *Safe stop:* ships with exactly one basic live.
 
-**Stage 3 — REVISED 2026-09-09: admin-editable onboarding config. Design APPROVED (with revisions) by the user 2026-09-09. 3a + 3b + 3c DONE (2026-09-09 / 2026-09-10 / 2026-09-10); 3d (shortcuts) is next.**
+**Stage 3 — REVISED 2026-09-09: admin-editable onboarding config. Design APPROVED (with revisions) by the user 2026-09-09. 3a + 3b + 3c + 3d all code-complete (2026-09-10); 3c retest PASSED; one mobile confirmation of 3d + drag-to-reorder is the only thing left before Stage 3 is done.**
+
+**2026-09-10 addition to 3d:** drag-to-reorder in the editor — a per-row grip
+handle (Pointer Events; `touch-none` on the handle only so the rest of the row
+still scrolls; not in the tab order), dragging within a group via the pure
+`reorderOnboardingDraft` in `domain/buildYourBar.js` (+5 tests). The ↑/↓
+buttons stay for keyboard/AT. Reorders use the same draft → Save/Discard →
+atomic `set_onboarding_config` path. No migration.
 
 **2026-09-10 design change for 3c (user override):** the admin editor holds a
 **local draft** and saves the **whole config atomically in one call** —
@@ -387,16 +394,17 @@ cocktails" / "Find more ingredients" nav — all untouched.
   view holds more than the six). `buildYourBarEssentials.js` + its
   name-based tests deleted. `pnpm test` 223/223, `pnpm build` clean,
   isolated-LF `oxfmt --check` clean.
-- **3c — admin editor. CODE COMPLETE 2026-09-10 (committed + pushed);
-  SAVING = FAILED PENDING RETEST.** First real Save raised
-  `DELETE requires a WHERE clause` — the `authenticator` role preloads
-  `pg-safeupdate` and rejected `set_onboarding_config`'s bare whole-list
-  DELETE (the RLS suite missed it: `db query --linked` doesn't preload
-  safeupdate). Fixed in migration `20260910130000` (`delete ... where true`,
-  pg-safeupdate's recommended form; SECURITY INVOKER / RLS / atomicity
-  unchanged). RLS suite got a source-level regression guard. Needs the in-app
-  retest (replace Dark Rum → Rum, Save, reload, persists) before saving is
-  marked verified. `src/components/admin/OnboardingTab.jsx`
+- **3c — admin editor. DONE 2026-09-10 (committed + pushed); retest PASSED.**
+  First real Save raised `DELETE requires a WHERE clause` — the
+  `authenticator` role preloads `pg-safeupdate` and rejected
+  `set_onboarding_config`'s bare whole-list DELETE (the RLS suite missed it:
+  `db query --linked` doesn't preload safeupdate). Fixed in migration
+  `20260910130000` (`delete ... where true`, pg-safeupdate's recommended
+  form; SECURITY INVOKER / RLS / atomicity unchanged). RLS suite got a
+  source-level regression guard. **User retest on the real app (2026-09-10):
+  saving works, reload persists, replacing ingredients works, order/group/
+  Initial changes save; non-staff can't reach Admin. Offline-save handling
+  not manually verified.** `src/components/admin/OnboardingTab.jsx`
   + `AdminScreen` `TABS` entry `{ id: "onboarding", label: "Onboarding
   ingredients", adminOnly: true }` + render guard. **Atomic whole-config
   save** (user override — see the 2026-09-10 note above): migration
@@ -415,11 +423,18 @@ cocktails" / "Find more ingredients" nav — all untouched.
   (admin replace; >6 rejected + config intact; member denied + config intact;
   anon no EXECUTE) — full suite passes. `pnpm test` 227/227, build clean,
   isolated-LF `oxfmt --check` clean.
-- **3d — shortcuts.** BuildYourBar admin "Edit list" link + `AdminMenu`
-  "Onboarding ingredients" item; wire `isAdmin` into `HomeScreen` →
-  `BuildYourBar`.
+- **3d — shortcuts + drag-to-reorder. CODE COMPLETE 2026-09-10 (committed +
+  pushed); one mobile confirmation pending.** BuildYourBar admin "Edit list"
+  link (`isAdmin` threaded `HomeScreen` → `BuildYourBar`); `AdminMenu` gains
+  an "Onboarding ingredients" item next to the kept "Edit ingredients" (backs
+  both the My Bar and Add ingredients ⋯ menus); all → `/admin?tab=onboarding`.
+  Plus drag-to-reorder in the editor: per-row grip handle, Pointer Events,
+  `touch-none` on the handle only, `reorderOnboardingDraft` (pure, +5 tests),
+  ↑/↓ retained for keyboard/AT, same draft → atomic save. No migration.
+  `pnpm test` 232/232, build clean, isolated-LF `oxfmt --check` clean.
 - Each: `corepack pnpm@10.34.3` test/build, `oxfmt --check` on isolated LF
-  copies, commit + push. Mobile verification of 3b–3d held for the user.
+  copies, commit + push. Mobile verification of 3b–3d held for the user
+  (3b done; 3c done; 3d + drag pending one phone check).
 
 ### Permissions summary
 - Read: `is_member()`. Write: `is_admin()`. Shortcut visibility gates on

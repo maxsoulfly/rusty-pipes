@@ -5,8 +5,30 @@ import { Btn, Card, Input, Select } from "@/components/primitives"
 import {
   defaultOnboardingGroup,
   ONBOARDING_GROUP_LABELS,
+  reorderOnboardingDraft,
 } from "@/domain/buildYourBar"
 import { saveOnboardingConfig } from "@/services/onboarding"
+
+// Six-dot drag affordance. Inline (no icon-set entry) since it's only ever
+// used here.
+function GripIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <circle cx="4" cy="3" r="1.4" />
+      <circle cx="10" cy="3" r="1.4" />
+      <circle cx="4" cy="7" r="1.4" />
+      <circle cx="10" cy="7" r="1.4" />
+      <circle cx="4" cy="11" r="1.4" />
+      <circle cx="10" cy="11" r="1.4" />
+    </svg>
+  )
+}
 
 // Admin editor for the "Build your bar" onboarding lists
 // (onboarding_ingredients). The whole config is edited as one local draft -
@@ -143,6 +165,53 @@ export function OnboardingTab({ catalog }) {
       return next
     })
 
+  // Drag-to-reorder via the per-row grip handle. Pointer Events (not HTML5
+  // drag) so it works the same on touch; the handle alone carries
+  // `touch-none`, so a swipe anywhere else on the row still scrolls the
+  // page. The ↑/↓ buttons stay for keyboard / assistive tech - the handle
+  // is not in the tab order. Reorders go through the same `draft` state, so
+  // Save / Discard and the atomic save are unchanged. Drag only reorders
+  // inside a group; the group dropdown moves rows between groups.
+  const [draggingId, setDraggingId] = useState(null)
+  const draggingIdRef = useRef(null)
+
+  const startDrag = (e, typeId) => {
+    if (saving) return
+    e.preventDefault()
+    draggingIdRef.current = typeId
+    setDraggingId(typeId)
+    setError(null)
+    setSavedOk(false)
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      // setPointerCapture can throw if the pointer is already gone; the
+      // drag just won't track, which is harmless.
+    }
+  }
+
+  const onDragMove = (e) => {
+    const draggedId = draggingIdRef.current
+    if (!draggedId) return
+    const under = document
+      .elementFromPoint(e.clientX, e.clientY)
+      ?.closest("[data-onboarding-row]")
+    const overId = under?.getAttribute("data-onboarding-row")
+    if (!overId || overId === draggedId) return
+    setDraft((cur) => reorderOnboardingDraft(cur, draggedId, overId))
+  }
+
+  const endDrag = (e) => {
+    if (!draggingIdRef.current) return
+    draggingIdRef.current = null
+    setDraggingId(null)
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      // Already released / pointer gone - nothing to do.
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     setError(null)
@@ -197,7 +266,8 @@ export function OnboardingTab({ catalog }) {
         in this order; the home screen shows the first <b>{MAX_INITIAL}</b>{" "}
         marked <b>Initial</b>, and fills any empty slots from the rest of the
         list. Household basics are assumed for everyone, so they never appear on
-        the home screen even if listed here.
+        the home screen even if listed here. Drag the handle (or use ↑/↓) to
+        reorder within a group; change a row's group with its dropdown.
       </p>
 
       {/* Save bar. Not sticky - the Admin screen already provides a
@@ -267,73 +337,96 @@ export function OnboardingTab({ catalog }) {
                 const type = typeById.get(it.typeId)
                 const hidden = type?.assumed_available === true
                 return (
-                  <Card key={it.typeId} className="p-3">
-                    <div className="flex flex-col gap-2.5">
-                      <div className="flex items-start gap-2">
-                        <span
-                          className={clsx(
-                            "flex-1 text-[15px] font-display font-bold",
-                            hidden ? "text-tx3 line-through" : "text-tx",
-                          )}
-                        >
-                          {type ? type.name : "(missing ingredient)"}
-                        </span>
-                        {hidden && (
-                          <span className="text-[11px] text-tx3 font-mono shrink-0 mt-1">
-                            Hidden — household basic
+                  <Card
+                    key={it.typeId}
+                    data-onboarding-row={it.typeId}
+                    className={clsx(
+                      "p-3 transition-shadow",
+                      draggingId === it.typeId && "opacity-60 ring-2 ring-cyan",
+                    )}
+                  >
+                    <div className="flex items-start gap-1.5">
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        aria-hidden="true"
+                        disabled={groupItems.length < 2}
+                        onPointerDown={(e) => startDrag(e, it.typeId)}
+                        onPointerMove={onDragMove}
+                        onPointerUp={endDrag}
+                        onPointerCancel={endDrag}
+                        title="Drag to reorder"
+                        className="w-11 h-11 shrink-0 -ml-1 rounded-sm text-tx3 flex items-center justify-center touch-none select-none cursor-grab active:cursor-grabbing disabled:opacity-25 disabled:cursor-default"
+                      >
+                        <GripIcon />
+                      </button>
+                      <div className="flex-1 flex flex-col gap-2.5">
+                        <div className="flex items-start gap-2">
+                          <span
+                            className={clsx(
+                              "flex-1 text-[15px] font-display font-bold",
+                              hidden ? "text-tx3 line-through" : "text-tx",
+                            )}
+                          >
+                            {type ? type.name : "(missing ingredient)"}
                           </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="min-w-[8.5rem]">
-                          <Select
-                            small
-                            value={it.groupLabel}
-                            onChange={(g) => setGroupAt(idx, g)}
-                            options={ONBOARDING_GROUP_LABELS}
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => toggleInitialAt(idx)}
-                          disabled={!it.isInitial && atInitialCap}
-                          aria-pressed={it.isInitial}
-                          className={clsx(
-                            "h-11 px-3 rounded-sm text-xs font-display font-semibold border cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
-                            it.isInitial
-                              ? "bg-cyan/15 border-cyan/40 text-cyan"
-                              : "bg-surface3 border-bdr text-tx2",
+                          {hidden && (
+                            <span className="text-[11px] text-tx3 font-mono shrink-0 mt-1">
+                              Hidden — household basic
+                            </span>
                           )}
-                        >
-                          {it.isInitial ? "★ Initial" : "Initial"}
-                        </button>
-                        <div className="flex-1" />
-                        <button
-                          type="button"
-                          onClick={() => move(idx, -1)}
-                          disabled={posInGroup === 0}
-                          aria-label={`Move ${type?.name ?? "row"} up`}
-                          className="w-11 h-11 rounded-sm bg-surface3 border border-bdr text-tx2 flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          <IconChevD size={16} className="rotate-180" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => move(idx, 1)}
-                          disabled={posInGroup === groupItems.length - 1}
-                          aria-label={`Move ${type?.name ?? "row"} down`}
-                          className="w-11 h-11 rounded-sm bg-surface3 border border-bdr text-tx2 flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          <IconChevD size={16} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeAt(idx)}
-                          aria-label={`Remove ${type?.name ?? "row"}`}
-                          className="w-11 h-11 rounded-sm bg-coral/10 border border-coral/25 text-coral flex items-center justify-center cursor-pointer"
-                        >
-                          <IconTrash size={14} />
-                        </button>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="min-w-[8.5rem]">
+                            <Select
+                              small
+                              value={it.groupLabel}
+                              onChange={(g) => setGroupAt(idx, g)}
+                              options={ONBOARDING_GROUP_LABELS}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleInitialAt(idx)}
+                            disabled={!it.isInitial && atInitialCap}
+                            aria-pressed={it.isInitial}
+                            className={clsx(
+                              "h-11 px-3 rounded-sm text-xs font-display font-semibold border cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed",
+                              it.isInitial
+                                ? "bg-cyan/15 border-cyan/40 text-cyan"
+                                : "bg-surface3 border-bdr text-tx2",
+                            )}
+                          >
+                            {it.isInitial ? "★ Initial" : "Initial"}
+                          </button>
+                          <div className="flex-1" />
+                          <button
+                            type="button"
+                            onClick={() => move(idx, -1)}
+                            disabled={posInGroup === 0}
+                            aria-label={`Move ${type?.name ?? "row"} up`}
+                            className="w-11 h-11 rounded-sm bg-surface3 border border-bdr text-tx2 flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <IconChevD size={16} className="rotate-180" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => move(idx, 1)}
+                            disabled={posInGroup === groupItems.length - 1}
+                            aria-label={`Move ${type?.name ?? "row"} down`}
+                            className="w-11 h-11 rounded-sm bg-surface3 border border-bdr text-tx2 flex items-center justify-center cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                          >
+                            <IconChevD size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeAt(idx)}
+                            aria-label={`Remove ${type?.name ?? "row"}`}
+                            className="w-11 h-11 rounded-sm bg-coral/10 border border-coral/25 text-coral flex items-center justify-center cursor-pointer"
+                          >
+                            <IconTrash size={14} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </Card>

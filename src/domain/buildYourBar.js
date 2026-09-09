@@ -32,6 +32,26 @@ export function defaultOnboardingGroup(categoryName) {
   return "Kitchen basics"
 }
 
+// Pure array-move backing the onboarding admin editor's drag-to-reorder
+// (src/components/admin/OnboardingTab.jsx). `items` is the flat grouped
+// draft ({ typeId, groupLabel, isInitial }[]); the dragged row is spliced
+// out and re-inserted where the target row currently sits. Returns the SAME
+// array reference (a no-op React will bail on) when either id is missing,
+// they're identical, or the two rows are in different groups - drag only
+// reorders within a group; the group dropdown is what moves a row between
+// groups. Never mutates the input.
+export function reorderOnboardingDraft(items, draggedId, targetId) {
+  if (draggedId === targetId) return items
+  const from = items.findIndex((x) => x.typeId === draggedId)
+  const to = items.findIndex((x) => x.typeId === targetId)
+  if (from < 0 || to < 0) return items
+  if (items[from].groupLabel !== items[to].groupLabel) return items
+  const next = items.slice()
+  const [moved] = next.splice(from, 1)
+  next.splice(to, 0, moved)
+  return next
+}
+
 // The initial grid holds at most this many tiles - is_initial rows first,
 // then backfilled from the rest so a short is_initial set still fills the
 // grid. Fewer eligible rows than this just render fewer tiles.

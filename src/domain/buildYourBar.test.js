@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   defaultOnboardingGroup,
   ONBOARDING_GROUP_LABELS,
+  reorderOnboardingDraft,
   resolveOnboardingSelection,
 } from "./buildYourBar"
 
@@ -263,5 +264,53 @@ describe("defaultOnboardingGroup", () => {
     for (const name of ["Spirit", "Mixer", "Whatever", ""]) {
       expect(ONBOARDING_GROUP_LABELS).toContain(defaultOnboardingGroup(name))
     }
+  })
+})
+
+describe("reorderOnboardingDraft", () => {
+  const rows = [
+    { typeId: "gin", groupLabel: "Spirits", isInitial: true },
+    { typeId: "vodka", groupLabel: "Spirits", isInitial: true },
+    { typeId: "rum", groupLabel: "Spirits", isInitial: false },
+    { typeId: "soda", groupLabel: "Mixers", isInitial: true },
+    { typeId: "coke", groupLabel: "Mixers", isInitial: false },
+  ]
+
+  it("moves a dragged row down to where the target sits, within its group", () => {
+    const out = reorderOnboardingDraft(rows, "gin", "rum")
+    expect(out.map((r) => r.typeId)).toEqual([
+      "vodka",
+      "rum",
+      "gin",
+      "soda",
+      "coke",
+    ])
+  })
+
+  it("moves a dragged row up to the target's slot", () => {
+    const out = reorderOnboardingDraft(rows, "rum", "gin")
+    expect(out.map((r) => r.typeId)).toEqual([
+      "rum",
+      "gin",
+      "vodka",
+      "soda",
+      "coke",
+    ])
+  })
+
+  it("is a no-op (same reference) across groups - the dropdown handles that", () => {
+    expect(reorderOnboardingDraft(rows, "gin", "coke")).toBe(rows)
+  })
+
+  it("is a no-op for an unknown id or a drag onto itself", () => {
+    expect(reorderOnboardingDraft(rows, "gin", "gin")).toBe(rows)
+    expect(reorderOnboardingDraft(rows, "ghost", "gin")).toBe(rows)
+    expect(reorderOnboardingDraft(rows, "gin", "ghost")).toBe(rows)
+  })
+
+  it("does not mutate the input array", () => {
+    const snapshot = rows.map((r) => r.typeId)
+    reorderOnboardingDraft(rows, "gin", "rum")
+    expect(rows.map((r) => r.typeId)).toEqual(snapshot)
   })
 })

@@ -36,9 +36,9 @@ Each numbered step is a development chunk boundary for this file.
 ## Exact next action (paused here, 2026-09-10)
 
 1. **Household Basics Stage 2 is DONE (committed `c1629b9`, mobile-verified 2026-09-09).**
-2. **Household Basics Stage 3: design approved, sub-stages 3a + 3b DONE + verified; 3c CODE COMPLETE but SAVING = FAILED PENDING RETEST.** 3a `c999e1d`. 3b `960aa86` — mobile-verified 2026-09-10 (six initial tiles show Coke not Ice; expanded groups correct; selection / live count / "Show my cocktails" work; Browse cocktails, Show my cocktails, Find more ingredients all open the expected screens). **Back-navigation widget visibility was NOT separately confirmed** — its per-visit-snapshot behavior is unchanged and stays unverified. 3c (2026-09-10) — admin "Onboarding ingredients" editor; committed + pushed. **BUG found by the user on the real app: "DELETE requires a WHERE clause" on Save (replace Dark Rum → Rum).** Root cause confirmed: `set_onboarding_config`'s whole-list `delete` had no `WHERE`; the Supabase `authenticator` role preloads `pg-safeupdate` (`session_preload_libraries = supautils, safeupdate`) which rejects a bare DELETE — the RLS suite missed it because `db query --linked` connects without that preload and `SET ROLE` doesn't load it mid-session. **Fix: migration `20260910130000_set_onboarding_config_safeupdate_where` — `delete ... where true`** (pg-safeupdate's own recommended form; check runs at parse-analyze before the constant folds; SECURITY INVOKER / RLS gating / atomicity all unchanged). Pushed; advisors clean. RLS suite extended with a source-level regression guard (the suite can't `LOAD safeupdate` to fire the hook). **`pnpm test` 227/227, build clean. NOT retested in-app — 3c saving stays FAILED until the user confirms replace-and-reload persists.** **Next is 3d** (BuildYourBar admin "Edit list" link + `AdminMenu` "Onboarding ingredients" item + `isAdmin` through `HomeScreen` — `isAdmin` already in Outlet context), but do 3c's in-app retest first. Do not start Ingredient Forms / Homemade Preparations until Household Basics is fully done.
+2. **Household Basics Stage 3: 3a + 3b + 3c + 3c-safeupdate-fix + 3d(drag + shortcuts) all CODE COMPLETE and committed/pushed. Awaiting one final mobile confirmation before the feature is marked done.** 3a `c999e1d`. 3b `960aa86` — mobile-verified 2026-09-10 (Coke not Ice; expanded groups; selection / live count / "Show my cocktails"; all three nav links). **Back-nav widget visibility NOT separately confirmed** — unchanged, stays unverified. 3c editor `3a7e29d`; **safeupdate bug** (`DELETE requires a WHERE clause` — `set_onboarding_config`'s bare `delete`; `authenticator` preloads `pg-safeupdate`; RLS suite missed it because `db query --linked` doesn't preload it) **fixed `ab73305`** (migration `20260910130000`, `delete ... where true`; SECURITY INVOKER / RLS / atomicity unchanged; advisors clean; source-level regression guard added to the RLS suite). **3c retested by the user on the real app 2026-09-10 — PASSED:** saving works, reloading persists, replacing ingredients works, and order / group / Initial changes all save. Regular (non-staff) users cannot reach Admin. **Offline-save handling was NOT manually verified — do not mark it done.** **3d + drag-to-reorder (2026-09-10, this chunk):** per-row grip handle (Pointer Events, `touch-none` on the handle only so the rest of the row still scrolls, `tabIndex=-1`), drags within a group via `reorderOnboardingDraft` (pure, in `domain/buildYourBar.js`, 5 tests); ↑/↓ kept for keyboard/AT; reorders flow through the same draft → Save/Discard → atomic save. Admin-only "Edit list" link beside the Build Your Bar heading (`isAdmin` threaded HomeScreen → BuildYourBar); "Onboarding ingredients" item added to `AdminMenu` (My Bar + Add ingredients ⋯), "Edit ingredients" kept. All shortcuts → `/admin?tab=onboarding`; `/admin` still behind `RequireStaff`. `pnpm test` 232/232, build clean, isolated-LF `oxfmt --check` clean. **Stop for the user's mobile confirmation (drag / save+reload / scroll / shortcut destinations) before marking the feature complete.** Do not start Ingredient Forms / Homemade Preparations. `project.md` stays unchanged until close-out.
 3. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files (and when a changed file needs reformatting, run `oxfmt` on the isolated LF copy and hand-apply the wrap changes back). Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
-4. **Migration count (2026-09-10): 53 files on disk, 53 ledger rows, all `local == remote`, 0 pending.** Was 48 after the 2026-09-09 reconcile; +`20260909130000/140000/150000` (3a) +`20260910120000` (3c) +`20260910130000` (3c safeupdate fix) = 53. History intact (unique ordered timestamps, no gaps/dupes).
+4. **Migration count (2026-09-10): 53 files on disk, 53 ledger rows, all `local == remote`, 0 pending.** Was 48 after the 2026-09-09 reconcile; +`20260909130000/140000/150000` (3a) +`20260910120000` (3c) +`20260910130000` (3c safeupdate fix) = 53. History intact (unique ordered timestamps, no gaps/dupes). **3d added no migration** — drag + shortcuts are client-only.
 
 5. **Migration count reconciled 2026-09-09.** 48 migration files on disk, 48 ledger rows, every one `local == remote`, 0 pending. The Speed Rack chunk's "47/47" was correct for its time (46 synced + `20260906130000`); Stage 1's chunk originally said "47/47" which was a **miscount** — with `20260909120000` it is **48/48**. Migration history itself is intact (unique ordered timestamps, no gaps, no dupes) — nothing was repaired, only the recorded count corrected.
 
@@ -63,17 +63,65 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## In-progress chunk (Household Basics Stage 3 — admin-editable onboarding config; design APPROVED, sub-stages 3a + 3b + 3c DONE, 2026-09-10)
+## In-progress chunk (Household Basics Stage 3 — admin-editable onboarding config; 3a–3d all code-complete 2026-09-10; awaiting one final mobile confirmation)
+
+### Sub-stage 3d + drag-to-reorder — CODE COMPLETE 2026-09-10 (committed + pushed; mobile confirmation pending)
+
+- **`domain/buildYourBar.js` `reorderOnboardingDraft(items, draggedId, targetId)`** —
+  pure array-move: splice the dragged row out, re-insert at the target's
+  index. Returns the SAME reference (React bails) when either id is missing,
+  they're equal, or the two rows are in different groups (drag reorders
+  within a group only; the group dropdown moves rows between groups). Never
+  mutates. + 5 tests (down-move, up-move, cross-group no-op, unknown/self
+  id, no-mutation) → 232 total.
+- **`components/admin/OnboardingTab.jsx`** — per-row **grip handle**
+  (inline `GripIcon`, 6 dots). Drag = **Pointer Events**, not HTML5 DnD:
+  `onPointerDown` on the handle captures the pointer + records the dragged
+  id; `onPointerMove` uses `document.elementFromPoint(...).closest(
+  "[data-onboarding-row]")` to find the row under the finger and calls
+  `setDraft(reorderOnboardingDraft(...))`; `onPointerUp`/`onPointerCancel`
+  release. `touch-none` is on the **handle only**, so a swipe anywhere else
+  on the row scrolls the page normally. Handle is `tabIndex={-1}` /
+  `aria-hidden` and `disabled` in a 1-row group; the **↑/↓ buttons stay**
+  for keyboard / assistive tech. Dragged card dims + cyan ring. Reorders go
+  through the same `draft` → `dirty` → Save/Discard → `saveOnboardingConfig`
+  (atomic `set_onboarding_config`) path — unchanged. Intro copy updated.
+- **`components/home/BuildYourBar.jsx`** — new `isAdmin` prop; admin-only
+  **"Edit list"** link (cyan, 44px min height) beside the "Build your bar"
+  `<h2>` → `/admin?tab=onboarding`. Non-admins: not rendered.
+- **`screens/HomeScreen.jsx`** — pulls `isAdmin` from Outlet context (already
+  provided by `App.jsx`), passes it to `BuildYourBar`.
+- **`components/myBar/AdminMenu.jsx`** — second item **"Onboarding
+  ingredients"** → `/admin?tab=onboarding`, alongside the kept **"Edit
+  ingredients"** (→ `?tab=types`). This one component backs both the My Bar
+  header (`SearchFilterHeader`) and `AddIngredientsScreen` ⋯ menus. Still
+  `if (!isAdmin) return null`; `/admin` stays behind `RequireStaff`.
+- **No migration.** Client-only.
+- **Verify:** `corepack pnpm@10.34.3 test` 232/232; `build` clean;
+  isolated-LF `oxfmt --check` clean on all 6 changed `.js`/`.jsx`
+  (OnboardingTab reflowed by the formatter, taken as-is). `project.md`
+  untouched.
+- **Pending:** the user's phone check — drag within a group, save + reload
+  persists, page still scrolls off-handle, and the three shortcuts
+  (Home "Edit list", My Bar ⋯, Add ingredients ⋯) all land on
+  Admin → Onboarding ingredients. Feature is NOT marked complete until then.
+- **3c retest result (2026-09-10, user, real app): PASSED** — saving,
+  reloading (persists), replacing ingredients, and order/group/Initial
+  changes all work; non-staff users cannot access Admin. **Offline-save
+  handling NOT manually verified** — left unconfirmed.
+
+### Background — Stage 3 scope
 
 Stage 2 is done + mobile-verified. Stage 3 re-scoped: the "Build your bar"
 onboarding lists become an **admin-managed DB table** so future curation needs
 no code / AI / redeploy. **Full approved design (with the user's 8 revisions)
 is in `docs/plans/household-basics-ingredient-forms-preparations.md`'s Stage 3
 section** — read it there. Sub-stages: **3a (flags + schema + seed) — DONE**;
-**3b (read service + resolver + BuildYourBar wiring) — DONE 2026-09-10,
-mobile-verified**; **3c (admin "Onboarding ingredients" editor) — DONE
-2026-09-10, mobile verification held for the user**; 3d (shortcuts). **3d has
-NOT been started** — stop point per the user.
+**3b (read service + resolver + BuildYourBar wiring) — DONE + mobile-verified**;
+**3c (admin "Onboarding ingredients" editor + safeupdate fix) — DONE, retest
+PASSED**; **3d (drag-to-reorder + shortcuts) — CODE COMPLETE, one mobile
+confirmation pending**. After that confirmation Stage 3 is done; Ingredient
+Forms / Homemade Preparations are still not started.
 
 ### Sub-stage 3c — CODE COMPLETE 2026-09-10 (committed + pushed); SAVING = FAILED PENDING RETEST after the safeupdate bugfix
 
@@ -173,9 +221,8 @@ cover that, so a new function was added.
 - **Verify:** `corepack pnpm@10.34.3 test` 227/227; `build` clean; isolated-LF
   `oxfmt --check` clean on all 5 changed `.js`/`.jsx` (OnboardingTab reflowed
   by the formatter, taken as-is). `project.md` untouched.
-- **Not done (3d, per the user):** the BuildYourBar "Edit list" link and the
-  `AdminMenu` "Onboarding ingredients" item — the editor is reachable now only
-  via Admin → Onboarding ingredients (tab + `?tab=onboarding`).
+- **3d (BuildYourBar "Edit list" link + `AdminMenu` item) — done in the
+  drag-to-reorder chunk above.**
 
 ### Sub-stage 3b — DONE 2026-09-10 (`960aa86`, committed + pushed; mobile-verified 2026-09-10)
 

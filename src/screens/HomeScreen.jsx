@@ -32,6 +32,7 @@ export default function HomeScreen() {
     inventory,
     catalog,
     userId,
+    isAdmin,
   } = useOutletContext()
   const firstName = (profile?.display_name || email || "there").split(
     /[\s@]/,
@@ -146,6 +147,7 @@ export default function HomeScreen() {
             catalog={catalog}
             inventory={inventory}
             computed={computed}
+            isAdmin={isAdmin}
           />
         )}
 

@@ -11,7 +11,7 @@ import { resolveOnboardingSelection } from "@/domain/buildYourBar"
 // the expand chevron when allProducts.length > 0, always empty here).
 const NOOP = () => {}
 
-export function BuildYourBar({ catalog, inventory, computed }) {
+export function BuildYourBar({ catalog, inventory, computed, isAdmin }) {
   const navigate = useNavigate()
   const [expanded, setExpanded] = useState(false)
 
@@ -81,9 +81,23 @@ export function BuildYourBar({ catalog, inventory, computed }) {
 
   return (
     <div className="mb-6 bg-surface2 border border-bdr rounded-lg p-4">
-      <h2 className="text-lg font-display font-extrabold text-tx mb-1">
-        Build your bar
-      </h2>
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <h2 className="text-lg font-display font-extrabold text-tx">
+          Build your bar
+        </h2>
+        {/* Admin-only shortcut to the list editor. Visibility gates on
+            isAdmin only - /admin stays behind RequireStaff and the
+            onboarding_ingredients writes keep their own RLS. */}
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => navigate("/admin?tab=onboarding")}
+            className="text-cyan text-[13px] font-display font-semibold bg-transparent border-none cursor-pointer p-0 min-h-11 flex items-center shrink-0"
+          >
+            Edit list
+          </button>
+        )}
+      </div>
       <p className="text-sm text-tx2 mb-3">
         Select ingredients you already have to discover what you can make.
       </p>
