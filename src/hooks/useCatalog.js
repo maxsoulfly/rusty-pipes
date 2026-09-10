@@ -12,6 +12,7 @@ import {
   fetchTasteTags,
 } from "@/services/catalog"
 import { fetchIngredientFormConversions } from "@/services/ingredientForms"
+import { fetchIngredientSubstitutions } from "@/services/ingredientSubstitutions"
 import { fetchOnboardingIngredients } from "@/services/onboarding"
 
 export function useCatalog() {
@@ -36,6 +37,7 @@ export function useCatalog() {
     liquidColors: [],
     onboardingIngredients: [],
     formConversions: [],
+    ingredientSubstitutions: [],
   })
 
   // Deliberately doesn't re-set loading:true on refetch - same reasoning as
@@ -66,6 +68,7 @@ export function useCatalog() {
         fetchLiquidColors(),
         fetchOnboardingIngredients(),
         fetchIngredientFormConversions(),
+        fetchIngredientSubstitutions(),
       ]),
     )
       .then(
@@ -81,6 +84,7 @@ export function useCatalog() {
           liquidColors,
           onboardingIngredients,
           formConversions,
+          ingredientSubstitutions,
         ]) => {
           const next = {
             loading: false,
@@ -97,6 +101,7 @@ export function useCatalog() {
             liquidColors,
             onboardingIngredients,
             formConversions,
+            ingredientSubstitutions,
           }
           setState(next)
           return next

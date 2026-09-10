@@ -9,15 +9,24 @@ export function IngredientRowsEditor({
   ings,
   types,
   aliases,
+  ingredientSubstitutions,
   onAdd,
   onRemove,
   onUpdate,
   onCommitAlternative,
   onRemoveAlternative,
+  onUpdateAlternativeNote,
+  onAdoptSuggestion,
   hasUnmatchedIng,
   isDraftable,
   returnTo,
 }) {
+  const typeNameById = new Map(types.map((t) => [t.id, t.name]))
+  const subsByFrom = new Map()
+  for (const s of ingredientSubstitutions ?? []) {
+    if (!subsByFrom.has(s.from_type_id)) subsByFrom.set(s.from_type_id, [])
+    subsByFrom.get(s.from_type_id).push(s)
+  }
   return (
     <div>
       <div className="flex items-center justify-between mb-2.5">
@@ -114,40 +123,92 @@ export function IngredientRowsEditor({
                   </Link>
                 </span>
               )}
-              {matched && (
-                <div className="flex flex-wrap gap-1.5 items-center pl-0.5">
-                  <span className="text-[11px] text-tx3">Substitutes:</span>
-                  {(ing.alternativeNames ?? []).map((altName, ai) => (
-                    <span
-                      key={altName}
-                      className="flex items-center gap-1 bg-surface2 border border-bdr rounded py-0.5 pr-1.5 pl-2.5 text-[11px] text-tx2"
-                    >
-                      {altName}
-                      <button
-                        onClick={() => onRemoveAlternative(i, ai)}
-                        aria-label={`Remove substitute ${altName}`}
-                        className="bg-transparent border-none cursor-pointer text-tx3 p-0.5 flex"
-                      >
-                        <IconX size={9} />
-                      </button>
-                    </span>
-                  ))}
-                  <input
-                    list="ing-types-editor"
-                    placeholder="+ add substitute"
-                    value={ing.altDraft ?? ""}
-                    onChange={(e) => onUpdate(i, "altDraft", e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        onCommitAlternative(i)
-                      }
-                    }}
-                    onBlur={() => onCommitAlternative(i)}
-                    className="w-32.5 bg-surface border border-bdr rounded-[6px] py-[3px] px-2 text-[11px] text-tx font-body"
-                  />
-                </div>
-              )}
+              {matched &&
+                (() => {
+                  const alts = ing.alternatives ?? []
+                  const altNamesLower = new Set(
+                    alts.map((a) => a.name.toLowerCase()),
+                  )
+                  const suggestions = (
+                    subsByFrom.get(matchedType.id) ?? []
+                  ).filter((s) => {
+                    const n = typeNameById.get(s.to_type_id)
+                    return n && !altNamesLower.has(n.toLowerCase())
+                  })
+                  return (
+                    <div className="flex flex-col gap-1 pl-0.5">
+                      <span className="text-[11px] text-tx3">
+                        Substitutes (also satisfy this slot):
+                      </span>
+                      {alts.map((alt, ai) => (
+                        <div
+                          key={alt.name}
+                          className="flex items-center gap-1.5 flex-wrap"
+                        >
+                          <span className="flex items-center gap-1 bg-surface2 border border-bdr rounded py-0.5 pr-1.5 pl-2.5 text-[11px] text-tx2">
+                            {alt.name}
+                            <button
+                              onClick={() => onRemoveAlternative(i, ai)}
+                              aria-label={`Remove substitute ${alt.name}`}
+                              className="bg-transparent border-none cursor-pointer text-tx3 p-0.5 flex"
+                            >
+                              <IconX size={9} />
+                            </button>
+                          </span>
+                          <input
+                            placeholder="flavor note (optional)"
+                            value={alt.note ?? ""}
+                            onChange={(e) =>
+                              onUpdateAlternativeNote(i, ai, e.target.value)
+                            }
+                            className="flex-1 min-w-0 bg-surface border border-bdr rounded-[6px] py-[3px] px-2 text-[11px] text-tx font-body"
+                          />
+                        </div>
+                      ))}
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        <input
+                          list="ing-types-editor"
+                          placeholder="+ add substitute"
+                          value={ing.altDraft ?? ""}
+                          onChange={(e) =>
+                            onUpdate(i, "altDraft", e.target.value)
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault()
+                              onCommitAlternative(i)
+                            }
+                          }}
+                          onBlur={() => onCommitAlternative(i)}
+                          className="w-32.5 bg-surface border border-bdr rounded-[6px] py-[3px] px-2 text-[11px] text-tx font-body"
+                        />
+                      </div>
+                      {suggestions.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 items-center">
+                          <span className="text-[11px] text-tx3">
+                            Suggested:
+                          </span>
+                          {suggestions.map((s) => {
+                            const toName = typeNameById.get(s.to_type_id)
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() =>
+                                  onAdoptSuggestion(i, toName, s.flavor_note)
+                                }
+                                title={s.flavor_note}
+                                className="bg-transparent border border-cyan/40 rounded py-0.5 px-2 text-[11px] text-cyan cursor-pointer"
+                              >
+                                + {toName}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
             </div>
           )
         })}

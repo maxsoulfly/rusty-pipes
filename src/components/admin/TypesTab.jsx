@@ -166,6 +166,7 @@ export function TypesTab({ catalog, onAddNew }) {
               aliases={catalog.aliases}
               liquidColors={catalog.liquidColors}
               formConversions={catalog.formConversions}
+              ingredientSubstitutions={catalog.ingredientSubstitutions}
               onSaved={async () => {
                 await catalog.refetch()
                 setEditingAdminTypeId(null)

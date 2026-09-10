@@ -119,7 +119,10 @@ export async function updateIngredientType(
 //
 // `aliases` is the full desired list of alias strings. `conversions` is the
 // full desired list of { preparedTypeId, guidance } whose raw side is this
-// type. Both replace the type's current set entirely.
+// type. `substitutes` is the full desired list of { toTypeId, flavorNote }
+// whose from side is this type (Stage B - catalogue "Suggested substitutes",
+// suggestion-only, never touches availability). All three replace the type's
+// current set entirely, in the one transaction.
 export async function saveIngredientType({
   typeId,
   name,
@@ -132,6 +135,7 @@ export async function saveIngredientType({
   shape,
   aliases,
   conversions,
+  substitutes,
 }) {
   const { error } = await supabase.rpc("save_ingredient_type", {
     p_type_id: typeId,
@@ -149,6 +153,10 @@ export async function saveIngredientType({
     p_conversions: (conversions ?? []).map((c) => ({
       prepared_type_id: c.preparedTypeId,
       guidance: c.guidance,
+    })),
+    p_substitutions: (substitutes ?? []).map((s) => ({
+      to_type_id: s.toTypeId,
+      flavor_note: s.flavorNote,
     })),
   })
   if (error) throw error

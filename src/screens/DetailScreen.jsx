@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import clsx from "clsx"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { IconBookmark, IconHeart } from "@/components/icons"
@@ -9,6 +9,7 @@ import { IngredientsSection } from "@/components/detail/IngredientsSection"
 import { ServingsSelector } from "@/components/detail/ServingsSelector"
 import { StepsSection } from "@/components/detail/StepsSection"
 import { Btn, ConfirmPanel } from "@/components/primitives"
+import { buildSubstituteSuggester } from "@/domain/substituteSuggestions"
 import {
   deleteRecipe,
   publishRecipe,
@@ -31,7 +32,22 @@ export default function DetailScreen() {
     isAdmin,
     isStaff,
     refetchRecipes,
+    catalog,
+    ingredientTypesById,
   } = useOutletContext()
+
+  // Catalogue "Suggested substitutes" (Stage B) - display-only hints on
+  // missing rows, owned stand-ins first. Never feeds computeAvail(), so
+  // availability / makeable counts / Buy Next are untouched.
+  const getSubstituteSuggestions = useMemo(
+    () =>
+      buildSubstituteSuggester(
+        catalog.ingredientSubstitutions,
+        owned,
+        (tid) => ingredientTypesById.get(tid)?.name ?? tid,
+      ),
+    [catalog.ingredientSubstitutions, owned, ingredientTypesById],
+  )
   const [showConfirmShare, setShowConfirmShare] = useState(false)
   const [showConfirmUnpublish, setShowConfirmUnpublish] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -186,6 +202,7 @@ export default function DetailScreen() {
           servings={servings}
           partsMode={partsMode}
           setPartsMode={setPartsMode}
+          getSubstituteSuggestions={getSubstituteSuggestions}
         />
 
         <StepsSection steps={c.steps} />

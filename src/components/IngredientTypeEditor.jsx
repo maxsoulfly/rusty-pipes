@@ -31,8 +31,10 @@ import { saveIngredientType } from "@/services/catalog"
 //
 // Aliases live here (not a global list) per user request - "Sec -> Triple
 // Sec" reads more naturally next to Triple Sec's own fields. "Can provide"
-// (ingredient_form_conversions, raw side = this type) moved here 2026-09-10
-// from a standalone admin tab, same reasoning. Both are Edit-only.
+// (ingredient_form_conversions, raw side = this type) and "Can be replaced
+// by" (ingredient_substitutions, from side = this type - Stage B,
+// suggestion-only) live here for the same reason. All three are Edit-only
+// and part of the one atomic save.
 //
 // The one catalog-shape rule (duplicate name / parent hierarchy) still runs
 // client-side via validateIngredientImport()'s single-item path before the
@@ -53,6 +55,12 @@ function normConversions(list) {
     .sort((a, b) => a[0].localeCompare(b[0]))
 }
 
+function normSubstitutes(list) {
+  return [...list]
+    .map((s) => [s.toTypeId, s.flavorNote])
+    .sort((a, b) => a[0].localeCompare(b[0]))
+}
+
 export function IngredientTypeEditor({
   type,
   categories,
@@ -60,6 +68,7 @@ export function IngredientTypeEditor({
   aliases,
   liquidColors,
   formConversions,
+  ingredientSubstitutions,
   onSaved,
   onCancel,
   style,
@@ -199,7 +208,75 @@ export function IngredientTypeEditor({
   }
   const openMenu = (e, idx) => {
     menuAnchorRef.current = e.currentTarget
+    setMenuForSubIdx(null)
     setMenuForIdx(idx)
+  }
+
+  // ── "Can be replaced by" draft (from side = this type) - Stage B ──────
+  // Directional catalogue suggestion. NOT symmetric, no inverse guard, no
+  // chaining - it never affects availability, it only surfaces as a muted
+  // hint on a recipe's missing rows.
+  const initialSubstitutes = useMemo(
+    () =>
+      (ingredientSubstitutions ?? [])
+        .filter((s) => s.from_type_id === type.id)
+        .map((s) => ({ toTypeId: s.to_type_id, flavorNote: s.flavor_note }))
+        .sort((a, b) =>
+          (typeNameById.get(a.toTypeId) ?? "").localeCompare(
+            typeNameById.get(b.toTypeId) ?? "",
+          ),
+        ),
+    [ingredientSubstitutions, type.id, typeNameById],
+  )
+  const [draftSubstitutes, setDraftSubstitutes] = useState(initialSubstitutes)
+  const [addingSub, setAddingSub] = useState(false)
+  const [newSubToId, setNewSubToId] = useState(null)
+  const [newSubNote, setNewSubNote] = useState("")
+  const [editingSubIdx, setEditingSubIdx] = useState(null)
+  const [subEditText, setSubEditText] = useState("")
+  const [menuForSubIdx, setMenuForSubIdx] = useState(null)
+
+  // Pickable "replacement" types: not this type and not already listed.
+  // Deliberately NO inverse filter - "White Rum can be replaced by Spiced
+  // Rum" and the reverse are both legitimate, separate rows.
+  const addableReplacementTypes = useMemo(() => {
+    const listed = new Set(draftSubstitutes.map((s) => s.toTypeId))
+    return types.filter((t) => t.id !== type.id && !listed.has(t.id))
+  }, [types, draftSubstitutes, type.id])
+
+  const openAddSub = () => {
+    setAddingSub(true)
+    setNewSubToId(null)
+    setNewSubNote("")
+  }
+  const commitAddSub = () => {
+    if (!newSubToId || !newSubNote.trim()) return
+    setDraftSubstitutes([
+      ...draftSubstitutes,
+      { toTypeId: newSubToId, flavorNote: newSubNote.trim() },
+    ])
+    setAddingSub(false)
+  }
+  const removeSubAt = (idx) =>
+    setDraftSubstitutes(draftSubstitutes.filter((_, i) => i !== idx))
+  const startSubEdit = (idx) => {
+    setEditingSubIdx(idx)
+    setSubEditText(draftSubstitutes[idx].flavorNote)
+  }
+  const commitSubEdit = () => {
+    const text = subEditText.trim()
+    if (!text) return
+    setDraftSubstitutes(
+      draftSubstitutes.map((s, i) =>
+        i === editingSubIdx ? { ...s, flavorNote: text } : s,
+      ),
+    )
+    setEditingSubIdx(null)
+  }
+  const openSubMenu = (e, idx) => {
+    menuAnchorRef.current = e.currentTarget
+    setMenuForIdx(null)
+    setMenuForSubIdx(idx)
   }
 
   // ── Dirty hint ────────────────────────────────────────────────────────
@@ -215,6 +292,7 @@ export function IngredientTypeEditor({
       shape: type.shape ?? "spirit_bottle",
       aliases: [...initialAliases].sort(),
       conversions: normConversions(initialConversions),
+      substitutes: normSubstitutes(initialSubstitutes),
     })
   }
   const isDirty =
@@ -229,6 +307,7 @@ export function IngredientTypeEditor({
       shape,
       aliases: [...draftAliases].sort(),
       conversions: normConversions(draftConversions),
+      substitutes: normSubstitutes(draftSubstitutes),
     })
 
   // ── Save (the only DB write this editor makes) ────────────────────────
@@ -271,6 +350,7 @@ export function IngredientTypeEditor({
         shape,
         aliases: draftAliases,
         conversions: draftConversions,
+        substitutes: draftSubstitutes,
       })
       await onSaved()
     } catch (err) {
@@ -515,6 +595,123 @@ export function IngredientTypeEditor({
         )}
       </div>
 
+      {/* Can be replaced by (Stage B) - local draft, committed on Save
+          changes. Suggestion only: never changes any recipe's availability. */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <label className={LABEL}>Can be replaced by</label>
+          {!addingSub && (
+            <button
+              type="button"
+              onClick={openAddSub}
+              className="min-h-11 px-2.5 text-xs text-cyan font-display font-semibold bg-transparent border-none cursor-pointer shrink-0"
+            >
+              + Add
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-tx3 leading-snug">
+          When a recipe needs {type.name}, suggest one of these as a stand-in. A
+          hint only — it never changes availability, and it is one-way (not the
+          reverse).
+        </p>
+
+        {draftSubstitutes.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            {draftSubstitutes.map((s, idx) => {
+              const toName = typeNameById.get(s.toTypeId) ?? "(unknown)"
+              const editing = editingSubIdx === idx
+              return (
+                <div
+                  key={s.toTypeId}
+                  className="rounded-sm border border-bdr bg-surface2 p-2.5 flex items-start justify-between gap-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] text-tx font-display font-semibold break-words">
+                      {type.name} <span className="text-tx3">→</span> {toName}
+                    </div>
+                    {editing ? (
+                      <div className="mt-1.5 flex flex-col gap-1.5">
+                        <Input
+                          placeholder="e.g. drier, less sweet"
+                          value={subEditText}
+                          onChange={setSubEditText}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={!subEditText.trim()}
+                            onClick={commitSubEdit}
+                            className={QUIET_BTN}
+                          >
+                            Done
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingSubIdx(null)}
+                            className={QUIET_BTN}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-tx2 break-words mt-0.5">
+                        {s.flavorNote}
+                      </div>
+                    )}
+                  </div>
+                  {!editing && (
+                    <button
+                      type="button"
+                      onClick={(e) => openSubMenu(e, idx)}
+                      aria-label={`Actions for ${type.name} replaced by ${toName}`}
+                      className="w-11 h-11 -mr-1 -mt-1 shrink-0 rounded-sm border border-bdr text-tx2 flex items-center justify-center cursor-pointer hover:text-tx active:bg-bg2"
+                    >
+                      <IconDots size={18} />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {addingSub && (
+          <div className="rounded-sm border border-cyan/40 bg-surface2 p-2.5 flex flex-col gap-1.5">
+            <TypeComboBox
+              valueId={newSubToId}
+              onPick={setNewSubToId}
+              types={addableReplacementTypes}
+              aliasesByTypeId={aliasesByTypeId}
+              placeholder="Search replacement ingredient..."
+            />
+            <Input
+              placeholder="e.g. drier, less sweet"
+              value={newSubNote}
+              onChange={setNewSubNote}
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={!newSubToId || !newSubNote.trim()}
+                onClick={commitAddSub}
+                className={QUIET_BTN}
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddingSub(false)}
+                className={QUIET_BTN}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {error && (
         <p className="text-[13px] text-coral" role="alert">
           {error}
@@ -557,6 +754,36 @@ export function IngredientTypeEditor({
             onClick={() => {
               removeConvAt(menuForIdx)
               setMenuForIdx(null)
+            }}
+            className={`${MENU_ITEM} text-coral`}
+          >
+            Remove
+          </button>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet
+        open={menuForSubIdx !== null}
+        onClose={() => setMenuForSubIdx(null)}
+        title="Substitute suggestion"
+        anchorRef={menuAnchorRef}
+      >
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              startSubEdit(menuForSubIdx)
+              setMenuForSubIdx(null)
+            }}
+            className={MENU_ITEM}
+          >
+            Edit note
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              removeSubAt(menuForSubIdx)
+              setMenuForSubIdx(null)
             }}
             className={`${MENU_ITEM} text-coral`}
           >

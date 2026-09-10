@@ -280,9 +280,19 @@ export default function EditorScreen() {
     setHasSecondColor(Boolean(draftBanner.liquidColor2))
     setLiquidColor2(draftBanner.liquidColor2 ?? "")
     setIngs(
-      draftBanner.ings ?? [
-        { ingredientName: "", amount: "", unit: "ml", role: "required" },
-      ],
+      (
+        draftBanner.ings ?? [
+          { ingredientName: "", amount: "", unit: "ml", role: "required" },
+        ]
+      ).map((ing) => ({
+        ...ing,
+        // A draft saved before Stage B carries `alternativeNames: string[]`.
+        // Migrate it forward so its substitutes (and any adopted flavor
+        // notes on later saves) aren't silently dropped on restore.
+        alternatives:
+          ing.alternatives ??
+          (ing.alternativeNames ?? []).map((name) => ({ name, note: "" })),
+      })),
     )
     setSteps(draftBanner.steps ?? [""])
     setTasteTagIds(draftBanner.tasteTagIds ?? [])
@@ -330,8 +340,13 @@ export default function EditorScreen() {
         ingredientName: ri.name ?? "",
         ...unitLabelToForm(ri),
         role: ri.role,
-        alternativeNames: (ri.alternativeIds ?? [])
-          .map((altId) => types.find((t) => t.id === altId)?.name)
+        alternatives: (ri.alternativeIds ?? [])
+          .map((altId) => {
+            const t = types.find((t) => t.id === altId)
+            return t
+              ? { name: t.name, note: ri.alternativeNotes?.[altId] ?? "" }
+              : null
+          })
           .filter(Boolean),
       })),
     )
@@ -429,13 +444,12 @@ export default function EditorScreen() {
   const updateIng = (i, k, v) =>
     setIngs(ings.map((ing, idx) => (idx === i ? { ...ing, [k]: v } : ing)))
 
-  // Substitution groups ("gin OR vodka") - the availability engine already
-  // treats any one owned alternative as satisfying the slot
-  // (src/domain/availability.js), this is just the first UI that can ever
-  // create one. Resolved the same way the main ingredient field is (exact
-  // name or alias, no fuzzy matching) - committed as a chip only once it
-  // resolves to a real type, so the stored list is always valid ids by the
-  // time Save runs.
+  // Substitution groups ("gin OR vodka") - the availability engine treats
+  // any one owned alternative as satisfying the slot
+  // (src/domain/availability.js). Each entry is { name, note } - `note` is
+  // an optional recipe-scoped flavor-change line (Stage B). Resolved the
+  // same way the main ingredient field is (exact name or alias, no fuzzy
+  // matching), committed only once it resolves to a real type.
   const commitAlternativeDraft = (i) => {
     const ing = ings[i]
     const draft = (ing.altDraft ?? "").trim()
@@ -445,10 +459,10 @@ export default function EditorScreen() {
       aliases: catalog.aliases,
     })
     if (!resolved) return
-    const existing = ing.alternativeNames ?? []
+    const existing = ing.alternatives ?? []
     if (
       resolved.name.toLowerCase() === ing.ingredientName.trim().toLowerCase() ||
-      existing.some((n) => n.toLowerCase() === resolved.name.toLowerCase())
+      existing.some((a) => a.name.toLowerCase() === resolved.name.toLowerCase())
     ) {
       updateIng(i, "altDraft", "")
       return
@@ -458,7 +472,7 @@ export default function EditorScreen() {
         idx === i
           ? {
               ...row,
-              alternativeNames: [...existing, resolved.name],
+              alternatives: [...existing, { name: resolved.name, note: "" }],
               altDraft: "",
             }
           : row,
@@ -471,12 +485,41 @@ export default function EditorScreen() {
         idx === i
           ? {
               ...row,
-              alternativeNames: (row.alternativeNames ?? []).filter(
+              alternatives: (row.alternatives ?? []).filter(
                 (_, ai) => ai !== altIndex,
               ),
             }
           : row,
       ),
+    )
+  const updateAlternativeNote = (i, altIndex, note) =>
+    setIngs(
+      ings.map((row, idx) =>
+        idx === i
+          ? {
+              ...row,
+              alternatives: (row.alternatives ?? []).map((a, ai) =>
+                ai === altIndex ? { ...a, note } : a,
+              ),
+            }
+          : row,
+      ),
+    )
+  // Adopt a catalogue "Suggested substitute" onto this component - it
+  // becomes a real recipe_component_alternatives row (with its flavor note)
+  // on Save, and only then does it affect this recipe's availability.
+  const adoptSuggestion = (i, toName, note) =>
+    setIngs(
+      ings.map((row, idx) => {
+        if (idx !== i) return row
+        const existing = row.alternatives ?? []
+        if (existing.some((a) => a.name.toLowerCase() === toName.toLowerCase()))
+          return row
+        return {
+          ...row,
+          alternatives: [...existing, { name: toName, note: note ?? "" }],
+        }
+      }),
     )
 
   const addStep = () => setSteps([...steps, ""])
@@ -526,21 +569,23 @@ export default function EditorScreen() {
           i.unit === "oz"
             ? ozToMl(Number(i.amount) || 0)
             : Number(i.amount) || 0
-        const alternativeIds = (i.alternativeNames ?? [])
-          .map(
-            (altName) =>
-              resolveIngredientType(altName, {
-                types,
-                aliases: catalog.aliases,
-              })?.id,
-          )
+        const alternatives = (i.alternatives ?? [])
+          .map((a) => {
+            const t = resolveIngredientType(a.name, {
+              types,
+              aliases: catalog.aliases,
+            })
+            return t
+              ? { ingredientTypeId: t.id, note: a.note?.trim() || null }
+              : null
+          })
           .filter(Boolean)
         return {
           ingredientTypeId: i.matchedType.id,
           amount: isVolume ? amountMl : 0,
           unitLabel: isVolume ? "ml" : `${i.amount} ${i.unit}`.trim(),
           role: i.role,
-          alternativeIds,
+          alternatives,
         }
       })
       const payload = {
@@ -720,11 +765,14 @@ export default function EditorScreen() {
               ings={ings}
               types={types}
               aliases={catalog.aliases}
+              ingredientSubstitutions={catalog.ingredientSubstitutions}
               onAdd={addIng}
               onRemove={removeIng}
               onUpdate={updateIng}
               onCommitAlternative={commitAlternativeDraft}
               onRemoveAlternative={removeAlternative}
+              onUpdateAlternativeNote={updateAlternativeNote}
+              onAdoptSuggestion={adoptSuggestion}
               hasUnmatchedIng={hasUnmatchedIng}
               isDraftable={isDraftable}
               returnTo={location.pathname + location.search}

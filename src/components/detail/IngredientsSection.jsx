@@ -22,6 +22,10 @@ export function IngredientsSection({
   servings,
   partsMode,
   setPartsMode,
+  // (missingTypeId) => [{ toId, toName, note, owned }] - catalogue "Suggested
+  // substitutes" (Stage B). Display only: these never affect availability,
+  // so a row that has suggestions still reads as missing.
+  getSubstituteSuggestions,
 }) {
   // Computed from the recipe's base stored amounts (never servings-scaled -
   // see domain/parts.js) so the ratio never changes when servings does.
@@ -104,6 +108,9 @@ export function IngredientsSection({
                 Boolean(substitution) ||
                 Boolean(householdBasic) ||
                 Boolean(formConversion)
+              const suggestions = isOwned
+                ? []
+                : (getSubstituteSuggestions?.(ri.ingId) ?? [])
               const ratio = ratioByIng?.get(ri)
               const amountText =
                 ratio != null
@@ -134,15 +141,34 @@ export function IngredientsSection({
                     {substitution ? (
                       <span className="block text-[11px] text-tx3">
                         Substituting: {substitution.matchedName}
+                        {substitution.note ? ` — ${substitution.note}` : ""}
                       </span>
                     ) : formConversion ? (
                       <span className="block text-[11px] text-tx3">
                         {formConversion.guidance}
                       </span>
+                    ) : householdBasic ? (
+                      <span className="block text-[11px] text-tx3">
+                        Household basic
+                      </span>
                     ) : (
-                      householdBasic && (
-                        <span className="block text-[11px] text-tx3">
-                          Household basic
+                      suggestions.length > 0 && (
+                        <span className="block text-[11px] text-tx3 leading-snug">
+                          Try:{" "}
+                          {suggestions.map((s, si) => (
+                            <span key={s.toId}>
+                              {si > 0 && " · "}
+                              <span
+                                className={
+                                  s.owned ? "text-tx2 font-medium" : ""
+                                }
+                              >
+                                {s.toName}
+                              </span>
+                              {s.owned ? " (in your bar)" : ""}
+                              {s.note ? ` — ${s.note}` : ""}
+                            </span>
+                          ))}
                         </span>
                       )
                     )}

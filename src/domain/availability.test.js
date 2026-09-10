@@ -103,7 +103,7 @@ describe("computeAvail", () => {
       id === "vodka" ? "Vodka" : id,
     )
     expect(result.substitutions).toEqual({
-      gin: { matchedId: "vodka", matchedName: "Vodka" },
+      gin: { matchedId: "vodka", matchedName: "Vodka", note: null },
     })
   })
 
@@ -441,7 +441,7 @@ describe("computeAvail — household basics (Concept 1)", () => {
     )
     expect(result.avail).toBe("perfect")
     expect(result.substitutions).toEqual({
-      "crushed-ice": { matchedId: "ice", matchedName: "ice" },
+      "crushed-ice": { matchedId: "ice", matchedName: "ice", note: null },
     })
     expect(result.householdBasics).toEqual({})
   })
@@ -624,7 +624,11 @@ describe("computeAvail — ingredient form conversions (Concept 2)", () => {
     expect(result.avail).toBe("perfect")
     expect(result.formConversions).toEqual({})
     expect(result.substitutions).toEqual({
-      "lemon-juice": { matchedId: "lime-juice", matchedName: "lime-juice" },
+      "lemon-juice": {
+        matchedId: "lime-juice",
+        matchedName: "lime-juice",
+        note: null,
+      },
     })
   })
 
@@ -692,5 +696,63 @@ describe("computeAvail — ingredient form conversions (Concept 2)", () => {
     expect(result.formConversions["lemon-juice"].guidance).toBe(
       "Use bottled lemon juice",
     )
+  })
+})
+
+describe("computeAvail — recipe-scoped substitution flavor note (Stage B)", () => {
+  it("carries the note for the alternative that actually matched", () => {
+    const cocktail = {
+      ings: [
+        component({
+          ingId: "white-rum",
+          role: "required",
+          alternativeIds: ["spiced-rum"],
+          alternativeNotes: { "spiced-rum": "sweeter, warm spice" },
+        }),
+      ],
+    }
+    const result = computeAvail(cocktail, new Set(["spiced-rum"]), (id) => id)
+    expect(result.avail).toBe("perfect")
+    expect(result.substitutions).toEqual({
+      "white-rum": {
+        matchedId: "spiced-rum",
+        matchedName: "spiced-rum",
+        note: "sweeter, warm spice",
+      },
+    })
+  })
+
+  it("note is null when the matched alternative has no note", () => {
+    const cocktail = {
+      ings: [
+        component({
+          ingId: "white-rum",
+          role: "required",
+          alternativeIds: ["gold-rum", "spiced-rum"],
+          alternativeNotes: { "spiced-rum": "sweeter" },
+        }),
+      ],
+    }
+    // gold-rum is owned and comes first, so it matches - and it has no note
+    const result = computeAvail(cocktail, new Set(["gold-rum"]), (id) => id)
+    expect(result.substitutions["white-rum"].matchedId).toBe("gold-rum")
+    expect(result.substitutions["white-rum"].note).toBeNull()
+  })
+
+  it("a note never changes avail or the missing lists", () => {
+    const cocktail = {
+      ings: [
+        component({
+          ingId: "white-rum",
+          role: "required",
+          alternativeIds: ["spiced-rum"],
+          alternativeNotes: { "spiced-rum": "sweeter" },
+        }),
+      ],
+    }
+    const notOwned = computeAvail(cocktail, new Set(), (id) => id)
+    expect(notOwned.avail).toBe("almost")
+    expect(notOwned.missingRequiredIds).toEqual(["white-rum"])
+    expect(notOwned.substitutions).toEqual({})
   })
 })

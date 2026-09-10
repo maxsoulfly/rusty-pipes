@@ -58,17 +58,26 @@ function mapRecipe(row) {
     ings: (row.recipe_components ?? [])
       .slice()
       .sort((a, b) => a.sort_order - b.sort_order)
-      .map((c) => ({
-        ingId: c.ingredient_type_id,
-        alternativeIds: (c.recipe_component_alternatives ?? []).map(
-          (a) => a.ingredient_type_id,
-        ),
-        // numeric columns come back as strings over PostgREST
-        amount: Number(c.amount),
-        unitLabel: c.unit_label,
-        role: c.role,
-        name: c.ingredient_types?.name,
-      })),
+      .map((c) => {
+        const alts = c.recipe_component_alternatives ?? []
+        return {
+          ingId: c.ingredient_type_id,
+          alternativeIds: alts.map((a) => a.ingredient_type_id),
+          // Recipe-scoped flavor-change notes (Stage B), keyed by the
+          // alternative's type id. Only alternatives that carry a note
+          // appear here; computeAvail() reads it purely for display.
+          alternativeNotes: Object.fromEntries(
+            alts
+              .filter((a) => a.note)
+              .map((a) => [a.ingredient_type_id, a.note]),
+          ),
+          // numeric columns come back as strings over PostgREST
+          amount: Number(c.amount),
+          unitLabel: c.unit_label,
+          role: c.role,
+          name: c.ingredient_types?.name,
+        }
+      }),
   }
 }
 
@@ -78,7 +87,7 @@ const RECIPE_SELECT = `
   family:cocktail_families(name),
   owner:profiles!recipes_owner_id_fkey(display_name),
   original_owner:profiles!recipes_original_owner_id_fkey(display_name),
-  recipe_components(id, ingredient_type_id, amount, unit_label, role, sort_order, ingredient_types(name, color), recipe_component_alternatives(ingredient_type_id)),
+  recipe_components(id, ingredient_type_id, amount, unit_label, role, sort_order, ingredient_types(name, color), recipe_component_alternatives(ingredient_type_id, note)),
   recipe_taste_tags(taste_tags(name))
 `
 
@@ -129,14 +138,24 @@ async function insertComponentsWithAlternatives(recipeId, components) {
 
   const alternativeRows = []
   components.forEach((c, index) => {
-    if (!c.alternativeIds?.length) return
+    // Editor payload: `alternatives` = [{ ingredientTypeId, note }]. Older
+    // callers (batch import doesn't set either, but stay defensive) may pass
+    // a plain `alternativeIds` string array - treat those as note-less.
+    const alts =
+      c.alternatives ??
+      (c.alternativeIds ?? []).map((id) => ({
+        ingredientTypeId: id,
+        note: null,
+      }))
+    if (!alts.length) return
     const componentRow = insertedComponents.find((r) => r.sort_order === index)
     if (!componentRow) return
-    c.alternativeIds.forEach((altId) => {
+    alts.forEach((alt) => {
       alternativeRows.push({
         recipe_id: recipeId,
         recipe_component_id: componentRow.id,
-        ingredient_type_id: altId,
+        ingredient_type_id: alt.ingredientTypeId,
+        note: alt.note?.trim() ? alt.note.trim() : null,
       })
     })
   })

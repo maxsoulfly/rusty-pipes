@@ -3,7 +3,7 @@
 // once recipe/ingredient data comes from Supabase instead of src/data/mockData.js.
 
 /**
- * @param {{ ings: { ingId: string, role: 'required'|'optional'|'garnish', alternativeIds?: string[] }[] }} cocktail
+ * @param {{ ings: { ingId: string, role: 'required'|'optional'|'garnish', alternativeIds?: string[], alternativeNotes?: Record<string,string> }[] }} cocktail
  * @param {Set<string>} owned - satisfied ingredient type ids; build with resolveOwnedIngredientTypes()
  *   so product-mapping and parent/child hierarchy are already accounted for before this runs.
  * @param {(id: string) => string} [resolveIngredientName] - id -> display name; defaults to the id itself
@@ -66,7 +66,14 @@ export function computeAvail(
       }
 
     const altId = (component.alternativeIds ?? []).find((id) => isAvailable(id))
-    if (altId) return { kind: "substitution", matchedId: altId }
+    if (altId)
+      return {
+        kind: "substitution",
+        matchedId: altId,
+        // Optional recipe-scoped flavor-change note (Stage B). Passive
+        // metadata only - the match decision above is unchanged by it.
+        note: component.alternativeNotes?.[altId] ?? null,
+      }
 
     return null
   }
@@ -110,6 +117,7 @@ export function computeAvail(
       substitutions[component.ingId] = {
         matchedId: info.matchedId,
         matchedName: resolveName(info.matchedId),
+        note: info.note ?? null,
       }
     } else if (info.kind === "conversion") {
       formConversionsOut[component.ingId] = {

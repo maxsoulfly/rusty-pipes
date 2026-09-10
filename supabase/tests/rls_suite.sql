@@ -1062,6 +1062,139 @@ begin
 end;
 $$;
 
+-- ── ingredient_substitutions ───────────────────────────────────────────
+-- Stage B catalogue "Suggested substitutes" (20260910190000). member read /
+-- admin+moderator write, written only through save_ingredient_type()'s 5th
+-- arg. Directional, no inverse guard (unlike ingredient_form_conversions).
+-- SUGGESTION ONLY - nothing here is read by any availability path.
+
+do $$
+declare
+  f record;
+  v_cat uuid;
+  v_from uuid;
+  v_to uuid;
+  n int;
+  affected int;
+  v_note text;
+begin
+  perform set_config('role', (select name from rls_original_role), true);
+  select * into f from rls_fixture_ids;
+  select category_id into v_cat from public.ingredient_types where id = f.type_a_id;
+  insert into public.ingredient_types (category_id, name, bar_priority, recommend_by_default)
+    values (v_cat, 'RLS_TEST sub from', 'common', false) returning id into v_from;
+  insert into public.ingredient_types (category_id, name, bar_priority, recommend_by_default)
+    values (v_cat, 'RLS_TEST sub to', 'common', false) returning id into v_to;
+
+  -- read: member yes, anon no
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  select count(*) into n from public.ingredient_substitutions;
+  perform pg_temp.assert(n >= 0, 'ingredient_substitutions: a member can read the table');
+  perform pg_temp.set_identity('anon', null);
+  select count(*) into n from public.ingredient_substitutions;
+  perform pg_temp.assert(n = 0, 'ingredient_substitutions: anon cannot read');
+
+  -- direct member write denied
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  begin
+    insert into public.ingredient_substitutions (from_type_id, to_type_id, flavor_note)
+    values (v_from, v_to, 'member should not write this');
+    perform pg_temp.assert(false, 'ingredient_substitutions: a member inserting should be denied');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'ingredient_substitutions: a member cannot insert directly');
+  end;
+
+  -- admin direct write allowed
+  perform pg_temp.set_identity('authenticated', f.admin_id);
+  insert into public.ingredient_substitutions (from_type_id, to_type_id, flavor_note)
+  values (v_from, v_to, 'RLS_TEST sweeter, warmer');
+  perform pg_temp.assert(true, 'ingredient_substitutions: admin can insert');
+
+  -- self-pair rejected
+  begin
+    insert into public.ingredient_substitutions (from_type_id, to_type_id, flavor_note)
+    values (v_to, v_to, 'a type cannot replace itself');
+    perform pg_temp.assert(false, 'ingredient_substitutions: a self pair should be rejected');
+  exception when check_violation then
+    perform pg_temp.assert(true, 'ingredient_substitutions: from_type_id <> to_type_id enforced');
+  end;
+
+  -- blank note rejected
+  begin
+    insert into public.ingredient_substitutions (from_type_id, to_type_id, flavor_note)
+    values (v_to, v_from, '   ');
+    perform pg_temp.assert(false, 'ingredient_substitutions: a blank flavor_note should be rejected');
+  exception when check_violation then
+    perform pg_temp.assert(true, 'ingredient_substitutions: flavor_note must be non-blank');
+  end;
+
+  -- the INVERSE direction is allowed (deliberately, unlike form conversions)
+  insert into public.ingredient_substitutions (from_type_id, to_type_id, flavor_note)
+  values (v_to, v_from, 'RLS_TEST cleaner, drier');
+  perform pg_temp.assert(true, 'ingredient_substitutions: the inverse pair is allowed (directional, no inverse guard)');
+
+  -- duplicate (same from, same to) rejected
+  begin
+    insert into public.ingredient_substitutions (from_type_id, to_type_id, flavor_note)
+    values (v_from, v_to, 'duplicate of the first row');
+    perform pg_temp.assert(false, 'ingredient_substitutions: a duplicate (from, to) pair should be rejected');
+  exception when unique_violation then
+    perform pg_temp.assert(true, 'ingredient_substitutions: (from_type_id, to_type_id) is unique');
+  end;
+
+  -- save_ingredient_type() reconciles this type's suggested-substitute set
+  perform public.save_ingredient_type(
+    v_from,
+    jsonb_build_object('name','RLS_TEST sub from','category_id',v_cat,
+      'parent_type_id',null,'bar_priority','common','assumed_available',false,
+      'color',null,'description',null,'shape','spirit_bottle'),
+    '[]'::jsonb, '[]'::jsonb,
+    jsonb_build_array(jsonb_build_object('to_type_id', v_to, 'flavor_note', 'RLS_TEST via save'))
+  );
+  select flavor_note into v_note from public.ingredient_substitutions
+    where from_type_id = v_from and to_type_id = v_to;
+  perform pg_temp.assert(v_note = 'RLS_TEST via save', 'save_ingredient_type: the p_substitutions arg replaces this type''s suggested-substitute set');
+  -- the v_to -> v_from row (a DIFFERENT from side) is untouched
+  select count(*) into n from public.ingredient_substitutions where from_type_id = v_to and to_type_id = v_from;
+  perform pg_temp.assert(n = 1, 'save_ingredient_type: it only touches rows whose from side is the edited type');
+
+  -- ATOMICITY: a save whose substitution list has a self-pair fails whole -
+  -- the type name and the suggested-substitute set are both left as they were
+  begin
+    perform public.save_ingredient_type(
+      v_from,
+      jsonb_build_object('name','RLS_TEST sub SHOULD NOT STICK','category_id',v_cat,
+        'parent_type_id',null,'bar_priority','common','assumed_available',false,
+        'color',null,'description',null,'shape','spirit_bottle'),
+      '[]'::jsonb, '[]'::jsonb,
+      jsonb_build_array(jsonb_build_object('to_type_id', v_from, 'flavor_note', 'self - rejected'))
+    );
+    perform pg_temp.assert(false, 'save_ingredient_type: a substitution self-pair in the payload should reject the whole save');
+  exception when others then
+    perform pg_temp.assert(true, 'save_ingredient_type: a bad substitution rolls the whole save back');
+  end;
+  select name into v_note from public.ingredient_types where id = v_from;
+  perform pg_temp.assert(v_note = 'RLS_TEST sub from', 'save_ingredient_type: a failed substitution save leaves the type name unchanged');
+  select flavor_note into v_note from public.ingredient_substitutions
+    where from_type_id = v_from and to_type_id = v_to;
+  perform pg_temp.assert(v_note = 'RLS_TEST via save', 'save_ingredient_type: a failed substitution save leaves the prior set intact');
+
+  -- member cannot save (RLS on ingredient_types update fires first)
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  begin
+    perform public.save_ingredient_type(v_from, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb);
+    perform pg_temp.assert(false, 'save_ingredient_type (5-arg): a member call should be denied');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'save_ingredient_type (5-arg): a member cannot save');
+  end;
+
+  -- cleanup
+  perform set_config('role', (select name from rls_original_role), true);
+  delete from public.ingredient_substitutions where from_type_id in (v_from, v_to) or to_type_id in (v_from, v_to);
+  delete from public.ingredient_types where id in (v_from, v_to);
+end;
+$$;
+
 -- ── products ─────────────────────────────────────────────────────────────
 -- Shared catalog: any member can read and insert (their own created_by),
 -- but only admin can update/delete - unlike the lookup tables, ordinary
@@ -1397,18 +1530,20 @@ end;
 $$;
 
 do $$
-declare f record; r record; c record; v_id uuid; n int; affected int;
+declare f record; r record; c record; v_id uuid; n int; affected int; v_alt_note text;
 begin
   select * into f from rls_fixture_ids;
   select * into r from rls_recipe_ids;
   select * into c from rls_component_ids;
 
   perform pg_temp.set_identity('authenticated', f.member_owner_id);
-  insert into public.recipe_component_alternatives (recipe_id, recipe_component_id, ingredient_type_id)
-  values (r.private_id, c.comp_id, f.type_b_id)
+  insert into public.recipe_component_alternatives (recipe_id, recipe_component_id, ingredient_type_id, note)
+  values (r.private_id, c.comp_id, f.type_b_id, 'RLS_TEST spicier, drier')
   returning id into v_id;
   update rls_component_ids set alt_id = v_id;
-  perform pg_temp.assert(true, 'recipe_component_alternatives: the recipe owner can insert a substitution alternative');
+  perform pg_temp.assert(true, 'recipe_component_alternatives: the recipe owner can insert a substitution alternative (with a Stage B flavor note)');
+  select note into v_alt_note from public.recipe_component_alternatives where id = v_id;
+  perform pg_temp.assert(v_alt_note = 'RLS_TEST spicier, drier', 'recipe_component_alternatives: the flavor note round-trips for the owner');
 
   perform pg_temp.set_identity('authenticated', f.member_other_id);
   select count(*) into n from public.recipe_component_alternatives where id = v_id;
