@@ -8,20 +8,16 @@ Household Basics — Stages 1–3 all done, committed, pushed, mobile-verified;
 Stage 3 closed out 2026-09-10 (`21193fa`). See the Stage 3 close-out note
 below for its two non-blocking limits.
 
-Ingredient Forms — re-audit done live 2026-09-10 (confirmed the 4 type ids,
-found the old "no recipe uses Garnish types" note is wrong — Lemon is
-`required` in Whiskey Sour, Lime `required` in Caipirinha, etc., which is
-exactly why the one-direction rule matters). Implemented: `computeAvail()`
-form-conversion matching with the approved precedence, admin-managed
-`ingredient_form_conversions` table (member read / admin write + a
-one-direction trigger), "Ingredient forms" admin tab (**UX reworked
-2026-09-10** — compact rows, reveal-on-demand add form, collapsed inline
-searchable pickers, capped width), inline recipe guidance. `pnpm test`
-242/242, build clean, RLS suite passes, advisors clean. **User has confirmed
-the three engine/data checks** (Whiskey Sour / Caipirinha / seeded pairs
-visible); **admin add/edit/save and the reworked layout are still
-unverified** (no browser tooling in this sandbox). Concept 3 stays
-direction-only until Concept 2 is fully confirmed.
+Ingredient Forms — engine + data shipped; the one-direction rule, table, and
+`computeAvail` tier are settled and confirmed working (Whiskey Sour /
+Caipirinha). **The management UI and two new adjacent mechanisms are now
+planned in `docs/plans/substitutes-and-variations.md`** (2026-09-10):
+"Can provide" moves off the standalone admin tab into the Ingredient Type
+editor; a guidance-autofill bug is fixed; **Suggested substitutes** and
+**Linked cocktail variations** are designed there. Read that doc for the
+forward plan. Concept 3 (Homemade Preparations, below) stays separate and
+unstarted; it only shares the recipe-row sub-label slot, noted in the new
+doc's dependencies section.
 
 ## Goal
 
@@ -501,7 +497,14 @@ cocktails" / "Find more ingredients" nav — all untouched.
 
 ---
 
-## Concept 2 — Ingredient Forms — CODE COMPLETE 2026-09-10 (pushed; mobile check pending)
+## Concept 2 — Ingredient Forms — engine/data DONE; management UI + next steps moved to `docs/plans/substitutes-and-variations.md` (2026-09-10)
+
+> The sections below record what shipped. The **forward plan** — retiring the
+> standalone "Ingredient forms" tab in favour of a "Can provide" section in
+> the Ingredient Type editor, the blank-guidance fix, plus the new
+> **Suggested substitutes** and **Linked cocktail variations** designs —
+> lives in `docs/plans/substitutes-and-variations.md`. Homemade Preparations
+> (Concept 3) is unaffected and stays here, unstarted.
 
 ### Re-audit (live, 2026-09-10) — done
 
