@@ -29,14 +29,15 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
    (Note: item 17's "Stage 1 done, mobile verification pending" / "admin type editing moved to an `IngredientDetailScreen` overflow action" text predates the My Bar redesign's later stages — see the corrected current state in item 18's plan doc: inline admin edit pencils are gone, editing now goes through Admin → Ingredient Types via the ⋯ menu.)
 
-18. Household basics, ingredient forms, and homemade preparations (new feature) — **in progress. Household Basics Stage 1 + Stage 2 committed + pushed + mobile-verified 2026-09-09. Stage 3 in progress (blocked on a live-flag reconciliation — see the Stage 3 chunk).** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000` applied to the live DB, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Toggle phone-verified by the user (ON/OFF both persist). **Stage 2 (engine wiring, Ice only):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds` from `catalog.types` and feeds both; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set (comment added). **Ice is the only flagged type live.** **Stage 3 (remaining basics + onboarding cleanup) is next, but do not start it until the user confirms Stage 2 on a phone.** Ingredient Forms and Homemade Preparations unchanged: direction only, with required pre-stage re-audits still pending.
+18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms + Homemade Preparations not started (direction agreed only).** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
 
 Each numbered step is a development chunk boundary for this file.
 
-## Exact next action (paused here, 2026-09-10)
+## Exact next action (2026-09-10)
 
-1. **Household Basics Stage 2 is DONE (committed `c1629b9`, mobile-verified 2026-09-09).**
-2. **Household Basics Stage 3: 3a + 3b + 3c + 3c-safeupdate-fix all done/pushed; 3c retest PASSED. 3d shortcuts + drag-to-reorder code-complete; DRAG REORDER FAILED on first retest, fix pushed, RETEST PENDING.** 3a `c999e1d`. 3b `960aa86` — mobile-verified 2026-09-10. **Back-nav widget visibility NOT separately confirmed.** 3c editor `3a7e29d`; **safeupdate bug fixed `ab73305`** (migration `20260910130000`, `delete ... where true`; advisors clean; RLS-suite regression guard). **3c retest 2026-09-10 (user, real app): PASSED** — saving / reload-persists / replace / order+group+Initial all work; non-staff cannot reach Admin. **Offline-save handling NOT manually verified.** **3d + drag-to-reorder `cec6e81`:** admin-only "Edit list" link beside the Build Your Bar heading (`isAdmin` threaded HomeScreen → BuildYourBar); "Onboarding ingredients" item added to `AdminMenu` (My Bar + Add ingredients ⋯), "Edit ingredients" kept; all → `/admin?tab=onboarding`; `/admin` still behind `RequireStaff`. **Drag reorder was broken in `cec6e81`** — `data-onboarding-row` was on `<Card>`, which drops unknown DOM props, so drop-target detection always got `null` (failed on mouse and touch alike). **Fix pushed (this chunk):** marker moved to a `<div>` wrapper; drag driven by `window` pointer listeners (survives the button re-rendering mid-reorder); `pointer-events:none` on the dragged row so `elementFromPoint` sees underneath; 4px threshold. `pnpm test` 232/232, build clean, `oxfmt --check` clean. **No browser/touch automation or DOM test env in this sandbox — real mouse + iPhone drag is NOT verified here.** **DRAG = FAILED PENDING RETEST; the other latest-checklist items (save+reload after drag, off-handle scroll, shortcut destinations, non-admin gating) remain UNCONFIRMED.** No close-out, no new features. Do not start Ingredient Forms / Homemade Preparations. `project.md` unchanged until close-out.
+1. **Household Basics is COMPLETE — Stages 1, 2, 3 all done, committed, pushed, mobile-verified. Stage 3 closed out 2026-09-10 (`21193fa` drag fix was the last code; this close-out is docs + verification only).** See the "Household Basics Stage 3 — CLOSE-OUT" chunk below for the exact verified scope and its two non-blocking limits (Home "Edit list" visual check; offline-save handling).
+2. **Next: Concept 2 — Ingredient Forms (not started).** Run its pre-stage re-audit before any code (`docs/plans/household-basics-ingredient-forms-preparations.md`, Concept 2 section): (a) confirm live whether any current `recipe_components` row references a Garnish-category type (Lemon/Lime especially) — don't trust the old note; (b) confirm exact live names/ids for Lemon, Lemon Juice, Lime, Lime Juice. Then stage v1: Lemon→Lemon Juice + Lime→Lime Juice only, directional, new `ingredient_form_conversions` table, `matchedIdFor` order = exact available → form-conversion → explicit substitution.
+3. Homemade Preparations (Concept 3) stays "agreed direction, not started" until Ingredient Forms ships and is reviewed.
 3. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files (and when a changed file needs reformatting, run `oxfmt` on the isolated LF copy and hand-apply the wrap changes back). Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
 4. **Migration count (2026-09-10): 53 files on disk, 53 ledger rows, all `local == remote`, 0 pending.** Was 48 after the 2026-09-09 reconcile; +`20260909130000/140000/150000` (3a) +`20260910120000` (3c) +`20260910130000` (3c safeupdate fix) = 53. History intact (unique ordered timestamps, no gaps/dupes). **3d added no migration** — drag + shortcuts are client-only.
 
@@ -63,9 +64,60 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## In-progress chunk (Household Basics Stage 3 — admin-editable onboarding config; 3a–3d code-complete; drag-to-reorder FAILED once, fix pushed, retest pending)
+## Last completed chunk (Household Basics Stage 3 — admin-editable onboarding config — COMPLETE + CLOSED OUT 2026-09-10)
 
-### Drag-to-reorder BUGFIX — 2026-09-10 (committed + pushed; retest pending)
+### Household Basics Stage 3 — CLOSE-OUT — 2026-09-10 (docs + verification only, no code change)
+
+**Household Basics is complete.** Stages 1, 2, 3 all done, committed, pushed,
+mobile-verified. Stage 3 sub-stages: 3a `c999e1d`, 3b `960aa86`
+(mobile-verified), 3c `3a7e29d` + safeupdate fix `ab73305` (retest PASSED),
+3d `cec6e81` + drag fix `21193fa` (drag retest PASSED).
+
+**User-confirmed on the real app (2026-09-10):**
+- Drag-to-reorder works (mouse and touch).
+- Save → reload preserves the new order.
+- On iPhone, swiping outside the drag handle scrolls normally.
+- The ⋯ menu shows "Onboarding ingredients".
+- (3c retest, earlier 2026-09-10) save/reload, ingredient replacement,
+  group/order/Initial changes all work.
+- Regular (non-staff) users cannot access Admin.
+
+**Code-verified in this close-out (wiring only, not manually exercised):**
+- All three admin shortcuts navigate to `/admin?tab=onboarding`:
+  - Home "Build your bar" → **"Edit list"** — `BuildYourBar.jsx`, rendered
+    only when `isAdmin` (from `HomeScreen` Outlet context → `App.jsx`
+    `profile?.role === "admin"`); `navigate("/admin?tab=onboarding")`.
+  - My Bar ⋯ and Add ingredients ⋯ → **"Onboarding ingredients"** — one
+    `AdminMenu.jsx` backs both hosts (`SearchFilterHeader.jsx`,
+    `AddIngredientsScreen.jsx`), each passing `isAdmin` from Outlet context;
+    `if (!isAdmin) return null`; `go("/admin?tab=onboarding")`.
+- Destination resolves: `/admin` behind `RequireStaff` (`App.jsx`);
+  `AdminScreen` `TABS` has `{ id: "onboarding", label: "Onboarding
+  ingredients", adminOnly: true }`; `?tab=onboarding` deep link initialises
+  `tab` to `"onboarding"` only when it's in `visibleTabs` (admin-only tabs
+  filtered out for moderators), else falls back to Overview — a moderator
+  reaching the URL via the side nav lands on Overview, not a broken tab;
+  render guard `{tab === "onboarding" && isAdmin && <OnboardingTab />}`.
+
+**Verification limits — non-blocking, carried forward:**
+1. **Home "Edit list" link — visual/interaction check UNVERIFIED.** The link
+   renders only inside the Build Your Bar widget, which `HomeScreen` shows
+   only when the bar was empty at first inventory load this visit
+   (`showBuildYourBar` snapshot). The user's admin account owns ingredients
+   and there is no empty-bar admin account; per the user's instruction,
+   inventory was not cleared and no account/role change was made for this
+   check. Wiring is code-verified above; the on-screen click was not
+   exercised. Menu visibility alone is not treated as confirmation of the
+   destination.
+2. **Offline-save handling — UNVERIFIED.** `saveOnboardingConfig` failure
+   keeps the draft + surfaces `err.message`; the offline / failed-RPC path
+   has not been manually exercised.
+
+**Fresh run (2026-09-10):** `corepack pnpm@10.34.3 test` 232/232,
+`pnpm build` clean. No migration, no code change in the close-out.
+`project.md` — brief planning-status line only.
+
+### Drag-to-reorder BUGFIX — 2026-09-10 (`21193fa`, committed + pushed; retest PASSED)
 
 **Reported:** on `cec6e81`, dragging the grip handle did nothing — **mouse
 and touch both**. **Root cause (proven by inspection, not the unit tests):**
@@ -99,19 +151,19 @@ function itself was fine; the DOM wiring was the break.
   Discard → atomic `set_onboarding_config`. Within-group only.
 - `aria-hidden` dropped from the handle (kept a real `aria-label`).
 
-**Verification limits (honest):** this sandbox has **no browser/touch
+**Verification (in-sandbox):** this sandbox has **no browser/touch
 automation** (no Playwright/puppeteer) and **no DOM test env** (vitest
-`environment: "node"`, no jsdom/testing-library) — adding either is outside
-this fix's scope. So the fix is verified by: root-cause proof from source,
-`reorderOnboardingDraft` unit tests (232/232), production build clean,
-isolated-LF `oxfmt --check` clean, and `.touch-none { touch-action:none }`
-confirmed present in the built CSS. **Real mouse + real-iPhone drag is NOT
-verified here — needs the user's retest.**
+`environment: "node"`, no jsdom/testing-library). So the fix was verified in
+the sandbox by: root-cause proof from source, `reorderOnboardingDraft` unit
+tests (232/232), production build clean, isolated-LF `oxfmt --check` clean,
+and `.touch-none { touch-action:none }` present in the built CSS.
 
-**Status: drag-to-reorder = FAILED PENDING RETEST.** The other latest-checklist
-items (save+reload after a drag, off-handle scrolling, the three shortcut
-destinations, non-admin gating) also remain **unconfirmed**. No close-out, no
-new features.
+**Status: drag-to-reorder = PASSED.** The user retested on the real app
+2026-09-10 — drag works (mouse + touch), save → reload preserves order,
+off-handle swipe still scrolls on iPhone, ⋯ menu shows "Onboarding
+ingredients", non-staff can't reach Admin. Stage 3 is closed out (see the
+CLOSE-OUT chunk above). Two non-blocking limits carried forward: Home "Edit
+list" visual check, offline-save handling.
 
 ### Sub-stage 3d + drag-to-reorder — implemented 2026-09-10 (`cec6e81`; drag reorder broken there, fixed in the bugfix above)
 
@@ -149,10 +201,14 @@ new features.
   isolated-LF `oxfmt --check` clean on all 6 changed `.js`/`.jsx`
   (OnboardingTab reflowed by the formatter, taken as-is). `project.md`
   untouched.
-- **Pending:** the user's phone check — drag within a group, save + reload
-  persists, page still scrolls off-handle, and the three shortcuts
-  (Home "Edit list", My Bar ⋯, Add ingredients ⋯) all land on
-  Admin → Onboarding ingredients. Feature is NOT marked complete until then.
+- **Phone check — PASSED (user, 2026-09-10):** drag within a group works
+  (mouse + touch), save + reload persists the order, the page still scrolls
+  when swiping off the handle on iPhone, and the ⋯ menu shows "Onboarding
+  ingredients". Non-staff cannot reach Admin. The Home "Edit list" link
+  itself was not exercised on screen (no empty-bar admin account — see the
+  CLOSE-OUT chunk's limit 1); its wiring is code-verified. Stage 3 is closed
+  out — see the "Household Basics Stage 3 — CLOSE-OUT" chunk at the top of
+  this file.
 - **3c retest result (2026-09-10, user, real app): PASSED** — saving,
   reloading (persists), replacing ingredients, and order/group/Initial
   changes all work; non-staff users cannot access Admin. **Offline-save
@@ -167,8 +223,8 @@ is in `docs/plans/household-basics-ingredient-forms-preparations.md`'s Stage 3
 section** — read it there. Sub-stages: **3a (flags + schema + seed) — DONE**;
 **3b (read service + resolver + BuildYourBar wiring) — DONE + mobile-verified**;
 **3c (admin "Onboarding ingredients" editor + safeupdate fix) — DONE, retest
-PASSED**; **3d (drag-to-reorder + shortcuts) — CODE COMPLETE, one mobile
-confirmation pending**. After that confirmation Stage 3 is done; Ingredient
+PASSED**; **3d (drag-to-reorder + shortcuts) — DONE, drag retest PASSED**.
+**Stage 3 closed out 2026-09-10 (see the CLOSE-OUT chunk above).** Ingredient
 Forms / Homemade Preparations are still not started.
 
 ### Sub-stage 3c — CODE COMPLETE 2026-09-10 (committed + pushed); SAVING = FAILED PENDING RETEST after the safeupdate bugfix
@@ -2049,6 +2105,8 @@ Newest: `20260905130000_fix_topup_part_corruption.sql` - data-correction only (n
 Sixteen migrations total across this session's work (thirteen prior to today, three more today) - backlog #4 (substitutions) needed **no new migration**, it reuses the existing `recipe_component_alternatives` RLS policies (read/insert/delete via `recipe_is_editable()`) that had simply never been called. Newest: `20260822170000_full_glass_catalog.sql` renames the 5 originally-matching glasses in place and inserts the other 14, widening `glasses_shape_check` to 19 shape keys first (had to drop the constraint, run the renames, then re-add it - `add constraint check` validates existing rows immediately, and the old "wine" row would have failed against the new list until its own rename ran first; caught this the first push attempt, which rolled back cleanly with no partial state). Previous: `20260822160000_glass_shape.sql` added the `glasses.shape` column itself. All migrations applied via `supabase db push`. No new environment variables.
 
 ## Tests / build checks last run
+
+2026-09-10 (Household Basics Stage 3 close-out - docs + verification only, no code change): `corepack pnpm@10.34.3 test` — 232/232 passing (unchanged). `pnpm build` clean. `pnpm format` not run (oxfmt CRLF bug; no source changed anyway). Shortcut wiring for all three admin entry points (Home "Edit list", My Bar ⋯, Add ingredients ⋯ → `/admin?tab=onboarding`) verified by reading `BuildYourBar.jsx` / `AdminMenu.jsx` / `SearchFilterHeader.jsx` / `AddIngredientsScreen.jsx` / `AdminScreen.jsx` (`TABS` entry + `?tab=` deep-link resolution + render guard) / `App.jsx` (`RequireStaff`, `isAdmin` context). User drag retest PASSED. Two non-blocking limits recorded (Home "Edit list" visual check - no empty-bar admin account; offline-save handling). **Household Basics complete.**
 
 2026-09-06 (Cocktail Library/My Bar UX Stage 3 - IngredientDetailScreen.jsx + two routes + Library's `?ingredient=` filter): `pnpm test` — 182/182 passing (unchanged, no new domain logic). `pnpm build` clean. `pnpm format` clean. Committing this stage before requesting the mobile check (per the standing process note). Mobile verification **pending**, not yet performed. Real test URLs recorded in "Last completed chunk" above, since nothing links to this screen yet.
 

@@ -22,7 +22,8 @@ You might revisit this every few months, not every day.
 Fixing the recurring "JWT issued at future" startup error on the first app open of the day.
 
 # Next
-- Household basics (Ice, Salt, Sugar, Water, Hot Water) don't need to be marked owned — plan approved, see `docs/plans/household-basics-ingredient-forms-preparations.md`.
+- Ingredient forms — owning Lemon should satisfy a Lemon Juice recipe (Lemon/Lime only for v1). Same plan doc.
+- Homemade preparations — "you can make Simple Syrup" hints without pretending it's already owned. Same plan doc.
 - Improve mood/taste discovery.
 
 # Backlog
@@ -32,6 +33,7 @@ Fixing the recurring "JWT issued at future" startup error on the first app open 
 - Homepage "Build your bar" for an empty My Bar — 2026-09-06.
 - Cocktail Library + My Bar UX (grouped Library, Sort control, ingredient/bottle recipe pages) — 2026-09-06.
 - My Bar redesign (owned-first "My ingredients", "Add ingredients" split, shelf visuals, Speed Rack) — 2026-09-07.
+- Household basics (Ice, Salt, Water, White Sugar, Black Pepper) + admin-managed "Build your bar" onboarding list — 2026-09-10.
 
 # Scenarios
 S01 — Choose a drink

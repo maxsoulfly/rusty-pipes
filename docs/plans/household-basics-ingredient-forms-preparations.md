@@ -1,17 +1,18 @@
 # Household Basics, Ingredient Forms, and Homemade Preparations
 
-**Status (2026-09-09): Household Basics Stage 1 + Stage 2 committed + pushed.**
-Stage 1 (schema + admin toggle) is phone-verified. Stage 2 (engine wiring,
-Ice only) is committed (`c1629b9`) and **mobile-verified by the user
-2026-09-09** (recipe reads "Perfect", Ice row shows "Household basic", absent
-from Buy Next, My Bar unaffected, Library groups agree, revert cycle works).
-**Stage 3 (remaining basics + onboarding cleanup) is in progress but blocked
-on a live-flag reconciliation** — the live `assumed_available` set has drifted
-since Stage 2 (now Ice + Salt + Water + White Sugar + Simple Syrup + Black
-Pepper); Simple Syrup and Black Pepper are outside the Stage 3 scope and need
-a decision before flagging work proceeds. Ingredient Forms and Homemade
-Preparations are unchanged: direction only, subject to the pre-stage
-re-audits each section calls out.
+**Status (2026-09-10): Household Basics COMPLETE — Stages 1, 2, 3 all done,
+committed, pushed, and mobile-verified. Stage 3 closed out 2026-09-10.**
+Stage 1 (schema + admin toggle) phone-verified. Stage 2 (engine wiring, Ice
+only) committed `c1629b9`, mobile-verified 2026-09-09. Stage 3 (admin-managed
+onboarding config) — 3a `c999e1d`, 3b `960aa86` (mobile-verified), 3c
+`3a7e29d` + safeupdate fix `ab73305` (retest PASSED), 3d `cec6e81` + drag fix
+`21193fa` (**drag retest PASSED by the user 2026-09-10**). See the Stage 3
+close-out note below for the exact verification scope and its two recorded
+limits (Home "Edit list" visual check, offline-save handling — both
+non-blocking). **Next: Concept 2 (Ingredient Forms) — not started; run its
+pre-stage re-audit first.** Ingredient Forms and Homemade Preparations are
+unchanged: direction only, subject to the pre-stage re-audits each section
+calls out.
 
 ## Goal
 
@@ -179,7 +180,29 @@ picking a best guess.
   cycle works.
 - *Safe stop:* ships with exactly one basic live.
 
-**Stage 3 — REVISED 2026-09-09: admin-editable onboarding config. Design APPROVED (with revisions) by the user 2026-09-09. 3a + 3b done; 3c done + retest PASSED; 3d shortcuts + drag-to-reorder code-complete but DRAG FAILED first retest (fix pushed — `data-onboarding-row` was on `<Card>`, which drops unknown DOM props, so drop detection always got null; now on a `<div>` wrapper + window-listener-driven drag). Drag retest + the rest of the 3d checklist pending before Stage 3 is done.**
+**Stage 3 — REVISED 2026-09-09: admin-editable onboarding config. COMPLETE + CLOSED OUT 2026-09-10.** 3a + 3b + 3c (+ safeupdate fix, retest PASSED) + 3d shortcuts + drag-to-reorder (drag FAILED first retest — `data-onboarding-row` was on `<Card>`, which drops unknown DOM props, so drop detection always got null; refixed on a `<div>` wrapper + window-listener-driven drag in `21193fa`; **drag retest PASSED by the user 2026-09-10**). See the close-out note directly below for the full verified scope and its two non-blocking limits.
+
+### Stage 3 close-out — 2026-09-10
+
+**User-confirmed on the real app (2026-09-10):**
+- Drag-to-reorder works (mouse and touch).
+- Save → reload preserves the new order.
+- On iPhone, swiping outside the drag handle scrolls normally.
+- The ⋯ menu shows "Onboarding ingredients".
+- (Earlier, 3c retest) save/reload, ingredient replacement, group/order/Initial changes all work.
+- Regular (non-staff) users cannot access Admin.
+
+**Code-verified this close-out (not manually exercised):**
+- All three shortcuts navigate to `/admin?tab=onboarding`:
+  - Home "Build your bar" → **"Edit list"** — `BuildYourBar.jsx`, rendered only when `isAdmin` (from `HomeScreen` Outlet context → `App.jsx` `profile?.role === "admin"`).
+  - My Bar ⋯ and Add ingredients ⋯ → **"Onboarding ingredients"** — one `AdminMenu.jsx` backs both (`SearchFilterHeader.jsx`, `AddIngredientsScreen.jsx`); `if (!isAdmin) return null`.
+- Destination resolves: `/admin` is behind `RequireStaff` (`App.jsx`); `AdminScreen` `TABS` has `{ id: "onboarding", label: "Onboarding ingredients", adminOnly: true }`; the `?tab=onboarding` deep link initialises `tab` state to `"onboarding"` only when it is in `visibleTabs` (admin-only tabs filtered out for moderators), otherwise falls back to Overview — so a moderator hitting the URL via the side nav lands on Overview, not a broken tab; render guard `{tab === "onboarding" && isAdmin && <OnboardingTab />}`.
+
+**Verification limits (non-blocking, carried forward):**
+1. **Home "Edit list" link — visual/interaction check UNVERIFIED.** The link only renders inside the Build Your Bar widget, which `HomeScreen` shows only when the bar was empty at first inventory load this visit. The user's admin account owns ingredients and there is no empty-bar admin account; per the user's instruction, inventory was not cleared and no account/role was created for this check. Wiring is code-verified (above); the on-screen click was not exercised. Menu visibility alone is not treated as confirmation of the destination.
+2. **Offline-save handling — UNVERIFIED.** `saveOnboardingConfig` failure keeps the draft and surfaces `err.message`; the offline/failed-RPC path has not been manually exercised.
+
+**Fresh verification run (2026-09-10):** `corepack pnpm@10.34.3 test` 232/232, `pnpm build` clean. No code change in this close-out — docs only.
 
 **2026-09-10 addition to 3d:** drag-to-reorder in the editor — a per-row grip
 handle (Pointer Events; `touch-none` on the handle only so the rest of the row
@@ -423,8 +446,8 @@ cocktails" / "Find more ingredients" nav — all untouched.
   (admin replace; >6 rejected + config intact; member denied + config intact;
   anon no EXECUTE) — full suite passes. `pnpm test` 227/227, build clean,
   isolated-LF `oxfmt --check` clean.
-- **3d — shortcuts + drag-to-reorder. CODE COMPLETE 2026-09-10 (committed +
-  pushed); one mobile confirmation pending.** BuildYourBar admin "Edit list"
+- **3d — shortcuts + drag-to-reorder. DONE 2026-09-10 (committed + pushed);
+  drag retest PASSED, Stage 3 closed out.** BuildYourBar admin "Edit list"
   link (`isAdmin` threaded `HomeScreen` → `BuildYourBar`); `AdminMenu` gains
   an "Onboarding ingredients" item next to the kept "Edit ingredients" (backs
   both the My Bar and Add ingredients ⋯ menus); all → `/admin?tab=onboarding`.
@@ -434,12 +457,16 @@ cocktails" / "Find more ingredients" nav — all untouched.
   **Drag reorder was broken on first retest (mouse + touch): the
   `data-onboarding-row` drop marker was on `<Card>`, which doesn't forward
   unknown DOM props, so `elementFromPoint().closest("[data-onboarding-row]")`
-  always returned null. Fix pushed — marker on a `<div>` wrapper; drag now
-  driven by `window` `pointermove`/`pointerup`/`pointercancel` listeners
-  (survive the handle re-rendering mid-reorder); `pointer-events:none` on the
-  dragged row; 4px threshold. No browser/touch automation in the sandbox, so
-  real mouse + iPhone drag is unverified — RETEST PENDING.**
-  `pnpm test` 232/232, build clean, isolated-LF `oxfmt --check` clean.
+  always returned null. Refixed in `21193fa` — marker on a `<div>` wrapper;
+  drag now driven by `window` `pointermove`/`pointerup`/`pointercancel`
+  listeners (survive the handle re-rendering mid-reorder);
+  `pointer-events:none` on the dragged row; 4px threshold. User retest on the
+  real app 2026-09-10: drag works (mouse + touch), save → reload preserves
+  order, off-handle swipe still scrolls on iPhone, ⋯ menu shows "Onboarding
+  ingredients", non-staff can't reach Admin.** Two non-blocking limits carried
+  forward — Home "Edit list" visual check (no empty-bar admin account; wiring
+  code-verified) and offline-save handling (see the Stage 3 close-out note
+  above). `pnpm test` 232/232, build clean, isolated-LF `oxfmt --check` clean.
 - Each: `corepack pnpm@10.34.3` test/build, `oxfmt --check` on isolated LF
   copies, commit + push. Mobile verification of 3b–3d held for the user
   (3b done; 3c done; 3d shortcuts + drag pending — drag FAILED once, fix
@@ -656,33 +683,22 @@ not just `fetchRecipes()`:
 
 ## Exact next-session starting action
 
-1. **Stage 3 is blocked on a live-flag reconciliation.** The live
-   `assumed_available` set drifted since Stage 2 (verified then: Ice only).
-   As of the Stage 3 catalogue check (2026-09-09) it is:
-   - **Ice** `d949c9b0-…` (Other) — expected, keep.
-   - **Salt** `ab935424-…` (Garnish) — matches Stage 3 target (plain salt;
-     "Celery Salt" `128dc7ef-…` is the flavored one, not flagged). Keep.
-   - **Water** `1ddbc38b-…` (Other) — matches Stage 3 target. Keep.
-   - **White Sugar** `7f9e3634-…` (Sweetener) — this IS the plain-sugar
-     target; no plain "Sugar" row exists ("Brown Sugar", "Sugar Cube" are
-     distinct, not flagged). Keep.
-   - **Simple Syrup** `594e9b87-…` (Sweetener) — **contradicts** the Stage 3
-     instruction ("do not include syrups") AND Concept 3 (Simple Syrup is a
-     *homemade preparation*, not a household basic). Needs a decision:
-     un-flag, or keep?
-   - **Black Pepper** `d690dace-…` (Other) — **not in the Stage 3 target
-     list** and never discussed. Kitchen staple, but the user didn't name it.
-     Needs a decision: keep, or un-flag?
-   - **"Hot Water"** — **no such ingredient_type exists.** Cannot be flagged
-     (creating catalogue types is out of scope; members can't). Reported
-     missing.
-   - Onboarding "Cola": the real type is **"Coke"** `8423a555-…` (Mixer, not
-     flagged) — use this exact name when replacing Ice in the initial six.
-2. Once the two decisions are in (Simple Syrup, Black Pepper) and Hot Water is
-   resolved: reconcile the live flags to the agreed set, then do the code
-   half — `BUILD_YOUR_BAR_INITIAL_SIX` Ice→Coke, dynamic `assumed_available`
-   exclusion from the six + expanded groups, top-up backfill from the
-   expanded order, dedupe, graceful under-six — plus tests.
-3. Ingredient Forms and Homemade Preparations stay in "agreed direction, not
-   started" until Household Basics is done — their pre-stage re-audits
-   (above) happen when their stages actually begin, not before.
+**Household Basics is COMPLETE (Stages 1–3, closed out 2026-09-10).** The
+flag reconciliation that once blocked Stage 3 was resolved in 3a — live
+`assumed_available` set is Black Pepper / Ice / Salt / Water / White Sugar;
+Simple Syrup un-flagged; "Hot Water" has no catalogue row (skipped).
+
+**Next concept: Ingredient Forms (Concept 2) — not started.** Before any
+code, run its pre-stage re-audit (see the Concept 2 section above):
+1. Confirm, live, whether any current `recipe_components` row references a
+   Garnish-category type (Lemon / Lime especially) — do not trust the old
+   "no recipe uses these" note either way.
+2. Confirm the exact live names/ids for Lemon, Lemon Juice, Lime, Lime Juice.
+3. Then design/stage v1: **Lemon → Lemon Juice and Lime → Lime Juice only**,
+   directional, via a new admin-managed `ingredient_form_conversions` table,
+   with `computeAvail()`'s `matchedIdFor` checking in the approved order
+   (exact available → form-conversion → explicit substitution).
+
+Homemade Preparations (Concept 3) stays "agreed direction, not started" until
+Ingredient Forms ships and is reviewed — its own pre-stage re-audit runs when
+that stage begins.
