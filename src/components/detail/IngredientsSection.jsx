@@ -14,6 +14,7 @@ export function IngredientsSection({
   ings,
   substitutions,
   householdBasics,
+  formConversions,
   missingOptional,
   owned,
   unit,
@@ -97,10 +98,12 @@ export function IngredientsSection({
             {roleIngs.map((ri) => {
               const substitution = substitutions[ri.ingId]
               const householdBasic = householdBasics?.[ri.ingId]
+              const formConversion = formConversions?.[ri.ingId]
               const isOwned =
                 owned.has(ri.ingId) ||
                 Boolean(substitution) ||
-                Boolean(householdBasic)
+                Boolean(householdBasic) ||
+                Boolean(formConversion)
               const ratio = ratioByIng?.get(ri)
               const amountText =
                 ratio != null
@@ -131,6 +134,10 @@ export function IngredientsSection({
                     {substitution ? (
                       <span className="block text-[11px] text-tx3">
                         Substituting: {substitution.matchedName}
+                      </span>
+                    ) : formConversion ? (
+                      <span className="block text-[11px] text-tx3">
+                        {formConversion.guidance}
                       </span>
                     ) : (
                       householdBasic && (

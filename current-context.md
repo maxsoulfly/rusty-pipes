@@ -29,17 +29,17 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
    (Note: item 17's "Stage 1 done, mobile verification pending" / "admin type editing moved to an `IngredientDetailScreen` overflow action" text predates the My Bar redesign's later stages — see the corrected current state in item 18's plan doc: inline admin edit pencils are gone, editing now goes through Admin → Ingredient Types via the ⋯ menu.)
 
-18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms + Homemade Preparations not started (direction agreed only).** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
+18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms (Concept 2) CODE COMPLETE + pushed 2026-09-10 — one mobile check pending. Homemade Preparations NOT started (direction agreed only).** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
 
 Each numbered step is a development chunk boundary for this file.
 
 ## Exact next action (2026-09-10)
 
-1. **Household Basics is COMPLETE — Stages 1, 2, 3 all done, committed, pushed, mobile-verified. Stage 3 closed out 2026-09-10 (`21193fa` drag fix was the last code; this close-out is docs + verification only).** See the "Household Basics Stage 3 — CLOSE-OUT" chunk below for the exact verified scope and its two non-blocking limits (Home "Edit list" visual check; offline-save handling).
-2. **Next: Concept 2 — Ingredient Forms (not started).** Run its pre-stage re-audit before any code (`docs/plans/household-basics-ingredient-forms-preparations.md`, Concept 2 section): (a) confirm live whether any current `recipe_components` row references a Garnish-category type (Lemon/Lime especially) — don't trust the old note; (b) confirm exact live names/ids for Lemon, Lemon Juice, Lime, Lime Juice. Then stage v1: Lemon→Lemon Juice + Lime→Lime Juice only, directional, new `ingredient_form_conversions` table, `matchedIdFor` order = exact available → form-conversion → explicit substitution.
-3. Homemade Preparations (Concept 3) stays "agreed direction, not started" until Ingredient Forms ships and is reviewed.
-3. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files (and when a changed file needs reformatting, run `oxfmt` on the isolated LF copy and hand-apply the wrap changes back). Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
-4. **Migration count (2026-09-10): 53 files on disk, 53 ledger rows, all `local == remote`, 0 pending.** Was 48 after the 2026-09-09 reconcile; +`20260909130000/140000/150000` (3a) +`20260910120000` (3c) +`20260910130000` (3c safeupdate fix) = 53. History intact (unique ordered timestamps, no gaps/dupes). **3d added no migration** — drag + shortcuts are client-only.
+1. **Household Basics is COMPLETE — Stages 1–3, closed out 2026-09-10.** See the "Household Basics Stage 3 — CLOSE-OUT" chunk below (two non-blocking limits: Home "Edit list" visual check; offline-save handling).
+2. **Concept 2 — Ingredient Forms: CODE COMPLETE + pushed 2026-09-10. NEXT ACTION = the user runs the mobile checklist** (below). Only after that is Concept 2 done. Re-audit was done live (4 type ids confirmed; the old "no recipe uses Garnish types" note is wrong — Lemon is `required` in Whiskey Sour, Lime `required` in Caipirinha). Built: `computeAvail()` 5th arg `formConversions` with precedence exact → conversion → substitution + a `formConversions` output map; `ingredient_form_conversions` table (member read / admin write + one-direction trigger, migrations `20260910140000` + `20260910150000` policy-scope fix); `services/ingredientForms.js`; `catalog.formConversions` via `useCatalog`; "Ingredient forms" admin tab (`adminOnly`, after Onboarding); `IngredientsSection.jsx` renders the guidance inline. `pnpm test` 242/242, build clean, RLS suite passes (new `ingredient_form_conversions` block), advisors clean, anon REST `200 []`. Seed: Lemon→Lemon Juice, Lime→Lime Juice. See the "Ingredient Forms (Concept 2)" chunk below.
+3. Homemade Preparations (Concept 3) stays "agreed direction, not started" until Concept 2 is user-confirmed. Do NOT start it.
+4. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files (and when a changed file needs reformatting, run `oxfmt` on the isolated LF copy and hand-apply the wrap changes back). Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
+4. **Migration count (2026-09-10): 55 files on disk, 55 applied to the linked project, 0 pending.** Was 53 after Stage 3; +`20260910140000_ingredient_form_conversions` +`20260910150000_ingredient_form_conversions_policy_role_scope` (Concept 2) = 55. Both pushed via `supabase db push --linked` (clean, no history mismatch this session). History intact (unique ordered timestamps, no gaps/dupes).
 
 5. **Migration count reconciled 2026-09-09.** 48 migration files on disk, 48 ledger rows, every one `local == remote`, 0 pending. The Speed Rack chunk's "47/47" was correct for its time (46 synced + `20260906130000`); Stage 1's chunk originally said "47/47" which was a **miscount** — with `20260909120000` it is **48/48**. Migration history itself is intact (unique ordered timestamps, no gaps, no dupes) — nothing was repaired, only the recorded count corrected.
 
@@ -64,7 +64,99 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## Last completed chunk (Household Basics Stage 3 — admin-editable onboarding config — COMPLETE + CLOSED OUT 2026-09-10)
+## Last completed chunk (Ingredient Forms — Concept 2 — CODE COMPLETE + pushed 2026-09-10; mobile check pending)
+
+### Ingredient Forms (Concept 2) — 2026-09-10 (committed + pushed)
+
+**What it does.** Owning a raw ingredient satisfies a recipe that asks for
+its prepared form — own **Lemon**, and a **Lemon Juice** requirement counts
+as met, shown on the recipe with a guidance line ("Squeeze fresh juice from
+Lemon"). One-directional: owning Lemon Juice never satisfies a whole-Lemon
+requirement (Whiskey Sour's lemon-slice garnish still reads as missing).
+Admin-managed — new pairs need no code.
+
+**Live re-audit (done first, 2026-09-10).** Type ids confirmed unambiguous:
+Lemon `4af23ef0-…` / Lemon Juice `f4058e53-…` / Lime `cc5fe68f-…` / Lime
+Juice `f59e498f-…`; none `assumed_available`, no parent/child links, no
+mapped products. **The old "no recipe references Garnish types" note is
+WRONG** — Lemon is a `required` component of Whiskey Sour, `optional` in
+Boulevardier, garnish in ~10 more; Lime is `required` in Caipirinha; Lemon
+Juice is used by 18 recipes, Lime Juice by 7. No pre-existing fruit↔juice
+`recipe_component_alternatives`.
+
+**Engine — `src/domain/availability.js`.** `computeAvail()` gains an optional
+5th arg `formConversions` (`{ rawTypeId, preparedTypeId, guidance }[]`). New
+`matchInfoFor(component)` resolves each component in the dev-spec's exact
+precedence and stops at the first match: **(1)** exact availability (owned or
+household basic) → **(2)** a registered raw→prepared conversion whose raw
+side is available → **(3)** an authored `alternativeIds` substitution. New
+return field `formConversions`: a map keyed by the component's own (prepared)
+id → `{ rawId, rawName, guidance }`, mutually exclusive with `substitutions`
+and `householdBasics`. `resolveOwnedIngredientTypes()` is **unchanged** —
+conversions are not unioned into the owned set, so `findRecipesUsingIngredient`
+(the ingredient detail "recipes using this" list) stays ownership-blind, same
+deliberate boundary as household basics. Buy Next / Home / Library need no
+change: they read `computed[].avail` / `missing*Ids`, which now already
+account for conversions.
+
+**`src/App.jsx`.** Derives `formConversions` from `catalog.formConversions`
+(snake→camel) in a memo, feeds it as `computeAvail`'s 5th arg, adds it to the
+`computed` deps. A note by `householdBasicTypeIds` records why it's not
+passed to `findRecipesUsingIngredient`.
+
+**DB.** Migration `20260910140000_ingredient_form_conversions.sql`:
+`ingredient_form_conversions (id uuid pk, raw_type_id, prepared_type_id,
+guidance)`, both FKs `on delete cascade`, `check (raw_type_id <>
+prepared_type_id)`, `unique (raw_type_id, prepared_type_id)`, guidance
+non-blank ≤200. RLS `is_member()` read / `is_admin()` write (moderators
+excluded, matching onboarding). **`forbid_inverse_form_conversion()`**
+BEFORE INSERT/UPDATE trigger (SECURITY INVOKER, `set search_path = ''`)
+rejects the inverse of an existing pair. Seed: Lemon→Lemon Juice, Lime→Lime
+Juice via `select … into strict` (aborts on rename/missing/ambiguous).
+Follow-up `20260910150000_ingredient_form_conversions_policy_role_scope.sql`:
+`alter policy … to authenticated` on both policies — same `to public` slip +
+fix as onboarding's `20260909140000` (an anon REST read was 401ing on
+`is_member` EXECUTE; now `200 []` like every other member-read table).
+
+**Service / hook.** `src/services/ingredientForms.js` —
+`fetchIngredientFormConversions`, `createIngredientFormConversion`,
+`updateIngredientFormConversionGuidance` (guidance is the only editable
+field; retargeting a pair = delete + re-add), `deleteIngredientFormConversion`.
+`useCatalog` fetches into `catalog.formConversions` via the existing
+`Promise.all` (+ `formConversions: []` initial state).
+
+**Admin UI.** `src/components/admin/IngredientFormsTab.jsx` + `AdminScreen`
+`TABS` entry `{ id: "forms", label: "Ingredient forms", adminOnly: true }`
+(after "Onboarding ingredients") + render guard `{tab === "forms" && isAdmin
+&& <IngredientFormsTab catalog={catalog} />}`. Two searchable type pickers
+(raw / prepared, name+alias), guidance box defaulting to "Squeeze fresh juice
+from &lt;raw&gt;" until edited; existing rows list "&lt;raw&gt; →
+&lt;prepared&gt;" + guidance with edit-text and confirm-delete. DB errors
+(self-pair / duplicate / inverse) surface as-is. No shortcut or deep-link —
+pure admin catalogue config, unlike Onboarding.
+
+**Recipe display.** `IngredientsSection.jsx` renders
+`formConversions?.[ri.ingId].guidance` in the same single sub-label slot as
+"Substituting: …" / "Household basic" (only one ever shows), with the green
+satisfied dot. `DetailScreen.jsx` passes `c.formConversions` through.
+
+**Verification.** `corepack pnpm@10.34.3 test` **242/242** (+10: 9 in
+`availability.test.js` — raw-satisfies-prepared, prepared-never-satisfies-raw,
+exact > conversion, household-basic > conversion, conversion > substitution,
+substitution fallback when raw not owned, no cross-category application,
+arg-omitted parity, multi-raw source; 1 in `recommendations.test.js`
+end-to-end via `computeAvail`). `pnpm build` clean. Isolated-LF `oxfmt
+--check` clean on all 10 changed files (3 needed reflow — hand-applied, since
+`pnpm format` still mangles the CRLF tree). **RLS suite** extended with an
+`ingredient_form_conversions` block (member read / anon denied / member write
+denied / admin insert+update+delete / self-pair + blank-guidance + duplicate
++ inverse-pair all rejected / cascade delete) — full suite passes.
+`supabase db advisors --type security` — no new finding. Migrations: 55 files,
+55 applied, 0 pending.
+
+**Pending: the user's mobile check** (checklist handed over with the commit).
+Concept 2 is NOT marked complete until then. `project.md`: one-line planning
+update only.
 
 ### Household Basics Stage 3 — CLOSE-OUT — 2026-09-10 (docs + verification only, no code change)
 
@@ -2105,6 +2197,8 @@ Newest: `20260905130000_fix_topup_part_corruption.sql` - data-correction only (n
 Sixteen migrations total across this session's work (thirteen prior to today, three more today) - backlog #4 (substitutions) needed **no new migration**, it reuses the existing `recipe_component_alternatives` RLS policies (read/insert/delete via `recipe_is_editable()`) that had simply never been called. Newest: `20260822170000_full_glass_catalog.sql` renames the 5 originally-matching glasses in place and inserts the other 14, widening `glasses_shape_check` to 19 shape keys first (had to drop the constraint, run the renames, then re-add it - `add constraint check` validates existing rows immediately, and the old "wine" row would have failed against the new list until its own rename ran first; caught this the first push attempt, which rolled back cleanly with no partial state). Previous: `20260822160000_glass_shape.sql` added the `glasses.shape` column itself. All migrations applied via `supabase db push`. No new environment variables.
 
 ## Tests / build checks last run
+
+2026-09-10 (Ingredient Forms - Concept 2: computeAvail form-conversion matching + ingredient_form_conversions table + admin "Ingredient forms" tab + inline recipe guidance): `corepack pnpm@10.34.3 test` - **242/242** passing (232 prior + 9 in `availability.test.js` + 1 in `recommendations.test.js`). `pnpm build` clean. `pnpm format` not run (oxfmt CRLF bug); isolated-LF `oxfmt --check` clean on all 10 changed files (availability.js / IngredientFormsTab.jsx / AdminScreen.jsx needed reflow, hand-applied). Migrations `20260910140000` + `20260910150000` pushed via `supabase db push --linked` (clean). `db advisors --type security` - no new finding. RLS suite (`supabase/tests/rls_suite.sql`) extended with an `ingredient_form_conversions` block - full suite passes. Live REST: anon GET on the table -> `200 []`; seed rows (Lemon->Lemon Juice, Lime->Lime Juice) present. **Mobile verification pending** - checklist handed over with the commit.
 
 2026-09-10 (Household Basics Stage 3 close-out - docs + verification only, no code change): `corepack pnpm@10.34.3 test` — 232/232 passing (unchanged). `pnpm build` clean. `pnpm format` not run (oxfmt CRLF bug; no source changed anyway). Shortcut wiring for all three admin entry points (Home "Edit list", My Bar ⋯, Add ingredients ⋯ → `/admin?tab=onboarding`) verified by reading `BuildYourBar.jsx` / `AdminMenu.jsx` / `SearchFilterHeader.jsx` / `AddIngredientsScreen.jsx` / `AdminScreen.jsx` (`TABS` entry + `?tab=` deep-link resolution + render guard) / `App.jsx` (`RequireStaff`, `isAdmin` context). User drag retest PASSED. Two non-blocking limits recorded (Home "Edit list" visual check - no empty-bar admin account; offline-save handling). **Household Basics complete.**
 

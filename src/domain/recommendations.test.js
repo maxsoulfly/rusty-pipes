@@ -287,4 +287,46 @@ describe("rankPurchaseRecommendations", () => {
     })
     expect(result).toEqual([])
   })
+
+  it("never recommends a prepared ingredient the user can already make from an owned raw one (Concept 2)", () => {
+    const cocktail = {
+      id: "r1",
+      name: "Whiskey Sour",
+      source: "classic",
+      ings: [
+        { ingId: "bourbon", role: "required", alternativeIds: [] },
+        { ingId: "lemon-juice", role: "required", alternativeIds: [] },
+      ],
+    }
+    // The user owns Bourbon and a whole Lemon; a Lemon -> Lemon Juice
+    // conversion exists, so the recipe resolves to "perfect" and Lemon Juice
+    // must not surface as a purchase suggestion.
+    const computed = [
+      {
+        ...cocktail,
+        ...computeAvail(
+          cocktail,
+          new Set(["bourbon", "lemon"]),
+          (id) => id,
+          new Set(),
+          [
+            {
+              rawTypeId: "lemon",
+              preparedTypeId: "lemon-juice",
+              guidance: "Squeeze fresh juice from Lemon",
+            },
+          ],
+        ),
+      },
+    ]
+    const result = rankPurchaseRecommendations({
+      computed,
+      ingredientTypesById: new Map([
+        ["lemon-juice", { name: "Lemon Juice", bar_priority: "common" }],
+      ]),
+      favoriteIds: new Set(),
+      wantToMakeIds: new Set(),
+    })
+    expect(result).toEqual([])
+  })
 })

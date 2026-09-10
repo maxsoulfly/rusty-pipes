@@ -12,27 +12,69 @@
  *   caller that forgot to also union these into `owned` still gets correct availability, and the
  *   only components tagged in the returned `householdBasics` map are ones satisfied *because of*
  *   the flag. Passing this never changes the four avail tiers' meaning, only which components count.
+ * @param {{ rawTypeId: string, preparedTypeId: string, guidance: string }[]} [formConversions] -
+ *   admin-managed raw -> prepared ingredient form conversions (Concept 2). Owning `rawTypeId`
+ *   satisfies a component that requires `preparedTypeId` (own Lemon -> a Lemon Juice requirement
+ *   is met), shown with `guidance` inline. STRICTLY one-directional: only ever looked up by a
+ *   component's own (prepared) id, so owning the prepared form never satisfies a raw requirement.
+ *   Checked AFTER exact availability and BEFORE authored substitution alternatives (dev-spec
+ *   Concept 2 precedence). Passing this never changes the four avail tiers' meaning.
  */
 export function computeAvail(
   cocktail,
   owned,
   resolveIngredientName,
   householdBasicIds,
+  formConversions,
 ) {
   const resolveName = resolveIngredientName ?? ((id) => id)
   const basics = householdBasicIds ?? new Set()
   const isAvailable = (id) => owned.has(id) || basics.has(id)
 
-  // The id that actually satisfies a component: its own ingId, the first
-  // owned (or household-basic) substitution alternative, or null if nothing
-  // covers it.
-  const matchedIdFor = (component) => {
-    if (isAvailable(component.ingId)) return component.ingId
-    return (
-      (component.alternativeIds ?? []).find((id) => isAvailable(id)) ?? null
+  // prepared type id -> the raw ingredients that can be prepared into it.
+  // Directional by construction: only ever keyed by, and looked up on, a
+  // component's own (prepared) id - owning the prepared form is never
+  // consulted to satisfy a raw requirement.
+  const conversionsByPrepared = new Map()
+  ;(formConversions ?? []).forEach(
+    ({ rawTypeId, preparedTypeId, guidance }) => {
+      if (!conversionsByPrepared.has(preparedTypeId))
+        conversionsByPrepared.set(preparedTypeId, [])
+      conversionsByPrepared.get(preparedTypeId).push({ rawTypeId, guidance })
+    },
+  )
+
+  // How a component is satisfied, checked in the dev-spec's exact precedence
+  // order (Concept 2): (1) the component's own ingredient is available -
+  // real ownership or a household basic; (2) a registered raw -> prepared
+  // form conversion whose raw side is available; (3) an authored
+  // substitution alternative that is available. First match wins; labels
+  // never stack. `matchedId` is the id doing the satisfying (own id, the
+  // raw fruit, or the alternative).
+  const matchInfoFor = (component) => {
+    if (isAvailable(component.ingId))
+      return { kind: "exact", matchedId: component.ingId }
+
+    const conv = (conversionsByPrepared.get(component.ingId) ?? []).find((c) =>
+      isAvailable(c.rawTypeId),
     )
+    if (conv)
+      return {
+        kind: "conversion",
+        matchedId: conv.rawTypeId,
+        guidance: conv.guidance,
+      }
+
+    const altId = (component.alternativeIds ?? []).find((id) => isAvailable(id))
+    if (altId) return { kind: "substitution", matchedId: altId }
+
+    return null
   }
-  const isSatisfied = (component) => matchedIdFor(component) !== null
+
+  const matchInfoByComponent = new Map(
+    cocktail.ings.map((component) => [component, matchInfoFor(component)]),
+  )
+  const isSatisfied = (component) => matchInfoByComponent.get(component) != null
 
   const missingRequiredIds = cocktail.ings
     .filter((i) => i.role === "required" && !isSatisfied(i))
@@ -50,32 +92,32 @@ export function computeAvail(
   else if (missingRequired.length === 1) avail = "almost"
   else avail = "unavail"
 
-  // Components satisfied via a substitution alternative rather than the
-  // primary ingredient itself, keyed by the component's own ingId.
+  // Three mutually-exclusive per-component annotation maps, all keyed by the
+  // component's own ingId and populated from the single match decision above
+  // so no component ever carries more than one label:
+  //   - substitutions:   satisfied by an authored alternativeIds entry
+  //   - formConversions: satisfied by preparing the requested ingredient
+  //                      from an owned raw one (Concept 2) - carries the
+  //                      guidance text to show inline
+  //   - householdBasics: satisfied by its own id, which is a flagged basic
   const substitutions = {}
-  cocktail.ings.forEach((component) => {
-    const matchedId = matchedIdFor(component)
-    if (matchedId && matchedId !== component.ingId) {
-      substitutions[component.ingId] = {
-        matchedId,
-        matchedName: resolveName(matchedId),
-      }
-    }
-  })
-
-  // Components satisfied directly by their own ingId where that ingId is a
-  // flagged household basic (Concept 1). Same shape/keying as `substitutions`
-  // so the ingredient list can render a "Household basic" note the same way.
-  // A component reached only through an explicit alternativeIds entry that
-  // happens to be a basic falls into `substitutions` above instead - that's
-  // an authored substitution relationship, a different thing from "everyone
-  // just has this".
+  const formConversionsOut = {}
   const householdBasics = {}
   cocktail.ings.forEach((component) => {
-    if (
-      matchedIdFor(component) === component.ingId &&
-      basics.has(component.ingId)
-    ) {
+    const info = matchInfoByComponent.get(component)
+    if (info == null) return
+    if (info.kind === "substitution") {
+      substitutions[component.ingId] = {
+        matchedId: info.matchedId,
+        matchedName: resolveName(info.matchedId),
+      }
+    } else if (info.kind === "conversion") {
+      formConversionsOut[component.ingId] = {
+        rawId: info.matchedId,
+        rawName: resolveName(info.matchedId),
+        guidance: info.guidance,
+      }
+    } else if (info.kind === "exact" && basics.has(component.ingId)) {
       householdBasics[component.ingId] = { name: resolveName(component.ingId) }
     }
   })
@@ -88,6 +130,7 @@ export function computeAvail(
     missingOptionalIds,
     substitutions,
     householdBasics,
+    formConversions: formConversionsOut,
   }
 }
 

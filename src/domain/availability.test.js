@@ -483,3 +483,214 @@ describe("computeAvail — household basics (Concept 1)", () => {
     expect(result.householdBasics).toEqual({})
   })
 })
+
+describe("computeAvail — ingredient form conversions (Concept 2)", () => {
+  const LEMON_CONV = [
+    {
+      rawTypeId: "lemon",
+      preparedTypeId: "lemon-juice",
+      guidance: "Squeeze fresh juice from Lemon",
+    },
+  ]
+
+  it("owning the raw ingredient satisfies a component that requires its prepared form", () => {
+    const cocktail = {
+      ings: [
+        component({ ingId: "gin", role: "required" }),
+        component({ ingId: "lemon-juice", role: "required" }),
+      ],
+    }
+    const result = computeAvail(
+      cocktail,
+      new Set(["gin", "lemon"]),
+      (id) => id,
+      undefined,
+      LEMON_CONV,
+    )
+    expect(result.avail).toBe("perfect")
+    expect(result.missingRequiredIds).toEqual([])
+    expect(result.formConversions).toEqual({
+      "lemon-juice": {
+        rawId: "lemon",
+        rawName: "lemon",
+        guidance: "Squeeze fresh juice from Lemon",
+      },
+    })
+    expect(result.substitutions).toEqual({})
+    expect(result.householdBasics).toEqual({})
+  })
+
+  it("is one-directional: owning the prepared form never satisfies a raw requirement", () => {
+    const cocktail = {
+      ings: [
+        component({ ingId: "gin", role: "required" }),
+        // recipe wants a whole Lemon (e.g. a wedge); only juice is owned
+        component({ ingId: "lemon", role: "required", alternativeIds: [] }),
+      ],
+    }
+    const result = computeAvail(
+      cocktail,
+      new Set(["gin", "lemon-juice"]),
+      (id) => id,
+      undefined,
+      LEMON_CONV,
+    )
+    expect(result.avail).toBe("almost")
+    expect(result.missingRequiredIds).toEqual(["lemon"])
+    expect(result.formConversions).toEqual({})
+  })
+
+  it("exact availability wins over a form conversion (own both the fruit and the juice -> no guidance)", () => {
+    const cocktail = {
+      ings: [component({ ingId: "lemon-juice", role: "required" })],
+    }
+    const result = computeAvail(
+      cocktail,
+      new Set(["lemon", "lemon-juice"]),
+      (id) => id,
+      undefined,
+      LEMON_CONV,
+    )
+    expect(result.avail).toBe("perfect")
+    expect(result.formConversions).toEqual({})
+    expect(result.substitutions).toEqual({})
+  })
+
+  it("a household basic on the component's own id also wins over a form conversion", () => {
+    const cocktail = {
+      ings: [component({ ingId: "lemon-juice", role: "required" })],
+    }
+    const result = computeAvail(
+      cocktail,
+      new Set(["lemon"]),
+      (id) => id,
+      new Set(["lemon-juice"]),
+      LEMON_CONV,
+    )
+    expect(result.avail).toBe("perfect")
+    expect(result.formConversions).toEqual({})
+    expect(result.householdBasics).toEqual({
+      "lemon-juice": { name: "lemon-juice" },
+    })
+  })
+
+  it("a form conversion wins over an authored substitution when both could apply", () => {
+    const cocktail = {
+      ings: [
+        component({
+          ingId: "lemon-juice",
+          role: "required",
+          // an admin also listed lime juice as an allowed alternative here
+          alternativeIds: ["lime-juice"],
+        }),
+      ],
+    }
+    const result = computeAvail(
+      cocktail,
+      new Set(["lemon", "lime-juice"]),
+      (id) => id,
+      undefined,
+      LEMON_CONV,
+    )
+    expect(result.avail).toBe("perfect")
+    expect(result.formConversions).toEqual({
+      "lemon-juice": {
+        rawId: "lemon",
+        rawName: "lemon",
+        guidance: "Squeeze fresh juice from Lemon",
+      },
+    })
+    // the substitution label must NOT also be produced
+    expect(result.substitutions).toEqual({})
+  })
+
+  it("falls back to the authored substitution when the raw ingredient is not owned", () => {
+    const cocktail = {
+      ings: [
+        component({
+          ingId: "lemon-juice",
+          role: "required",
+          alternativeIds: ["lime-juice"],
+        }),
+      ],
+    }
+    const result = computeAvail(
+      cocktail,
+      new Set(["lime-juice"]),
+      (id) => id,
+      undefined,
+      LEMON_CONV,
+    )
+    expect(result.avail).toBe("perfect")
+    expect(result.formConversions).toEqual({})
+    expect(result.substitutions).toEqual({
+      "lemon-juice": { matchedId: "lime-juice", matchedName: "lime-juice" },
+    })
+  })
+
+  it("never applies a conversion to an unrelated component that shares nothing but a category", () => {
+    const cocktail = {
+      ings: [
+        component({ ingId: "gin", role: "required" }),
+        // owning Lemon must NOT satisfy an Orange Juice requirement
+        component({ ingId: "orange-juice", role: "required" }),
+      ],
+    }
+    const result = computeAvail(
+      cocktail,
+      new Set(["gin", "lemon"]),
+      (id) => id,
+      undefined,
+      LEMON_CONV,
+    )
+    expect(result.avail).toBe("almost")
+    expect(result.missingRequiredIds).toEqual(["orange-juice"])
+    expect(result.formConversions).toEqual({})
+  })
+
+  it("omitting formConversions reproduces the pre-Concept-2 output exactly", () => {
+    const cocktail = {
+      ings: [
+        component({ ingId: "gin", role: "required" }),
+        component({ ingId: "lemon-juice", role: "required" }),
+      ],
+    }
+    const withEmpty = computeAvail(
+      cocktail,
+      new Set(["gin", "lemon"]),
+      undefined,
+      new Set(),
+      [],
+    )
+    const withoutArg = computeAvail(cocktail, new Set(["gin", "lemon"]))
+    expect(withoutArg.avail).toBe("almost")
+    expect(withoutArg.missingRequiredIds).toEqual(["lemon-juice"])
+    expect(withoutArg.formConversions).toEqual({})
+    expect(withEmpty).toEqual(withoutArg)
+  })
+
+  it("supports more than one raw source for the same prepared type", () => {
+    const cocktail = {
+      ings: [component({ ingId: "lemon-juice", role: "required" })],
+    }
+    const conversions = [
+      ...LEMON_CONV,
+      {
+        rawTypeId: "bottled-lemon",
+        preparedTypeId: "lemon-juice",
+        guidance: "Use bottled lemon juice",
+      },
+    ]
+    const result = computeAvail(
+      cocktail,
+      new Set(["bottled-lemon"]),
+      (id) => id,
+      undefined,
+      conversions,
+    )
+    expect(result.avail).toBe("perfect")
+    expect(result.formConversions["lemon-juice"].guidance).toBe(
+      "Use bottled lemon juice",
+    )
+  })
+})

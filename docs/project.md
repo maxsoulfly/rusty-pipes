@@ -22,7 +22,7 @@ You might revisit this every few months, not every day.
 Fixing the recurring "JWT issued at future" startup error on the first app open of the day.
 
 # Next
-- Ingredient forms — owning Lemon should satisfy a Lemon Juice recipe (Lemon/Lime only for v1). Same plan doc.
+- Ingredient forms — owning Lemon should satisfy a Lemon Juice recipe (Lemon/Lime only for v1). Same plan doc. — built, phone check pending.
 - Homemade preparations — "you can make Simple Syrup" hints without pretending it's already owned. Same plan doc.
 - Improve mood/taste discovery.
 

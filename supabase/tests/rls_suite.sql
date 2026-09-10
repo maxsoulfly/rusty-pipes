@@ -788,6 +788,147 @@ begin
 end;
 $$;
 
+-- ── ingredient_form_conversions ─────────────────────────────────────────
+-- Concept 2 (20260910140000). "member read, admin write" like
+-- onboarding_ingredients. Also exercises the CHECK constraints and the
+-- forbid_inverse_form_conversion() BEFORE trigger that keeps the mapping
+-- one-directional.
+
+do $$
+declare
+  f record;
+  v_raw uuid;
+  v_prep uuid;
+  v_third uuid;
+  v_id uuid;
+  n int;
+  affected int;
+begin
+  select * into f from rls_fixture_ids;
+
+  -- Three ingredient types not already wired into a conversion, picked while
+  -- still the superuser connection.
+  select id into v_raw from public.ingredient_types
+    where id not in (
+      select raw_type_id from public.ingredient_form_conversions
+      union select prepared_type_id from public.ingredient_form_conversions)
+    order by name limit 1;
+  select id into v_prep from public.ingredient_types
+    where id <> v_raw
+      and id not in (
+        select raw_type_id from public.ingredient_form_conversions
+        union select prepared_type_id from public.ingredient_form_conversions)
+    order by name limit 1;
+  select id into v_third from public.ingredient_types
+    where id not in (v_raw, v_prep)
+      and id not in (
+        select raw_type_id from public.ingredient_form_conversions
+        union select prepared_type_id from public.ingredient_form_conversions)
+    order by name limit 1;
+  perform pg_temp.assert(
+    v_raw is not null and v_prep is not null and v_third is not null,
+    'fixture: three ingredient types outside any existing form conversion exist');
+
+  -- read
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  select count(*) into n from public.ingredient_form_conversions;
+  perform pg_temp.assert(n >= 2, 'ingredient_form_conversions: a member can read (seed rows present)');
+
+  perform pg_temp.set_identity('anon', null);
+  select count(*) into n from public.ingredient_form_conversions;
+  perform pg_temp.assert(n = 0, 'ingredient_form_conversions: anon cannot read');
+
+  -- member write denied
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  begin
+    insert into public.ingredient_form_conversions (raw_type_id, prepared_type_id, guidance)
+    values (v_raw, v_prep, 'member should not be able to add this');
+    perform pg_temp.assert(false, 'ingredient_form_conversions: a member inserting should be denied');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'ingredient_form_conversions: a member cannot insert');
+  end;
+
+  -- admin write allowed
+  perform pg_temp.set_identity('authenticated', f.admin_id);
+  insert into public.ingredient_form_conversions (raw_type_id, prepared_type_id, guidance)
+  values (v_raw, v_prep, 'RLS_TEST squeeze it')
+  returning id into v_id;
+  perform pg_temp.assert(v_id is not null, 'ingredient_form_conversions: admin can insert');
+
+  update public.ingredient_form_conversions set guidance = 'RLS_TEST edited' where id = v_id;
+  get diagnostics affected = row_count;
+  perform pg_temp.assert(affected = 1, 'ingredient_form_conversions: admin can update the guidance text');
+
+  -- self-pair rejected by the CHECK
+  begin
+    insert into public.ingredient_form_conversions (raw_type_id, prepared_type_id, guidance)
+    values (v_third, v_third, 'a type cannot convert to itself');
+    perform pg_temp.assert(false, 'ingredient_form_conversions: a self-referential pair should be rejected');
+  exception when check_violation then
+    perform pg_temp.assert(true, 'ingredient_form_conversions: raw_type_id <> prepared_type_id is enforced');
+  end;
+
+  -- blank guidance rejected by the CHECK
+  begin
+    insert into public.ingredient_form_conversions (raw_type_id, prepared_type_id, guidance)
+    values (v_prep, v_third, '   ');
+    perform pg_temp.assert(false, 'ingredient_form_conversions: blank guidance should be rejected');
+  exception when check_violation then
+    perform pg_temp.assert(true, 'ingredient_form_conversions: guidance must be non-blank');
+  end;
+
+  -- duplicate pair rejected by the UNIQUE constraint
+  begin
+    insert into public.ingredient_form_conversions (raw_type_id, prepared_type_id, guidance)
+    values (v_raw, v_prep, 'duplicate of the row above');
+    perform pg_temp.assert(false, 'ingredient_form_conversions: a duplicate (raw, prepared) pair should be rejected');
+  exception when unique_violation then
+    perform pg_temp.assert(true, 'ingredient_form_conversions: (raw_type_id, prepared_type_id) is unique');
+  end;
+
+  -- inverse pair rejected by forbid_inverse_form_conversion()
+  begin
+    insert into public.ingredient_form_conversions (raw_type_id, prepared_type_id, guidance)
+    values (v_prep, v_raw, 'the inverse direction');
+    perform pg_temp.assert(false, 'ingredient_form_conversions: registering the inverse pair should be rejected');
+  exception when raise_exception then
+    perform pg_temp.assert(true, 'ingredient_form_conversions: the inverse-pair trigger keeps the mapping one-directional');
+  end;
+
+  -- on delete cascade: dropping a referenced ingredient type removes its
+  -- rows. Uses a throwaway type so an unrelated RESTRICT FK (recipe
+  -- components, products) on a real catalogue row can't derail the check.
+  declare
+    v_scratch_type uuid;
+    v_scratch_conv uuid;
+  begin
+    insert into public.ingredient_types (name, category_id)
+    values ('RLS_TEST scratch juice', (select category_id from public.ingredient_types where id = v_raw))
+    returning id into v_scratch_type;
+    insert into public.ingredient_form_conversions (raw_type_id, prepared_type_id, guidance)
+    values (v_raw, v_scratch_type, 'RLS_TEST cascade target')
+    returning id into v_scratch_conv;
+    delete from public.ingredient_types where id = v_scratch_type;
+    select count(*) into n from public.ingredient_form_conversions where id = v_scratch_conv;
+    perform pg_temp.assert(n = 0, 'ingredient_form_conversions: a row is cascade-deleted when its ingredient type is removed');
+  end;
+
+  -- member cannot delete a remaining admin-made row
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  delete from public.ingredient_form_conversions where guidance like 'Squeeze fresh juice%';
+  get diagnostics affected = row_count;
+  perform pg_temp.assert(affected = 0, 'ingredient_form_conversions: a member cannot delete a row');
+
+  -- admin can delete
+  perform pg_temp.set_identity('authenticated', f.admin_id);
+  insert into public.ingredient_form_conversions (raw_type_id, prepared_type_id, guidance)
+  values (v_raw, v_third, 'RLS_TEST deletable');
+  delete from public.ingredient_form_conversions where raw_type_id = v_raw and prepared_type_id = v_third;
+  get diagnostics affected = row_count;
+  perform pg_temp.assert(affected = 1, 'ingredient_form_conversions: admin can delete a row');
+end;
+$$;
+
 -- ── products ─────────────────────────────────────────────────────────────
 -- Shared catalog: any member can read and insert (their own created_by),
 -- but only admin can update/delete - unlike the lookup tables, ordinary

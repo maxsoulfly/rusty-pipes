@@ -178,6 +178,7 @@ export default function DetailScreen() {
           ings={c.ings}
           substitutions={c.substitutions}
           householdBasics={c.householdBasics}
+          formConversions={c.formConversions}
           missingOptional={c.missingOptional}
           owned={owned}
           unit={unit}

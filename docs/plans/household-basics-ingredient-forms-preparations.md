@@ -1,18 +1,23 @@
 # Household Basics, Ingredient Forms, and Homemade Preparations
 
-**Status (2026-09-10): Household Basics COMPLETE — Stages 1, 2, 3 all done,
-committed, pushed, and mobile-verified. Stage 3 closed out 2026-09-10.**
-Stage 1 (schema + admin toggle) phone-verified. Stage 2 (engine wiring, Ice
-only) committed `c1629b9`, mobile-verified 2026-09-09. Stage 3 (admin-managed
-onboarding config) — 3a `c999e1d`, 3b `960aa86` (mobile-verified), 3c
-`3a7e29d` + safeupdate fix `ab73305` (retest PASSED), 3d `cec6e81` + drag fix
-`21193fa` (**drag retest PASSED by the user 2026-09-10**). See the Stage 3
-close-out note below for the exact verification scope and its two recorded
-limits (Home "Edit list" visual check, offline-save handling — both
-non-blocking). **Next: Concept 2 (Ingredient Forms) — not started; run its
-pre-stage re-audit first.** Ingredient Forms and Homemade Preparations are
-unchanged: direction only, subject to the pre-stage re-audits each section
-calls out.
+**Status (2026-09-10): Household Basics COMPLETE. Ingredient Forms (Concept 2)
+CODE COMPLETE + pushed — one mobile confirmation pending. Homemade
+Preparations (Concept 3) NOT started.**
+
+Household Basics — Stages 1–3 all done, committed, pushed, mobile-verified;
+Stage 3 closed out 2026-09-10 (`21193fa`). See the Stage 3 close-out note
+below for its two non-blocking limits.
+
+Ingredient Forms — re-audit done live 2026-09-10 (confirmed the 4 type ids,
+found the old "no recipe uses Garnish types" note is wrong — Lemon is
+`required` in Whiskey Sour, Lime `required` in Caipirinha, etc., which is
+exactly why the one-direction rule matters). Implemented: `computeAvail()`
+form-conversion matching with the approved precedence, admin-managed
+`ingredient_form_conversions` table (member read / admin write + a
+one-direction trigger), "Ingredient forms" admin tab, inline recipe
+guidance. `pnpm test` 242/242, build clean, RLS suite passes, advisors
+clean. See the Concept 2 close-out note below. **Pending: the user's mobile
+check.** Concept 3 stays direction-only until Concept 2 is confirmed.
 
 ## Goal
 
@@ -492,7 +497,109 @@ cocktails" / "Find more ingredients" nav — all untouched.
 
 ---
 
-## Concept 2 — Ingredient Forms (agreed direction; details subject to review before Stage 4 starts)
+## Concept 2 — Ingredient Forms — CODE COMPLETE 2026-09-10 (pushed; mobile check pending)
+
+### Re-audit (live, 2026-09-10) — done
+
+- **Type ids confirmed unambiguous:** Lemon `4af23ef0-d46b-48c2-a0f3-aa6140413d57`
+  (category Garnish), Lemon Juice `f4058e53-5dfc-4c35-a7fb-322067debe67` (Juice),
+  Lime `cc5fe68f-d5d6-4a8d-b0d2-46873142ca55` (Garnish), Lime Juice
+  `f59e498f-cc7f-4199-aada-211fd855dc69` (Juice). None flagged
+  `assumed_available`; no parent/child links; no products mapped to any of
+  them.
+- **The old "no recipe references Garnish types" note is wrong** — corrected.
+  Live: Lemon (the whole-fruit Garnish type) is a `required` component of
+  Whiskey Sour, `optional` in Boulevardier, and a garnish in ~10 more; Lime
+  is `required` in Caipirinha. Lemon Juice is used by 18 recipes, Lime Juice
+  by 7. So the one-direction rule genuinely matters: owning Lemon Juice must
+  not satisfy a recipe that needs a whole lemon.
+- **No existing `recipe_component_alternatives` links a fruit to its juice**
+  (only an unrelated Lemon/Cherry garnish alternative on Whiskey Sour).
+
+### Implemented
+
+- **Engine — `src/domain/availability.js` `computeAvail()`** gains an optional
+  5th arg `formConversions` (`{ rawTypeId, preparedTypeId, guidance }[]`).
+  A new `matchInfoFor(component)` resolves each component in the dev-spec's
+  exact precedence: **(1)** exact availability (owned or household basic),
+  **(2)** a registered raw→prepared conversion whose raw side is available,
+  **(3)** an authored `alternativeIds` substitution. First match wins;
+  labels never stack. New return field `formConversions` — a map keyed by the
+  component's own (prepared) id → `{ rawId, rawName, guidance }`, mutually
+  exclusive with `substitutions` and `householdBasics`. `resolveOwnedIngredientTypes()`
+  is **unchanged** — conversions are not unioned into the owned set, so
+  `findRecipesUsingIngredient` (ingredient detail page) is structurally
+  unaffected, same boundary as household basics.
+- **One-directional by construction:** the map is only ever keyed by, and
+  looked up on, a component's own (prepared) id. Owning the prepared form is
+  never consulted to satisfy a raw requirement.
+- **Buy Next / Home / Library stay consistent for free** — they read
+  `computed[].avail` / `missing*Ids`, which now already account for
+  conversions. `recommendations.js` is untouched; a regression test drives it
+  end-to-end through `computeAvail`.
+- **DB — migration `20260910140000_ingredient_form_conversions.sql`:**
+  `ingredient_form_conversions (id, raw_type_id, prepared_type_id, guidance)`,
+  both type FKs `on delete cascade`, `check (raw_type_id <> prepared_type_id)`,
+  `unique (raw_type_id, prepared_type_id)`, `guidance` non-blank ≤200 chars.
+  RLS: `is_member()` read, `is_admin()` write (moderators excluded, same as
+  onboarding). **`forbid_inverse_form_conversion()` BEFORE INSERT/UPDATE
+  trigger** (SECURITY INVOKER, `search_path=''`) rejects registering the
+  inverse of an existing pair — belt-and-braces on the one-direction rule at
+  the data layer. Seed: Lemon→Lemon Juice, Lime→Lime Juice, name-resolved
+  with `select … into strict` so a rename/missing row aborts the migration.
+  Follow-up migration `20260910150000_..._policy_role_scope.sql` scoped both
+  policies `to authenticated` (same `to public` slip + fix as onboarding's
+  `20260909140000` — an anon REST read was 401ing on `is_member` EXECUTE).
+- **Service — `src/services/ingredientForms.js`:**
+  `fetchIngredientFormConversions` / `create…` / `updateIngredientFormConversionGuidance`
+  (guidance is the only editable field — retargeting a pair is delete + re-add)
+  / `delete…`. `useCatalog` fetches it into `catalog.formConversions` via the
+  existing `Promise.all`.
+- **Admin UI — `src/components/admin/IngredientFormsTab.jsx`** + `AdminScreen`
+  `TABS` entry `{ id: "forms", label: "Ingredient forms", adminOnly: true }`
+  (after Onboarding) + render guard `{tab === "forms" && isAdmin && …}`. Two
+  searchable type pickers (raw / prepared, name+alias) + a guidance box that
+  defaults to "Squeeze fresh juice from &lt;raw&gt;" until edited; existing
+  rows list "&lt;raw&gt; → &lt;prepared&gt;" with the guidance, an edit-text
+  action, and a confirm-delete. DB errors (self-pair, duplicate, inverse)
+  surface as-is. No shortcut/deep-link — pure admin catalogue config.
+- **Recipe display — `IngredientsSection.jsx`** renders
+  `formConversions?.[ri.ingId].guidance` in the same single sub-label slot as
+  "Substituting: …" / "Household basic" (mutually exclusive), with the green
+  satisfied dot. `DetailScreen` passes `c.formConversions` through.
+
+### Verification
+
+- `corepack pnpm@10.34.3 test` **242/242** (+10: 9 in `availability.test.js`
+  covering directionality, all three precedence orderings, category-share
+  isolation, arg-omitted parity, multi-raw; 1 in `recommendations.test.js`
+  end-to-end).
+- `pnpm build` clean; isolated-LF `oxfmt --check` clean on all 10 changed
+  files.
+- **RLS suite** — new `ingredient_form_conversions` block (member read / anon
+  no read / member write denied / admin insert+update+delete / self-pair
+  rejected / blank guidance rejected / duplicate pair rejected / inverse-pair
+  trigger rejects / cascade delete). Full suite passes.
+- `supabase db advisors --type security` — no new finding (trigger fn is
+  SECURITY INVOKER with a fixed `search_path`).
+- Live REST check: anon GET on the table returns `200 []` (matches every
+  other member-read table); seed rows present and correct.
+
+### Pending
+
+- **The user's mobile check** — see the checklist handed over with the
+  commit. Concept 2 is NOT marked complete until then.
+
+### Deliberately out of scope (unchanged boundaries)
+
+- Ingredient detail page's "recipes using this ingredient" list stays
+  ownership-blind (no conversions fed to `findRecipesUsingIngredient`).
+- Orange → Orange Juice and any other pair: still deferred until Lemon/Lime
+  ships and is reviewed (open decision #2 below).
+
+---
+
+## Concept 2 — Ingredient Forms (original plan, kept for context)
 
 ### Audit findings
 - The catalogue already separates raw and prepared forms structurally: a
@@ -683,22 +790,14 @@ not just `fetchRecipes()`:
 
 ## Exact next-session starting action
 
-**Household Basics is COMPLETE (Stages 1–3, closed out 2026-09-10).** The
-flag reconciliation that once blocked Stage 3 was resolved in 3a — live
-`assumed_available` set is Black Pepper / Ice / Salt / Water / White Sugar;
-Simple Syrup un-flagged; "Hot Water" has no catalogue row (skipped).
+**Household Basics is COMPLETE (Stages 1–3, closed out 2026-09-10).**
 
-**Next concept: Ingredient Forms (Concept 2) — not started.** Before any
-code, run its pre-stage re-audit (see the Concept 2 section above):
-1. Confirm, live, whether any current `recipe_components` row references a
-   Garnish-category type (Lemon / Lime especially) — do not trust the old
-   "no recipe uses these" note either way.
-2. Confirm the exact live names/ids for Lemon, Lemon Juice, Lime, Lime Juice.
-3. Then design/stage v1: **Lemon → Lemon Juice and Lime → Lime Juice only**,
-   directional, via a new admin-managed `ingredient_form_conversions` table,
-   with `computeAvail()`'s `matchedIdFor` checking in the approved order
-   (exact available → form-conversion → explicit substitution).
+**Ingredient Forms (Concept 2) is CODE COMPLETE + pushed 2026-09-10** — see
+the Concept 2 close-out note above for the full change list and verification.
+**Next action: the user runs the mobile checklist** (handed over with the
+commit). Only after that confirmation is Concept 2 done.
 
-Homemade Preparations (Concept 3) stays "agreed direction, not started" until
-Ingredient Forms ships and is reviewed — its own pre-stage re-audit runs when
-that stage begins.
+**Homemade Preparations (Concept 3) — do NOT start.** Stays direction-only
+until Concept 2 is user-confirmed. When it does begin, run its own pre-stage
+re-audit first (re-check every `recipes` consumer, not just `fetchRecipes()`
+— see the Concept 3 section).

@@ -189,6 +189,22 @@ function AppShell({ profile, session }) {
     [catalog.types],
   )
 
+  // Ingredient form conversions (Concept 2): admin-managed raw -> prepared
+  // pairs (own Lemon -> a Lemon Juice requirement is satisfied, with inline
+  // guidance). Reshaped to computeAvail()'s expected keys and fed to it
+  // below. Deliberately NOT passed to findRecipesUsingIngredient - see
+  // ingredientRecipeMatches.js: that lookup answers "which recipes use the
+  // one thing I'm viewing" and must stay a pure exact/ancestor match.
+  const formConversions = useMemo(
+    () =>
+      (catalog.formConversions ?? []).map((c) => ({
+        rawTypeId: c.raw_type_id,
+        preparedTypeId: c.prepared_type_id,
+        guidance: c.guidance,
+      })),
+    [catalog.formConversions],
+  )
+
   const resolvedOwned = useMemo(
     () =>
       resolveOwnedIngredientTypes({
@@ -216,9 +232,16 @@ function AppShell({ profile, session }) {
           resolvedOwned,
           (id) => ingredientTypesById.get(id)?.name ?? id,
           householdBasicTypeIds,
+          formConversions,
         ),
       })),
-    [recipes, resolvedOwned, ingredientTypesById, householdBasicTypeIds],
+    [
+      recipes,
+      resolvedOwned,
+      ingredientTypesById,
+      householdBasicTypeIds,
+      formConversions,
+    ],
   )
 
   const isAdmin = profile?.role === "admin"
