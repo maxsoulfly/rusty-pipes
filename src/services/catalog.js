@@ -72,11 +72,10 @@ export async function createIngredientTypes(rows) {
   if (error) throw error
 }
 
-// Admin-only via the pre-existing "ingredient_types: admin update" RLS
-// policy - same "existed since the RLS-hardening pass, never had a caller"
-// situation as updateProduct()/deleteProduct(). Once a type was created
-// (Single Ingredient, batch import, or a live data fix), nothing could ever
-// correct its name/category/parent/color/priority/description again.
+// Admin/moderator-only via the pre-existing "ingredient_types: admin update"
+// RLS policy. Plain single-table update - kept for callers that only touch
+// the type row itself. The Ingredient Type editor uses saveIngredientType()
+// below instead (type + aliases + "Can provide" in one transaction).
 export async function updateIngredientType(
   id,
   {
@@ -107,6 +106,52 @@ export async function updateIngredientType(
     .single()
   if (error) throw error
   return data
+}
+
+// Atomic save for the Ingredient Type editor: the type's own fields, its
+// full alias set, and its full "Can provide" conversion set, applied in one
+// transaction by save_ingredient_type() (20260910170000, SECURITY INVOKER).
+// If any part fails - a name clash, an alias colliding with another type, a
+// conversion tripping the inverse-pair trigger - nothing is written and the
+// error propagates for the editor to show inline while keeping the draft.
+// RLS still gates every statement, so admin/moderator only; a member's call
+// raises before touching anything.
+//
+// `aliases` is the full desired list of alias strings. `conversions` is the
+// full desired list of { preparedTypeId, guidance } whose raw side is this
+// type. Both replace the type's current set entirely.
+export async function saveIngredientType({
+  typeId,
+  name,
+  categoryId,
+  parentTypeId,
+  barPriority,
+  assumedAvailable,
+  color,
+  description,
+  shape,
+  aliases,
+  conversions,
+}) {
+  const { error } = await supabase.rpc("save_ingredient_type", {
+    p_type_id: typeId,
+    p_fields: {
+      name,
+      category_id: categoryId,
+      parent_type_id: parentTypeId || null,
+      bar_priority: barPriority,
+      assumed_available: Boolean(assumedAvailable),
+      color: color || null,
+      description: description || null,
+      shape,
+    },
+    p_aliases: aliases ?? [],
+    p_conversions: (conversions ?? []).map((c) => ({
+      prepared_type_id: c.preparedTypeId,
+      guidance: c.guidance,
+    })),
+  })
+  if (error) throw error
 }
 
 // Admin-only via the pre-existing "ingredient_types: admin delete" RLS

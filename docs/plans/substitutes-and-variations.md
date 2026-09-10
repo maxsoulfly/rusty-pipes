@@ -1,7 +1,9 @@
 # Suggested Substitutes & Linked Cocktail Variations
 
 **Planning document — 2026-09-10. Decisions D1–D6 approved 2026-09-10.
-Stage A DONE + pushed 2026-09-10. Stages B and C not started.**
+Stage A DONE + pushed 2026-09-10, plus a Stage A follow-up (editor UI rework
++ atomic local-draft save via `save_ingredient_type()`) DONE + pushed
+2026-09-10. Stages B and C not started.**
 
 Covers three related pieces of "what else can satisfy or stand in for a
 recipe":
@@ -558,6 +560,82 @@ are independent enough to ship one at a time.
   the running app. Reused confirmed checks only: Lemon supplies Lemon Juice;
   juice does not supply whole Lime; the compact layout is more comfortable;
   guidance edits persist after reload.
+
+### Stage A follow-up — editor UI + atomic draft save — DONE 2026-09-10 (committed + pushed)
+
+The user reviewed Stage A and asked for a focused editor rework before
+Stage B. Delivered:
+
+- **Layout.** The editor card is capped `max-w-2xl` (mobile stays
+  full-width, `min-w-0`/`break-words` everywhere so nothing overflows
+  sideways). Color + Icon now sit in a `sm:grid-cols-2` pair; Parent type
+  and Priority got visible labels (they were bare `<Select>`s) and share
+  their own `sm:grid-cols-2` pair. Explanatory copy shortened (Household
+  basic and "Can provide" are one line each).
+- **"Can provide" rows.** Compact: prepared-ingredient name, guidance
+  directly beneath ("No guidance" placeholder when empty), and a **⋯ menu**
+  (`BottomSheet`, the app's existing kebab pattern) with **Edit guidance** /
+  **Remove**. A compact **+ Add** sits beside the "Can provide" heading (no
+  more full-width secondary button). New-conversion guidance stays blank
+  with the example placeholder.
+- **Actions.** **"Save changes"** is the only filled/prominent button;
+  every other control (Cancel, alias Add/Remove, the add-conversion
+  Add/Cancel, the inline guidance Done/Cancel) is a quiet outline button at
+  `min-h-11` (44px). An "Unsaved changes" hint shows when the draft differs
+  from what was loaded.
+- **Local-draft save model.** Name / category / parent / priority /
+  household-basic / color / icon **and** the full alias list **and** the
+  full "Can provide" list are all local state now. Nothing writes until
+  **Save changes**. **Cancel discards the whole draft with zero DB writes**
+  (it just unmounts the editor). The per-row immediate writes are gone.
+- **Atomic save.** New migration
+  `20260910170000_save_ingredient_type.sql` — `save_ingredient_type(p_type_id
+  uuid, p_fields jsonb, p_aliases jsonb, p_conversions jsonb)`, SECURITY
+  INVOKER plpgsql, `search_path=''`, `revoke … from public, anon` +
+  `grant … to authenticated`. Body: one `UPDATE ingredient_types` (raises
+  `insufficient_privilege` if it touches 0 rows — a member's call), then
+  replace this type's whole `ingredient_aliases` set, then replace its whole
+  `ingredient_form_conversions` set (raw side = the type). All in one
+  transaction — a failure anywhere (name clash, alias colliding with another
+  type, a conversion tripping `forbid_inverse_form_conversion`) rolls the
+  **entire** save back; the client keeps the draft and shows `err.message`.
+  Both DELETEs carry a real `WHERE` on the type id, so pg-safeupdate on the
+  `authenticator` role is satisfied without a `where true` crutch. No new
+  function beyond this one; no GRANT changes to the tables; RLS on all three
+  tables (`is_admin_or_moderator()`) is unchanged and is the real gate.
+  `src/services/catalog.js` gains `saveIngredientType()`; `updateIngredientType`
+  is kept for any other caller but the editor no longer uses it, nor the
+  per-row alias / form-conversion service calls.
+- **Consumers.** `IngredientTypeEditor` has exactly one — `TypesTab` (the
+  stale "My Bar edit pencil" is long gone). `TypesTab` drops the now-unused
+  `onAliasesChanged` / `onConversionsChanged` props; `onSaved` (refetch +
+  close) and `onCancel` unchanged.
+- **Preserved:** admin/moderator write access, member read-only, the
+  conversion engine, one-direction rule, existing saved data, and inventory
+  behaviour — all untouched.
+- **Verified:** `corepack pnpm@10.34.3 test` 242/242 (no domain change);
+  `pnpm build` clean (168 modules); isolated-LF `oxfmt --check` clean on the
+  3 changed JS files (2 reflows hand-applied). **RLS suite** extended with a
+  `save_ingredient_type()` block — admin full save writes type + aliases +
+  conversions; **a save whose conversion list contains the inverse of an
+  existing pair fails whole (name / aliases / conversions / assumed_available
+  all verified unchanged afterwards)**; a member's call raises
+  `insufficient_privilege` and changes nothing; anon has no EXECUTE; plus a
+  moderator positive check in the moderator section. Full suite passes.
+  `supabase db advisors --type security` — no new finding (SECURITY INVOKER,
+  fixed `search_path`). Live: function registered with the expected
+  signature, `security_definer=false`, EXECUTE = authenticated only.
+- **Not verified here** (no browser tooling): the reworked layout on desktop
+  / a narrow phone, and the Cancel-then-reload / Save-then-reload flow in the
+  running app.
+- **Test-coverage limits (honest):** "Cancel makes no writes" and
+  "successful persistence" are **not** covered by an automated *component*
+  test — vitest runs in the node env with no jsdom/testing-library, so the
+  React editor can't be mounted in a test. Cancel-no-writes is structural
+  (Cancel calls `onCancel()` only; `saveIngredientType()` is the sole write
+  path) and the RLS-suite atomicity/rollback + persistence checks exercise
+  the real DB transaction. A browser check is still needed for the UI-level
+  guarantees.
 
 ---
 

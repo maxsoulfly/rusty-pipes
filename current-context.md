@@ -36,14 +36,16 @@ Each numbered step is a development chunk boundary for this file.
 ## Exact next action (2026-09-10)
 
 1. **Household Basics is COMPLETE — Stages 1–3, closed out 2026-09-10.** See the "Household Basics Stage 3 — CLOSE-OUT" chunk below (two non-blocking limits: Home "Edit list" visual check; offline-save handling).
-2. **`docs/plans/substitutes-and-variations.md` — decisions D1–D6 APPROVED 2026-09-10; Stage A DONE + pushed. Stages B and C not started.**
+2. **`docs/plans/substitutes-and-variations.md` — decisions D1–D6 APPROVED 2026-09-10; Stage A + a Stage A follow-up (editor UI rework + atomic draft save) DONE + pushed. Stages B and C not started.**
    - **Decisions:** D1 general catalogue substitutes are suggestion-only; recipe-specific alternatives affect availability; owned suggestions shown first. D2 recipe-scoped subs reuse `recipe_component_alternatives` + a new optional `note`. D3 admins AND moderators manage "Can provide" + general substitutes, **enforced in the DB** (RLS), member access not broadened. D4 the original's owner does not control other members' variations; misleading links stay a moderation matter. D5 show all variations the viewer may see, makeable first, clear attribution. D6 3 suggestion chips before "+N more".
-   - **Stage A (this turn) — done:** guidance-autofill removed (blank + `placeholder="e.g. Squeeze fresh juice from Lemon"`; existing saved guidance untouched). "Can provide" moved into `IngredientTypeEditor` (scoped to the edited ingredient as the raw side; view/add/edit-guidance/remove, immediate writes like aliases, text kept on failure, inline errors). `TypeComboBox` extracted to `src/components/admin/TypeComboBox.jsx`. Standalone "Ingredient forms" tab + its `AdminScreen` `TABS` entry/import/render removed (no deep link ever existed). Migration `20260910160000_ingredient_form_conversions_moderator_writes.sql` — write policy predicate `is_admin()` → `public.is_admin_or_moderator()` (members-read unchanged, no GRANT change, no new function). Engine / directionality / one-direction trigger / inventory / existing conversion rows unchanged. `pnpm test` 242/242, build clean (168 modules), isolated-LF `oxfmt --check` clean (4 JS files), RLS suite extended (moderator write allowed; member-write-denied still holds) and passes, `db advisors --type security` no new finding. **Not verified here (no browser tooling):** the on-screen editor layout / add-edit-remove flow in the running app.
-   - **Reused confirmed checks only:** Lemon supplies Lemon Juice; juice does not supply whole Lime; the compact layout is more comfortable; guidance edits persist after reload. No unreported mobile checks claimed.
+   - **Stage A — done:** guidance-autofill removed; "Can provide" moved into `IngredientTypeEditor`; `TypeComboBox` extracted; standalone "Ingredient forms" tab retired; migration `20260910160000` widened the `ingredient_form_conversions` write policy to `is_admin_or_moderator()`.
+   - **Stage A follow-up (this turn) — done:** `IngredientTypeEditor` reworked — `max-w-2xl` cap, Color+Icon and Parent+Priority in `sm:grid-cols-2` pairs, visible Parent-type/Priority labels, shortened copy; "Can provide" rows are now compact (name + guidance beneath + a **⋯ `BottomSheet` menu** with Edit guidance / Remove) with a compact **+ Add** by the heading; **"Save changes" is the only prominent button**, every secondary control is a quiet `min-h-11` outline button. **Full local-draft model:** type fields + the whole alias list + the whole "Can provide" list are local state; nothing writes until **Save changes**; **Cancel discards the draft with zero DB writes**. **Atomic save** via new migration `20260910170000_save_ingredient_type.sql` — `save_ingredient_type(p_type_id uuid, p_fields jsonb, p_aliases jsonb, p_conversions jsonb)`, SECURITY INVOKER, `search_path=''`, revoke public/anon + grant authenticated; one txn: UPDATE the type (raises `insufficient_privilege` on 0 rows = a member), replace the alias set, replace the conversion set; any failure rolls the whole save back, client keeps the draft + shows the error. Both DELETEs have a real `WHERE` (no pg-safeupdate `where true` needed). `src/services/catalog.js` gains `saveIngredientType()`; `updateIngredientType` kept but unused by the editor. Only consumer of the editor is `TypesTab` (dropped the now-dead `onAliasesChanged`/`onConversionsChanged` props). RLS on all three tables (`is_admin_or_moderator()`) unchanged; no GRANT change; engine/directionality/inventory/existing data untouched.
+   - **Verified:** `pnpm test` 242/242 (no domain change), build clean (168 modules), isolated-LF `oxfmt --check` clean (3 JS files, 2 reflows hand-applied). **RLS suite** extended with a `save_ingredient_type()` block — admin full save writes type+aliases+conversions; **a save whose conversions include the inverse of an existing pair fails whole (name/aliases/conversions/assumed_available all asserted unchanged after)**; member call raises `insufficient_privilege` and changes nothing; anon no EXECUTE; moderator positive check added. Full suite passes. `db advisors --type security` no new finding. Function live with the expected signature, `security_definer=false`, EXECUTE=authenticated only.
+   - **Verification limits (honest):** no browser tooling in this sandbox → the reworked layout (desktop / narrow phone) and the Cancel-then-reload / Save-then-reload flow in the running app are **unverified**. "Cancel makes no writes" and "successful persistence" have **no automated component test** (vitest node env, no jsdom) — Cancel-no-writes is structural (Cancel = `onCancel()` only; `saveIngredientType()` is the sole write path); atomicity/rollback + persistence are covered by the RLS suite's DB-transaction checks. Reused confirmed checks only: Lemon supplies Lemon Juice; juice does not supply whole Lime; compact layout comfortable; guidance edits persist after reload.
    - **Next:** Stage B (Suggested substitutes — M1 `note` column + M2 `ingredient_substitutions` with `is_admin_or_moderator()` write from its first migration) then Stage C (Linked variations — `recipe_relationships`). On the user's go-ahead only.
 3. Homemade Preparations (Concept 3) stays "agreed direction, not started" — separate plan doc, untouched. The substitutes/variations plan notes only where it shares the recipe-row sub-label slot. Do NOT start it.
 4. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files (and when a changed file needs reformatting, run `oxfmt` on the isolated LF copy and hand-apply the wrap changes back). Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
-4. **Migration count (2026-09-10): 56 files on disk, 56 applied to the linked project, 0 pending.** Was 53 after Stage 3; +`20260910140000_ingredient_form_conversions` +`20260910150000_..._policy_role_scope` (Concept 2) +`20260910160000_ingredient_form_conversions_moderator_writes` (substitutes-and-variations Stage A — write policy `is_admin()` → `is_admin_or_moderator()`) = 56. All pushed via `supabase db push --linked` (clean, no history mismatch this session). History intact (unique ordered timestamps, no gaps/dupes).
+4. **Migration count (2026-09-10): 57 files on disk, 57 applied to the linked project, 0 pending.** Was 53 after Stage 3; +`20260910140000_ingredient_form_conversions` +`20260910150000_..._policy_role_scope` (Concept 2) +`20260910160000_ingredient_form_conversions_moderator_writes` (subs-and-variations Stage A) +`20260910170000_save_ingredient_type` (Stage A follow-up — SECURITY INVOKER atomic editor save) = 57. All pushed via `supabase db push --linked` (clean, no history mismatch this session). History intact (unique ordered timestamps, no gaps/dupes).
 
 5. **Migration count reconciled 2026-09-09.** 48 migration files on disk, 48 ledger rows, every one `local == remote`, 0 pending. The Speed Rack chunk's "47/47" was correct for its time (46 synced + `20260906130000`); Stage 1's chunk originally said "47/47" which was a **miscount** — with `20260909120000` it is **48/48**. Migration history itself is intact (unique ordered timestamps, no gaps, no dupes) — nothing was repaired, only the recorded count corrected.
 
@@ -68,11 +70,102 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## Last completed chunk (Substitutes & Variations — Stage A: "Can provide" into the ingredient editor + tab retired, 2026-09-10, committed + pushed)
+## Last completed chunk (Substitutes & Variations — Stage A follow-up: Ingredient Type editor rework + atomic local-draft save, 2026-09-10, committed + pushed)
 
-**Decisions D1–D6 approved by the user** (see the "Exact next action" item 2
-above and `docs/plans/substitutes-and-variations.md` → "Decisions"). Stages
-B (Suggested substitutes) and C (Linked variations) are **not started**.
+**Decisions D1–D6 approved by the user** (see "Exact next action" item 2 and
+`docs/plans/substitutes-and-variations.md` → "Decisions"). Stages B
+(Suggested substitutes) and C (Linked variations) are **not started**.
+
+### Stage A follow-up — 2026-09-10 (committed + pushed)
+
+The user asked for a focused Ingredient Type editor rework before Stage B.
+
+**UI (`src/components/IngredientTypeEditor.jsx`):**
+- Card capped `max-w-2xl` (`w-full` on mobile; `min-w-0`/`break-words` so
+  nothing scrolls sideways). Color + Icon in a `sm:grid-cols-2` pair; Parent
+  type + Priority in another, each with a visible label (they were bare
+  `<Select>`s). Household-basic and "Can provide" copy cut to one line each.
+- "Can provide" rows are compact: prepared-ingredient name, guidance
+  directly beneath ("No guidance" when empty), and a **⋯ menu** (one shared
+  `BottomSheet` driven by `menuForIdx` + `menuAnchorRef` — the app's kebab
+  pattern, same as `AdminMenu`) with **Edit guidance** / **Remove**. A
+  compact **+ Add** sits next to the "Can provide" heading (the full-width
+  secondary "+ Add" button is gone). New-conversion guidance is blank with
+  the example placeholder.
+- **"Save changes"** is the only filled/prominent `<Btn>`; every secondary
+  control (Cancel, alias Add/Remove, add-conversion Add/Cancel, inline-edit
+  Done/Cancel) is a quiet outline `<button>` at `min-h-11` (44px). An
+  "Unsaved changes" hint appears when the draft differs from what loaded.
+- `TypeComboBox` reused (with `label` omitted); it already collapses on
+  pick, bounded scroll list, inline (no overlay) so the mobile keyboard
+  doesn't cover it.
+
+**Save model:** every field **plus the full alias list plus the full "Can
+provide" list** are local state (`draftAliases`, `draftConversions`). The
+per-row immediate writes are gone. **Cancel** = `onCancel()` only → the
+editor unmounts, draft discarded, **zero DB writes**. **Save changes**
+validates the type fields client-side (`validateIngredientImport`, unchanged)
+then makes **one** call — `saveIngredientType()`.
+
+**Atomic save — migration `20260910170000_save_ingredient_type.sql`:**
+`save_ingredient_type(p_type_id uuid, p_fields jsonb, p_aliases jsonb,
+p_conversions jsonb)` — SECURITY INVOKER plpgsql, `set search_path = ''`,
+`revoke execute … from public, anon` + `grant … to authenticated`. Body, one
+transaction: (1) `UPDATE public.ingredient_types … WHERE id = p_type_id` —
+`get diagnostics row_count`; 0 → `raise … using errcode = 'insufficient_privilege'`
+(a member's call, RLS `using` false); (2) `DELETE … ingredient_aliases WHERE
+ingredient_type_id = p_type_id` then insert the desired set; (3) `DELETE …
+ingredient_form_conversions WHERE raw_type_id = p_type_id` then insert the
+desired `{prepared_type_id, guidance}` set. Any failure — name clash, alias
+colliding with another type (global `lower(alias)` unique index), a
+conversion tripping `forbid_inverse_form_conversion` / the CHECK / UNIQUE —
+rolls the **entire** call back; `catalog.js`'s `saveIngredientType()`
+rethrows and the editor keeps the draft + shows `err.message`. **Both
+DELETEs carry a real WHERE**, so pg-safeupdate on the `authenticator` role is
+satisfied without a `where true` crutch (the trap that bit
+`set_onboarding_config`). No GRANT change to any table; RLS
+(`is_admin_or_moderator()` on all three) is unchanged and is the real
+boundary. `updateIngredientType` is kept in `catalog.js` for any other
+caller; the editor and its per-row alias/form-conversion service calls no
+longer run.
+
+**Consumers:** `IngredientTypeEditor` has exactly one — `TypesTab` (the
+"My Bar edit pencil" mentioned in old comments is long removed). `TypesTab`
+drops the now-unused `onAliasesChanged` / `onConversionsChanged` props;
+`onSaved` (refetch + close) and `onCancel` unchanged.
+
+**Preserved:** admin/moderator write + member read-only, the availability
+engine, the one-direction rule, existing saved rows, inventory behaviour.
+
+**Verified:** `corepack pnpm@10.34.3 test` 242/242 (no domain change);
+`pnpm build` clean (168 modules); isolated-LF `oxfmt --check` clean on the 3
+changed JS files (2 reflows hand-applied). **RLS suite** (`supabase/tests/
+rls_suite.sql`) gains a `save_ingredient_type()` block: admin full save
+writes type + aliases + conversions and drops an alias absent from the
+payload; **a save whose conversion list contains the inverse of an existing
+pair fails whole** — afterwards the name, alias set, conversion set and
+`assumed_available` are all asserted unchanged; a member's call raises
+`insufficient_privilege` and changes nothing; anon has no EXECUTE; the
+moderator section gets a positive `save_ingredient_type()` check on a
+throwaway type. Full suite passes (exit 0, no `FAIL:`). `supabase db
+advisors --type security` — no new finding. Live: function registered as
+`save_ingredient_type(uuid, jsonb, jsonb, jsonb)`, `security_definer = false`,
+EXECUTE granted to `authenticated` only.
+
+**Verification limits (honest):** no browser tooling in this sandbox (no
+Playwright/Puppeteer/Chromium, `$PORT` unset) — the reworked layout on
+desktop / a narrow phone, and the Cancel-then-reload / Save-then-reload flow
+in the running app, are **unverified**. "Cancel makes no writes" and
+"successful persistence" have **no automated component test** — vitest runs
+in the node env with no jsdom/testing-library, so the React editor can't be
+mounted. Cancel-no-writes is structural (Cancel calls `onCancel()` only;
+`saveIngredientType()` is the single write path); atomicity/rollback and
+persistence are covered by the RLS-suite DB-transaction checks. Reused
+confirmed checks only (Lemon supplies Lemon Juice; juice does not supply
+whole Lime; compact layout comfortable; guidance edits persist after
+reload). `project.md` unchanged.
+
+### Stage A — 2026-09-10 (committed + pushed)
 
 **Stage A — shipped:**
 - **Guidance autofill removed.** The old standalone tab auto-filled the

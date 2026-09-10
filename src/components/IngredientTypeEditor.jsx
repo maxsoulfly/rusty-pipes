@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { ShapePicker } from "@/components/admin/ShapePicker"
 import { TypeComboBox } from "@/components/admin/TypeComboBox"
+import { IconDots } from "@/components/icons"
 import {
+  BottomSheet,
   Btn,
   Card,
   CategoryPicker,
@@ -15,31 +17,42 @@ import {
   BAR_PRIORITIES,
   validateIngredientImport,
 } from "@/schemas/ingredientImport"
-import {
-  createIngredientAlias,
-  deleteIngredientAlias,
-  updateIngredientType,
-} from "@/services/catalog"
-import {
-  createIngredientFormConversion,
-  deleteIngredientFormConversion,
-  updateIngredientFormConversionGuidance,
-} from "@/services/ingredientForms"
+import { saveIngredientType } from "@/services/catalog"
 
-// Shared "edit an existing ingredient type" form - used by both My Bar's
-// inline admin edit pencil and Admin's Ingredient Types tab, so the one real
-// business rule here (reusing validateIngredientImport()'s single-item path
-// for the duplicate-name/parent-hierarchy check) only lives in one place.
-// Aliases live here too (not a separate admin-wide list) per user request -
-// managing "Sec -> Triple Sec" reads more naturally next to Triple Sec's own
-// name/category/color than in a global table of every alias for every type.
-// "Can provide" (ingredient_form_conversions) lives here for the same reason
-// (2026-09-10) - it replaced a standalone admin tab. Each row is a
-// directional raw -> prepared conversion whose raw side is this type, with
-// the guidance line members see on the recipe. Adds/edits/removals write
-// immediately (like aliases), independent of the type's own Save button.
-// Both aliases and Can-provide are Edit-only: the row must already exist to
-// attach to.
+// Shared "edit an existing ingredient type" form. Only consumer today is
+// Admin -> Ingredient Types (src/components/admin/TypesTab.jsx).
+//
+// Local-draft model (2026-09-10): every field, plus Aliases and "Can
+// provide" conversions, is held in local state and NOTHING is written until
+// "Save changes". Cancel discards the draft with zero database writes. Save
+// commits the whole draft atomically through save_ingredient_type()
+// (20260910170000, one transaction) - a failure anywhere writes nothing and
+// leaves the draft intact with an inline error.
+//
+// Aliases live here (not a global list) per user request - "Sec -> Triple
+// Sec" reads more naturally next to Triple Sec's own fields. "Can provide"
+// (ingredient_form_conversions, raw side = this type) moved here 2026-09-10
+// from a standalone admin tab, same reasoning. Both are Edit-only.
+//
+// The one catalog-shape rule (duplicate name / parent hierarchy) still runs
+// client-side via validateIngredientImport()'s single-item path before the
+// save call.
+
+const LABEL =
+  "text-xs font-bold text-tx2 font-display uppercase tracking-[0.06em]"
+// Quiet-but-tappable: 44px min height, outline only, no fill. Used for every
+// secondary action so "Save changes" is the only filled/prominent button.
+const QUIET_BTN =
+  "min-h-11 px-3 rounded-sm border border-bdr bg-transparent text-tx2 text-[13px] font-display font-semibold cursor-pointer disabled:opacity-50"
+const MENU_ITEM =
+  "w-full text-left py-2.5 px-3 min-h-11 rounded-sm text-[13px] text-tx bg-surface border border-bdr cursor-pointer"
+
+function normConversions(list) {
+  return [...list]
+    .map((c) => [c.preparedTypeId, c.guidance])
+    .sort((a, b) => a[0].localeCompare(b[0]))
+}
+
 export function IngredientTypeEditor({
   type,
   categories,
@@ -48,8 +61,6 @@ export function IngredientTypeEditor({
   liquidColors,
   formConversions,
   onSaved,
-  onAliasesChanged,
-  onConversionsChanged,
   onCancel,
   style,
 }) {
@@ -62,21 +73,17 @@ export function IngredientTypeEditor({
   )
   const [color, setColor] = useState(type.color ?? "")
   const [shape, setShape] = useState(type.shape ?? "spirit_bottle")
-  const [description] = useState(type.description ?? "")
+  // Not editable in this form - carried through the save unchanged (it comes
+  // from batch import).
+  const description = type.description ?? ""
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
-  const typeAliases = aliases.filter((a) => a.ingredient_type_id === type.id)
-  const [newAlias, setNewAlias] = useState("")
-  const [aliasSaving, setAliasSaving] = useState(false)
-  const [aliasError, setAliasError] = useState(null)
-  const [deletingAliasId, setDeletingAliasId] = useState(null)
-
-  const otherTypes = types.filter((t) => t.id !== type.id)
-
-  // ── "Can provide" (ingredient_form_conversions, raw side = this type) ──
-  const conversions = formConversions ?? []
-  const refreshConversions = onConversionsChanged ?? (() => {})
+  const otherTypes = useMemo(
+    () => types.filter((t) => t.id !== type.id),
+    [types, type.id],
+  )
   const typeNameById = useMemo(
     () => new Map(types.map((t) => [t.id, t.name])),
     [types],
@@ -89,149 +96,142 @@ export function IngredientTypeEditor({
     }
     return m
   }, [aliases])
-  const myConversions = useMemo(
+
+  // ── Aliases draft ──────────────────────────────────────────────────────
+  const initialAliases = useMemo(
     () =>
-      conversions
+      aliases
+        .filter((a) => a.ingredient_type_id === type.id)
+        .map((a) => a.alias),
+    [aliases, type.id],
+  )
+  const [draftAliases, setDraftAliases] = useState(initialAliases)
+  const [newAlias, setNewAlias] = useState("")
+  const [aliasError, setAliasError] = useState(null)
+
+  const addAliasToDraft = () => {
+    const text = newAlias.trim()
+    if (!text) return
+    if (draftAliases.some((a) => a.toLowerCase() === text.toLowerCase())) {
+      setNewAlias("")
+      return
+    }
+    const resolved = resolveIngredientType(text, { types, aliases })
+    if (resolved && resolved.id !== type.id) {
+      setAliasError(`"${text}" already refers to "${resolved.name}"`)
+      return
+    }
+    setDraftAliases([...draftAliases, text])
+    setNewAlias("")
+    setAliasError(null)
+  }
+  const removeAliasFromDraft = (a) =>
+    setDraftAliases(draftAliases.filter((x) => x !== a))
+
+  // ── "Can provide" draft (raw side = this type) ─────────────────────────
+  const initialConversions = useMemo(
+    () =>
+      (formConversions ?? [])
         .filter((c) => c.raw_type_id === type.id)
+        .map((c) => ({
+          preparedTypeId: c.prepared_type_id,
+          guidance: c.guidance,
+        }))
         .sort((a, b) =>
-          (typeNameById.get(a.prepared_type_id) ?? "").localeCompare(
-            typeNameById.get(b.prepared_type_id) ?? "",
+          (typeNameById.get(a.preparedTypeId) ?? "").localeCompare(
+            typeNameById.get(b.preparedTypeId) ?? "",
           ),
         ),
-    [conversions, type.id, typeNameById],
+    [formConversions, type.id, typeNameById],
   )
-  // Pickable "prepared" types: not this type, not already linked from it, and
-  // not one that already provides THIS type (the DB trigger would reject that
-  // inverse anyway - filtering it out avoids a confusing error).
+  const [draftConversions, setDraftConversions] = useState(initialConversions)
+  const [addingConv, setAddingConv] = useState(false)
+  const [newConvPreparedId, setNewConvPreparedId] = useState(null)
+  const [newConvGuidance, setNewConvGuidance] = useState("")
+  const [editingConvIdx, setEditingConvIdx] = useState(null)
+  const [convEditText, setConvEditText] = useState("")
+  const [menuForIdx, setMenuForIdx] = useState(null)
+  const menuAnchorRef = useRef(null)
+
+  // Pickable "prepared" types: not this type, not already in the draft, and
+  // not one that already provides THIS type (the DB trigger rejects that
+  // inverse anyway).
   const addablePreparedTypes = useMemo(() => {
-    const linked = new Set(myConversions.map((c) => c.prepared_type_id))
+    const linked = new Set(draftConversions.map((c) => c.preparedTypeId))
     const providesThis = new Set(
-      conversions
+      (formConversions ?? [])
         .filter((c) => c.prepared_type_id === type.id)
         .map((c) => c.raw_type_id),
     )
     return types.filter(
       (t) => t.id !== type.id && !linked.has(t.id) && !providesThis.has(t.id),
     )
-  }, [types, myConversions, conversions, type.id])
-
-  const [addingConv, setAddingConv] = useState(false)
-  const [newConvPreparedId, setNewConvPreparedId] = useState(null)
-  const [newConvGuidance, setNewConvGuidance] = useState("")
-  const [editingConvId, setEditingConvId] = useState(null)
-  const [convEditText, setConvEditText] = useState("")
-  const [convSaving, setConvSaving] = useState(false)
-  const [convError, setConvError] = useState(null)
-  const [removingConvId, setRemovingConvId] = useState(null)
+  }, [types, draftConversions, formConversions, type.id])
 
   const openAddConv = () => {
     setAddingConv(true)
     setNewConvPreparedId(null)
     setNewConvGuidance("")
-    setConvError(null)
   }
-  const closeAddConv = () => {
+  const commitAddConv = () => {
+    if (!newConvPreparedId || !newConvGuidance.trim()) return
+    setDraftConversions([
+      ...draftConversions,
+      { preparedTypeId: newConvPreparedId, guidance: newConvGuidance.trim() },
+    ])
     setAddingConv(false)
-    setConvError(null)
   }
-  const handleAddConv = async () => {
-    setConvSaving(true)
-    setConvError(null)
-    try {
-      await createIngredientFormConversion({
-        rawTypeId: type.id,
-        preparedTypeId: newConvPreparedId,
-        guidance: newConvGuidance.trim(),
-      })
-      await refreshConversions()
-      setAddingConv(false)
-      setNewConvPreparedId(null)
-      setNewConvGuidance("")
-    } catch (err) {
-      // Keep the picked type + typed guidance so the admin can retry.
-      setConvError(err.message)
-    } finally {
-      setConvSaving(false)
-    }
+  const removeConvAt = (idx) =>
+    setDraftConversions(draftConversions.filter((_, i) => i !== idx))
+  const startConvEdit = (idx) => {
+    setEditingConvIdx(idx)
+    setConvEditText(draftConversions[idx].guidance)
   }
-  const startConvEdit = (c) => {
-    setEditingConvId(c.id)
-    setConvEditText(c.guidance)
-    setConvError(null)
+  const commitConvEdit = () => {
+    const text = convEditText.trim()
+    if (!text) return
+    setDraftConversions(
+      draftConversions.map((c, i) =>
+        i === editingConvIdx ? { ...c, guidance: text } : c,
+      ),
+    )
+    setEditingConvIdx(null)
   }
-  const cancelConvEdit = () => {
-    setEditingConvId(null)
-    setConvError(null)
-  }
-  const handleSaveConvEdit = async (id) => {
-    setConvSaving(true)
-    setConvError(null)
-    try {
-      await updateIngredientFormConversionGuidance(id, convEditText.trim())
-      await refreshConversions()
-      setEditingConvId(null)
-    } catch (err) {
-      // Stay in edit mode with the text intact.
-      setConvError(err.message)
-    } finally {
-      setConvSaving(false)
-    }
-  }
-  const handleRemoveConv = async (id) => {
-    setRemovingConvId(id)
-    setConvError(null)
-    try {
-      await deleteIngredientFormConversion(id)
-      await refreshConversions()
-    } catch (err) {
-      setConvError(err.message)
-    } finally {
-      setRemovingConvId(null)
-    }
+  const openMenu = (e, idx) => {
+    menuAnchorRef.current = e.currentTarget
+    setMenuForIdx(idx)
   }
 
-  const handleAddAlias = async () => {
-    const aliasText = newAlias.trim()
-    if (!aliasText) return
-    setAliasSaving(true)
-    setAliasError(null)
-    const collision = resolveIngredientType(aliasText, { types, aliases })
-    if (collision) {
-      setAliasError(
-        collision.id === type.id
-          ? `"${aliasText}" already refers to this type`
-          : `"${aliasText}" already refers to "${collision.name}"`,
-      )
-      setAliasSaving(false)
-      return
-    }
-    try {
-      await createIngredientAlias({
-        alias: aliasText,
-        ingredientTypeId: type.id,
-      })
-      setNewAlias("")
-      await onAliasesChanged()
-    } catch (err) {
-      setAliasError(err.message)
-    } finally {
-      setAliasSaving(false)
-    }
+  // ── Dirty hint ────────────────────────────────────────────────────────
+  const initialSnapshot = useRef(null)
+  if (initialSnapshot.current === null) {
+    initialSnapshot.current = JSON.stringify({
+      name: type.name,
+      categoryId: type.category_id,
+      parentTypeId: type.parent_type_id ?? "",
+      barPriority: type.bar_priority,
+      assumedAvailable: type.assumed_available ?? false,
+      color: type.color ?? "",
+      shape: type.shape ?? "spirit_bottle",
+      aliases: [...initialAliases].sort(),
+      conversions: normConversions(initialConversions),
+    })
   }
+  const isDirty =
+    initialSnapshot.current !==
+    JSON.stringify({
+      name,
+      categoryId,
+      parentTypeId,
+      barPriority,
+      assumedAvailable,
+      color,
+      shape,
+      aliases: [...draftAliases].sort(),
+      conversions: normConversions(draftConversions),
+    })
 
-  const handleDeleteAlias = async (id) => {
-    setDeletingAliasId(id)
-    setAliasError(null)
-    try {
-      await deleteIngredientAlias(id)
-      await onAliasesChanged()
-    } catch (err) {
-      setAliasError(err.message)
-    } finally {
-      setDeletingAliasId(null)
-    }
-  }
-
+  // ── Save (the only DB write this editor makes) ────────────────────────
   const handleSave = async () => {
     setSaving(true)
     setError(null)
@@ -259,36 +259,41 @@ export function IngredientTypeEditor({
       return
     }
     try {
-      const updated = await updateIngredientType(type.id, {
+      await saveIngredientType({
+        typeId: type.id,
         name: result.resolved.name,
         categoryId: result.resolved.category_id,
         parentTypeId: result.resolved.parent_type_id,
         barPriority: result.resolved.bar_priority,
+        assumedAvailable,
         color: result.resolved.color,
         description: result.resolved.description,
         shape,
-        assumedAvailable,
+        aliases: draftAliases,
+        conversions: draftConversions,
       })
-      onSaved(updated)
+      await onSaved()
     } catch (err) {
+      // Draft is left exactly as it is - only the error line appears.
       setError(err.message)
     } finally {
       setSaving(false)
     }
   }
 
+  const parentOptions = [
+    { value: "", label: "No parent type" },
+    ...otherTypes
+      .filter((t) => t.category_id === categoryId)
+      .map((t) => ({ value: t.id, label: t.name })),
+  ]
+
   return (
-    <Card className="p-3.5 flex flex-col gap-2" style={style}>
+    <Card className="p-4 flex flex-col gap-3 max-w-2xl w-full" style={style}>
       <Input label="Name" value={name} onChange={setName} />
+
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-bold text-tx2 font-display uppercase tracking-[0.06em]">
-          Category
-        </label>
-        {/* A bare trigger showing just the current category's name (e.g.
-            "Beer") is genuinely ambiguous without this label - confusingly
-            so whenever an ingredient type's own name happens to match its
-            category's name, as with the "Beer" type under the "Beer"
-            category. */}
+        <label className={LABEL}>Category</label>
         <CategoryPicker
           categories={categories}
           value={categoryId}
@@ -298,81 +303,77 @@ export function IngredientTypeEditor({
           }}
         />
       </div>
-      <Select
-        value={parentTypeId}
-        onChange={setParentTypeId}
-        options={[
-          { value: "", label: "No parent type" },
-          ...otherTypes
-            .filter((t) => t.category_id === categoryId)
-            .map((t) => ({ value: t.id, label: t.name })),
-        ]}
-      />
-      <Select
-        value={barPriority}
-        onChange={setBarPriority}
-        options={BAR_PRIORITIES.map((p) => ({
-          value: p,
-          label: p[0].toUpperCase() + p.slice(1),
-        }))}
-      />
-      {/* Household basic - a catalogue-wide "assume everyone has this" flag
-          (Ice, Salt, plain Sugar, Water). Sits next to bar_priority because
-          both are catalogue-level availability tuning, distinct from the
-          display fields (color/icon) below. Inert until the availability
-          engine starts reading it. */}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <label className={LABEL}>Parent type</label>
+          <Select
+            value={parentTypeId}
+            onChange={setParentTypeId}
+            options={parentOptions}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className={LABEL}>Priority</label>
+          <Select
+            value={barPriority}
+            onChange={setBarPriority}
+            options={BAR_PRIORITIES.map((p) => ({
+              value: p,
+              label: p[0].toUpperCase() + p.slice(1),
+            }))}
+          />
+        </div>
+      </div>
+
       <div className="flex items-center justify-between gap-3 py-1">
         <div>
           <div className="text-[13px] font-body font-medium text-tx">
             Household basic
           </div>
           <div className="text-xs text-tx3 leading-snug">
-            Assume every member has this. It never shows as missing in a recipe
-            and never drives a Buy Next suggestion.
+            Assumed in every bar — never shows as missing or in Buy Next.
           </div>
         </div>
         <OwnedToggle owned={assumedAvailable} onChange={setAssumedAvailable} />
       </div>
-      {/* Color and Icon grouped together, right next to each other - both
-          are "how this type displays," as distinct from the
-          category/hierarchy/priority fields above. */}
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-bold text-tx2 font-display uppercase tracking-[0.06em]">
-          Color
-        </label>
-        <ColorSwatchPicker
-          value={color}
-          onChange={setColor}
-          colors={liquidColors}
-        />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <label className={LABEL}>Color</label>
+          <ColorSwatchPicker
+            value={color}
+            onChange={setColor}
+            colors={liquidColors}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className={LABEL}>Icon</label>
+          <ShapePicker kind="ingredient" value={shape} onChange={setShape} />
+        </div>
       </div>
+
+      {/* Aliases - local draft, committed on Save changes */}
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-bold text-tx2 font-display uppercase tracking-[0.06em]">
-          Icon
-        </label>
-        <ShapePicker kind="ingredient" value={shape} onChange={setShape} />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-bold text-tx2 font-display uppercase tracking-[0.06em]">
-          Aliases
-        </label>
-        {typeAliases.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {typeAliases.map((a) => (
-              <span
-                key={a.id}
-                className="flex items-center gap-1.5 py-1 px-2 bg-surface border border-bdr rounded-sm text-[13px] text-tx"
+        <label className={LABEL}>Aliases</label>
+        {draftAliases.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            {draftAliases.map((a) => (
+              <div
+                key={a}
+                className="flex items-center justify-between gap-2 rounded-sm border border-bdr bg-surface2 pl-2.5 min-h-11"
               >
-                {a.alias}
+                <span className="text-[13px] text-tx break-words min-w-0">
+                  {a}
+                </span>
                 <button
-                  onClick={() => handleDeleteAlias(a.id)}
-                  disabled={deletingAliasId === a.id}
-                  title={`Remove alias "${a.alias}"`}
-                  className="bg-transparent border-none cursor-pointer p-0 text-tx3 text-sm leading-none"
+                  type="button"
+                  onClick={() => removeAliasFromDraft(a)}
+                  className="min-h-11 px-3 text-xs text-coral font-display font-semibold bg-transparent border-none cursor-pointer shrink-0"
                 >
-                  ×
+                  Remove
                 </button>
-              </span>
+              </div>
             ))}
           </div>
         )}
@@ -384,95 +385,94 @@ export function IngredientTypeEditor({
               onChange={setNewAlias}
             />
           </div>
-          <Btn
-            small
-            disabled={aliasSaving || !newAlias.trim()}
-            onClick={handleAddAlias}
+          <button
+            type="button"
+            disabled={!newAlias.trim()}
+            onClick={addAliasToDraft}
+            className={QUIET_BTN}
           >
-            {aliasSaving ? "Adding..." : "+ Add"}
-          </Btn>
+            Add
+          </button>
         </div>
         {aliasError && <p className="text-xs text-coral">{aliasError}</p>}
       </div>
 
-      {/* "Can provide" - directional raw -> prepared conversions whose raw
-          side is this ingredient. Writes immediately, like Aliases above,
-          independent of the type's own Save button. */}
+      {/* Can provide - local draft, committed on Save changes */}
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-bold text-tx2 font-display uppercase tracking-[0.06em]">
-          Can provide
-        </label>
+        <div className="flex items-center justify-between gap-2">
+          <label className={LABEL}>Can provide</label>
+          {!addingConv && (
+            <button
+              type="button"
+              onClick={openAddConv}
+              className="min-h-11 px-2.5 text-xs text-cyan font-display font-semibold bg-transparent border-none cursor-pointer shrink-0"
+            >
+              + Add
+            </button>
+          )}
+        </div>
         <p className="text-xs text-tx3 leading-snug">
-          Owning {type.name} counts toward a recipe that needs one of these
-          prepared forms, shown with your guidance text. One-way — the prepared
-          form never counts as {type.name}.
+          Owning {type.name} can satisfy a recipe that needs the prepared form.
+          One-way.
         </p>
 
-        {myConversions.length > 0 && (
+        {draftConversions.length > 0 && (
           <div className="flex flex-col gap-1.5">
-            {myConversions.map((c) => {
+            {draftConversions.map((c, idx) => {
               const preparedName =
-                typeNameById.get(c.prepared_type_id) ?? "(unknown)"
-              const isEditingRow = editingConvId === c.id
+                typeNameById.get(c.preparedTypeId) ?? "(unknown)"
+              const editing = editingConvIdx === idx
               return (
                 <div
-                  key={c.id}
-                  className="rounded-sm border border-bdr bg-surface p-2 flex flex-col gap-1.5"
+                  key={c.preparedTypeId}
+                  className="rounded-sm border border-bdr bg-surface2 p-2.5 flex items-start justify-between gap-2"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="text-[13px] text-tx font-display font-semibold min-w-0 break-words">
-                      → {preparedName}
-                    </span>
-                    {!isEditingRow && (
-                      <div className="flex gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => startConvEdit(c)}
-                          aria-label={`Edit guidance for ${type.name} provides ${preparedName}`}
-                          className="min-h-11 px-2 text-xs text-cyan font-display font-semibold bg-transparent border-none cursor-pointer"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveConv(c.id)}
-                          disabled={removingConvId === c.id}
-                          aria-label={`Remove: ${type.name} provides ${preparedName}`}
-                          className="min-h-11 px-2 text-xs text-coral font-display font-semibold bg-transparent border-none cursor-pointer disabled:opacity-50"
-                        >
-                          {removingConvId === c.id ? "Removing..." : "Remove"}
-                        </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] text-tx font-display font-semibold break-words">
+                      {preparedName}
+                    </div>
+                    {editing ? (
+                      <div className="mt-1.5 flex flex-col gap-1.5">
+                        <Input
+                          placeholder="e.g. Squeeze fresh juice from Lemon"
+                          value={convEditText}
+                          onChange={setConvEditText}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={!convEditText.trim()}
+                            onClick={commitConvEdit}
+                            className={QUIET_BTN}
+                          >
+                            Done
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingConvIdx(null)}
+                            className={QUIET_BTN}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-tx3 break-words mt-0.5">
+                        {c.guidance || (
+                          <span className="italic">No guidance</span>
+                        )}
                       </div>
                     )}
                   </div>
-                  {isEditingRow ? (
-                    <div className="flex flex-col gap-1.5">
-                      <Input
-                        placeholder="e.g. Squeeze fresh juice from Lemon"
-                        value={convEditText}
-                        onChange={setConvEditText}
-                      />
-                      {convError && (
-                        <p className="text-xs text-coral">{convError}</p>
-                      )}
-                      <div className="flex gap-2">
-                        <Btn
-                          variant="primary"
-                          small
-                          disabled={convSaving || !convEditText.trim()}
-                          onClick={() => handleSaveConvEdit(c.id)}
-                        >
-                          {convSaving ? "Saving..." : "Save"}
-                        </Btn>
-                        <Btn variant="ghost" small onClick={cancelConvEdit}>
-                          Cancel
-                        </Btn>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-tx2 italic break-words">
-                      &quot;{c.guidance}&quot;
-                    </p>
+                  {!editing && (
+                    <button
+                      type="button"
+                      onClick={(e) => openMenu(e, idx)}
+                      aria-label={`Actions for ${preparedName}`}
+                      className="w-11 h-11 -mr-1 -mt-1 shrink-0 rounded-sm text-tx3 flex items-center justify-center cursor-pointer"
+                    >
+                      <IconDots size={18} />
+                    </button>
                   )}
                 </div>
               )
@@ -480,12 +480,8 @@ export function IngredientTypeEditor({
           </div>
         )}
 
-        {convError && !addingConv && editingConvId === null && (
-          <p className="text-xs text-coral">{convError}</p>
-        )}
-
-        {addingConv ? (
-          <div className="rounded-sm border border-cyan/40 bg-surface p-2 flex flex-col gap-1.5">
+        {addingConv && (
+          <div className="rounded-sm border border-cyan/40 bg-surface2 p-2.5 flex flex-col gap-1.5">
             <TypeComboBox
               valueId={newConvPreparedId}
               onPick={setNewConvPreparedId}
@@ -498,44 +494,76 @@ export function IngredientTypeEditor({
               value={newConvGuidance}
               onChange={setNewConvGuidance}
             />
-            {convError && <p className="text-xs text-coral">{convError}</p>}
             <div className="flex gap-2">
-              <Btn
-                variant="primary"
-                small
-                disabled={
-                  convSaving || !newConvPreparedId || !newConvGuidance.trim()
-                }
-                onClick={handleAddConv}
+              <button
+                type="button"
+                disabled={!newConvPreparedId || !newConvGuidance.trim()}
+                onClick={commitAddConv}
+                className={QUIET_BTN}
               >
-                {convSaving ? "Adding..." : "Add"}
-              </Btn>
-              <Btn variant="ghost" small onClick={closeAddConv}>
+                Add
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddingConv(false)}
+                className={QUIET_BTN}
+              >
                 Cancel
-              </Btn>
+              </button>
             </div>
           </div>
-        ) : (
-          <Btn variant="ghost" small onClick={openAddConv}>
-            + Add
-          </Btn>
         )}
       </div>
 
-      {error && <p className="text-xs text-coral">{error}</p>}
-      <div className="flex gap-2">
+      {error && (
+        <p className="text-[13px] text-coral" role="alert">
+          {error}
+        </p>
+      )}
+      {isDirty && !error && <p className="text-xs text-tx3">Unsaved changes</p>}
+
+      <div className="flex items-center gap-2 pt-1">
         <Btn
           variant="primary"
-          small
           disabled={saving || !name.trim() || !categoryId}
           onClick={handleSave}
         >
-          {saving ? "Saving..." : "Save"}
+          {saving ? "Saving..." : "Save changes"}
         </Btn>
-        <Btn variant="ghost" small onClick={onCancel}>
+        <button type="button" onClick={onCancel} className={QUIET_BTN}>
           Cancel
-        </Btn>
+        </button>
       </div>
+
+      <BottomSheet
+        open={menuForIdx !== null}
+        onClose={() => setMenuForIdx(null)}
+        title="Conversion"
+        anchorRef={menuAnchorRef}
+      >
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              startConvEdit(menuForIdx)
+              setMenuForIdx(null)
+            }}
+            className={MENU_ITEM}
+          >
+            Edit guidance
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              removeConvAt(menuForIdx)
+              setMenuForIdx(null)
+            }}
+            className={`${MENU_ITEM} text-coral`}
+          >
+            Remove
+          </button>
+        </div>
+      </BottomSheet>
     </Card>
   )
 }

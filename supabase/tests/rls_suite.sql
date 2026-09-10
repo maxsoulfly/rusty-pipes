@@ -929,6 +929,139 @@ begin
 end;
 $$;
 
+-- ── save_ingredient_type() ──────────────────────────────────────────────
+-- Atomic save behind the Ingredient Type editor (20260910170000). One
+-- transaction: the type row + its full alias set + its full "Can provide"
+-- set. SECURITY INVOKER - the ingredient_types / ingredient_aliases /
+-- ingredient_form_conversions "admin writes" (is_admin_or_moderator) RLS
+-- policies still gate every statement; a member's call updates zero type
+-- rows and raises insufficient_privilege before anything else runs. Key
+-- property under test: a failure anywhere (here a conversion that trips the
+-- inverse-pair trigger) rolls the WHOLE save back - name, aliases and
+-- conversions are all left as they were.
+
+do $$
+declare
+  f record;
+  v_cat uuid;
+  v_raw uuid;
+  v_prep uuid;
+  v_name text;
+  v_alias_count int;
+  v_conv_count int;
+  n int;
+begin
+  perform set_config('role', (select name from rls_original_role), true);
+  select * into f from rls_fixture_ids;
+  select category_id into v_cat from public.ingredient_types where id = f.type_a_id;
+
+  -- Fixture rows, created as the real (superuser) connection - RLS bypass is
+  -- fine here, it's setup, not the thing under test. v_prep already provides
+  -- v_raw, so any later save that adds v_raw -> v_prep is the inverse and
+  -- must be rejected.
+  insert into public.ingredient_types (category_id, name, bar_priority, recommend_by_default)
+    values (v_cat, 'RLS_TEST sit raw', 'common', false) returning id into v_raw;
+  insert into public.ingredient_types (category_id, name, bar_priority, recommend_by_default)
+    values (v_cat, 'RLS_TEST sit prepared', 'common', false) returning id into v_prep;
+  insert into public.ingredient_form_conversions (raw_type_id, prepared_type_id, guidance)
+    values (v_prep, v_raw, 'RLS_TEST existing inverse');
+  insert into public.ingredient_aliases (ingredient_type_id, alias)
+    values (v_raw, 'RLS_TEST sit alias one');
+
+  -- ADMIN: a valid save replaces the type row + the whole alias set
+  perform pg_temp.set_identity('authenticated', f.admin_id);
+  perform public.save_ingredient_type(
+    v_raw,
+    jsonb_build_object('name','RLS_TEST sit raw v2','category_id',v_cat,
+      'parent_type_id',null,'bar_priority','niche','assumed_available',false,
+      'color',null,'description',null,'shape','spirit_bottle'),
+    jsonb_build_array('RLS_TEST sit alias A','RLS_TEST sit alias B'),
+    '[]'::jsonb
+  );
+  select name into v_name from public.ingredient_types where id = v_raw;
+  perform pg_temp.assert(v_name = 'RLS_TEST sit raw v2', 'save_ingredient_type: admin save updates the type row');
+  select count(*) into v_alias_count from public.ingredient_aliases where ingredient_type_id = v_raw;
+  perform pg_temp.assert(v_alias_count = 2, 'save_ingredient_type: admin save replaces the whole alias set');
+  perform pg_temp.assert(
+    not exists (select 1 from public.ingredient_aliases where ingredient_type_id = v_raw and alias = 'RLS_TEST sit alias one'),
+    'save_ingredient_type: an alias absent from the payload is removed');
+
+  -- ADMIN: a later save adds a valid conversion (v_raw -> type_b)
+  perform public.save_ingredient_type(
+    v_raw,
+    jsonb_build_object('name','RLS_TEST sit raw v2','category_id',v_cat,
+      'parent_type_id',null,'bar_priority','niche','assumed_available',false,
+      'color',null,'description',null,'shape','spirit_bottle'),
+    jsonb_build_array('RLS_TEST sit alias A','RLS_TEST sit alias B'),
+    jsonb_build_array(jsonb_build_object('prepared_type_id', f.type_b_id, 'guidance', 'RLS_TEST guidance'))
+  );
+  select count(*) into v_conv_count from public.ingredient_form_conversions where raw_type_id = v_raw;
+  perform pg_temp.assert(v_conv_count = 1, 'save_ingredient_type: admin save writes the conversion set');
+
+  -- ATOMICITY: a save whose conversion list contains the inverse of an
+  -- existing pair must fail whole. The post-checks (name / aliases /
+  -- conversions / assumed_available all unchanged) are the real assertion;
+  -- the handler only keeps the block running.
+  begin
+    perform public.save_ingredient_type(
+      v_raw,
+      jsonb_build_object('name','RLS_TEST sit SHOULD NOT STICK','category_id',v_cat,
+        'parent_type_id',null,'bar_priority','common','assumed_available',true,
+        'color',null,'description',null,'shape','spirit_bottle'),
+      jsonb_build_array('RLS_TEST sit alias C'),
+      jsonb_build_array(jsonb_build_object('prepared_type_id', v_prep, 'guidance', 'inverse - rejected'))
+    );
+    perform pg_temp.assert(false, 'save_ingredient_type: a save containing an inverse conversion should be rejected');
+  exception when others then
+    perform pg_temp.assert(true, 'save_ingredient_type: a save containing an inverse conversion is rejected');
+  end;
+  select name into v_name from public.ingredient_types where id = v_raw;
+  perform pg_temp.assert(v_name = 'RLS_TEST sit raw v2', 'save_ingredient_type: a failed save leaves the type name unchanged (rolled back)');
+  select count(*) into v_alias_count from public.ingredient_aliases where ingredient_type_id = v_raw;
+  perform pg_temp.assert(
+    v_alias_count = 2 and not exists (select 1 from public.ingredient_aliases where ingredient_type_id = v_raw and alias = 'RLS_TEST sit alias C'),
+    'save_ingredient_type: a failed save leaves the alias set unchanged (rolled back)');
+  select count(*) into v_conv_count from public.ingredient_form_conversions where raw_type_id = v_raw;
+  perform pg_temp.assert(v_conv_count = 1, 'save_ingredient_type: a failed save leaves the conversion set unchanged (rolled back)');
+  select count(*) into n from public.ingredient_types where id = v_raw and assumed_available = true;
+  perform pg_temp.assert(n = 0, 'save_ingredient_type: a failed save does not flip assumed_available');
+
+  -- MEMBER: denied, nothing changes
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  begin
+    perform public.save_ingredient_type(
+      v_raw,
+      jsonb_build_object('name','RLS_TEST sit member hijack','category_id',v_cat,
+        'parent_type_id',null,'bar_priority','common','assumed_available',false,
+        'color',null,'description',null,'shape','spirit_bottle'),
+      '[]'::jsonb, '[]'::jsonb
+    );
+    perform pg_temp.assert(false, 'save_ingredient_type: a member call should be denied');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'save_ingredient_type: a member cannot save (RLS on ingredient_types update)');
+  end;
+  select name into v_name from public.ingredient_types where id = v_raw;
+  perform pg_temp.assert(v_name = 'RLS_TEST sit raw v2', 'save_ingredient_type: a denied member call changed nothing');
+
+  -- ANON: no EXECUTE grant
+  perform pg_temp.set_identity('anon', null);
+  begin
+    perform public.save_ingredient_type(v_raw, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb);
+    perform pg_temp.assert(false, 'save_ingredient_type: anon should have no EXECUTE grant');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'save_ingredient_type: anon cannot execute it');
+  end;
+
+  -- cleanup (the final rollback also covers this; explicit keeps later
+  -- blocks' `select ... from ingredient_types` free of these scratch rows)
+  perform set_config('role', (select name from rls_original_role), true);
+  delete from public.ingredient_form_conversions
+    where raw_type_id in (v_raw, v_prep) or prepared_type_id in (v_raw, v_prep);
+  delete from public.ingredient_aliases where ingredient_type_id in (v_raw, v_prep);
+  delete from public.ingredient_types where id in (v_raw, v_prep);
+end;
+$$;
+
 -- ── products ─────────────────────────────────────────────────────────────
 -- Shared catalog: any member can read and insert (their own created_by),
 -- but only admin can update/delete - unlike the lookup tables, ordinary
@@ -1446,7 +1579,7 @@ end;
 $$;
 
 do $$
-declare f record; n int; affected int; v_id uuid;
+declare f record; n int; affected int; v_id uuid; v_name text;
 begin
   select * into f from rls_fixture_ids;
   perform pg_temp.set_identity('authenticated', f.member_other_id);
@@ -1534,6 +1667,32 @@ begin
     delete from public.ingredient_form_conversions where id = v_id;
     get diagnostics affected = row_count;
     perform pg_temp.assert(affected = 1, 'moderator: can insert/update/delete an ingredient form conversion (Can provide)');
+  end;
+
+  -- save_ingredient_type(): a moderator can run the atomic editor save (its
+  -- statements hit ingredient_types / ingredient_aliases /
+  -- ingredient_form_conversions, all is_admin_or_moderator() writes -
+  -- covered individually above; this confirms the wrapper too). Uses a
+  -- throwaway type so no real row's fields are touched.
+  declare
+    v_sit_type uuid;
+  begin
+    insert into public.ingredient_types (category_id, name, bar_priority, recommend_by_default)
+      values (f.category_id, 'RLS_TEST mod sit type', 'common', false)
+      returning id into v_sit_type;
+    perform public.save_ingredient_type(
+      v_sit_type,
+      jsonb_build_object('name', 'RLS_TEST mod sit type v2', 'category_id', f.category_id,
+        'parent_type_id', null, 'bar_priority', 'niche', 'assumed_available', false,
+        'color', null, 'description', null, 'shape', 'spirit_bottle'),
+      jsonb_build_array('RLS_TEST mod sit alias'), '[]'::jsonb
+    );
+    select name into v_name from public.ingredient_types where id = v_sit_type;
+    perform pg_temp.assert(v_name = 'RLS_TEST mod sit type v2', 'moderator: can run save_ingredient_type()');
+    select count(*) into n from public.ingredient_aliases where ingredient_type_id = v_sit_type;
+    perform pg_temp.assert(n = 1, 'moderator: save_ingredient_type() wrote the alias set as the moderator');
+    delete from public.ingredient_aliases where ingredient_type_id = v_sit_type;
+    delete from public.ingredient_types where id = v_sit_type;
   end;
 end;
 $$;
