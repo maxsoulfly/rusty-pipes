@@ -1503,6 +1503,38 @@ begin
   delete from public.ingredient_types where id = v_id;
   get diagnostics affected = row_count;
   perform pg_temp.assert(affected = 1, 'moderator: can insert/update/delete an ingredient type');
+
+  -- ingredient_form_conversions: the write policy was widened from admin-only
+  -- to is_admin_or_moderator() (20260910160000) when "Can provide"
+  -- management moved into the Ingredient Type editor, which moderators use.
+  -- Read stays members-only; ordinary-member writes are still denied (that
+  -- assertion lives in the dedicated ingredient_form_conversions block
+  -- above). Pick a raw/prepared pair that isn't already wired up so the
+  -- unique + inverse-trigger constraints don't get in the way.
+  declare
+    v_fc_raw uuid;
+    v_fc_prep uuid;
+  begin
+    select id into v_fc_raw from public.ingredient_types
+      where id not in (
+        select raw_type_id from public.ingredient_form_conversions
+        union select prepared_type_id from public.ingredient_form_conversions)
+      order by name limit 1;
+    select id into v_fc_prep from public.ingredient_types
+      where id <> v_fc_raw
+        and id not in (
+          select raw_type_id from public.ingredient_form_conversions
+          union select prepared_type_id from public.ingredient_form_conversions)
+      order by name limit 1;
+    insert into public.ingredient_form_conversions (raw_type_id, prepared_type_id, guidance)
+      values (v_fc_raw, v_fc_prep, 'RLS_TEST mod conversion')
+      returning id into v_id;
+    update public.ingredient_form_conversions
+      set guidance = 'RLS_TEST mod conversion edited' where id = v_id;
+    delete from public.ingredient_form_conversions where id = v_id;
+    get diagnostics affected = row_count;
+    perform pg_temp.assert(affected = 1, 'moderator: can insert/update/delete an ingredient form conversion (Can provide)');
+  end;
 end;
 $$;
 

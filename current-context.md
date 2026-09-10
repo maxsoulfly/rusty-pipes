@@ -29,20 +29,21 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
    (Note: item 17's "Stage 1 done, mobile verification pending" / "admin type editing moved to an `IngredientDetailScreen` overflow action" text predates the My Bar redesign's later stages — see the corrected current state in item 18's plan doc: inline admin edit pencils are gone, editing now goes through Admin → Ingredient Types via the ⋯ menu.)
 
-18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms (Concept 2) engine+data shipped 2026-09-10. A revised forward plan for Ingredient Forms management + two new mechanisms (Suggested substitutes, Linked cocktail variations) is in `docs/plans/substitutes-and-variations.md` (2026-09-10, planning only — awaiting user review of decisions D1–D6). Homemade Preparations NOT started (direction agreed only, stays in the household-basics plan doc).** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
+18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms (Concept 2) engine+data shipped; management moved into the Ingredient Type editor and the standalone tab retired (Stage A of `docs/plans/substitutes-and-variations.md`, DONE 2026-09-10). That doc also holds the approved design for two new mechanisms — Suggested substitutes (Stage B) and Linked cocktail variations (Stage C) — NOT started. Homemade Preparations NOT started (direction agreed only, stays in the household-basics plan doc).** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
 
 Each numbered step is a development chunk boundary for this file.
 
 ## Exact next action (2026-09-10)
 
 1. **Household Basics is COMPLETE — Stages 1–3, closed out 2026-09-10.** See the "Household Basics Stage 3 — CLOSE-OUT" chunk below (two non-blocking limits: Home "Edit list" visual check; offline-save handling).
-2. **NEXT ACTION = the user reviews `docs/plans/substitutes-and-variations.md`** (new, 2026-09-10, planning only — no code, no live-data change this turn) and answers open decisions **D1–D6**. That doc revises Ingredient Forms management ("Can provide" moves into the Ingredient Type editor; the standalone "Ingredient forms" tab is retired; the blank-guidance-autofill bug is fixed — new guidance starts blank with a placeholder, existing rows untouched) and designs two new mechanisms — **Suggested substitutes** (ingredient-level curated, suggestion-only unless promoted per recipe) and **Linked cocktail variations** (`recipe_relationships` table; a variation is its own recipe with its own availability). On approval, implementation starts at Stage A (no migration).
-   - **Confirmed by the user (2026-09-10):** Lemon→Lemon Juice works with guidance; Lime Juice does NOT satisfy whole Lime; the reworked Ingredient Forms admin layout is comfortable; editing conversion guidance saves and persists after reload. **Bug confirmed + fix approved:** guidance autofilled "Squeeze fresh juice from White Sugar" — will start blank + placeholder.
-   - **Open decisions (in the plan doc):** D1 general substitutions are suggestion-only (pivotal); D2 recipe-scoped subs reuse `recipe_component_alternatives` + a `note` column; D3 who curates catalogue-level "Can provide"/"substitutes" — admin only vs admin+moderator; D4 variation link needs no approval from the original's owner; D5 when to show the "Variations" block; D6 how many suggestion chips before "+N more".
-   - Concept 2's engine + data are unchanged and stay shipped (`computeAvail` 5th arg `formConversions`; `ingredient_form_conversions` table, migrations `20260910140000` + `20260910150000`).
+2. **`docs/plans/substitutes-and-variations.md` — decisions D1–D6 APPROVED 2026-09-10; Stage A DONE + pushed. Stages B and C not started.**
+   - **Decisions:** D1 general catalogue substitutes are suggestion-only; recipe-specific alternatives affect availability; owned suggestions shown first. D2 recipe-scoped subs reuse `recipe_component_alternatives` + a new optional `note`. D3 admins AND moderators manage "Can provide" + general substitutes, **enforced in the DB** (RLS), member access not broadened. D4 the original's owner does not control other members' variations; misleading links stay a moderation matter. D5 show all variations the viewer may see, makeable first, clear attribution. D6 3 suggestion chips before "+N more".
+   - **Stage A (this turn) — done:** guidance-autofill removed (blank + `placeholder="e.g. Squeeze fresh juice from Lemon"`; existing saved guidance untouched). "Can provide" moved into `IngredientTypeEditor` (scoped to the edited ingredient as the raw side; view/add/edit-guidance/remove, immediate writes like aliases, text kept on failure, inline errors). `TypeComboBox` extracted to `src/components/admin/TypeComboBox.jsx`. Standalone "Ingredient forms" tab + its `AdminScreen` `TABS` entry/import/render removed (no deep link ever existed). Migration `20260910160000_ingredient_form_conversions_moderator_writes.sql` — write policy predicate `is_admin()` → `public.is_admin_or_moderator()` (members-read unchanged, no GRANT change, no new function). Engine / directionality / one-direction trigger / inventory / existing conversion rows unchanged. `pnpm test` 242/242, build clean (168 modules), isolated-LF `oxfmt --check` clean (4 JS files), RLS suite extended (moderator write allowed; member-write-denied still holds) and passes, `db advisors --type security` no new finding. **Not verified here (no browser tooling):** the on-screen editor layout / add-edit-remove flow in the running app.
+   - **Reused confirmed checks only:** Lemon supplies Lemon Juice; juice does not supply whole Lime; the compact layout is more comfortable; guidance edits persist after reload. No unreported mobile checks claimed.
+   - **Next:** Stage B (Suggested substitutes — M1 `note` column + M2 `ingredient_substitutions` with `is_admin_or_moderator()` write from its first migration) then Stage C (Linked variations — `recipe_relationships`). On the user's go-ahead only.
 3. Homemade Preparations (Concept 3) stays "agreed direction, not started" — separate plan doc, untouched. The substitutes/variations plan notes only where it shares the recipe-row sub-label slot. Do NOT start it.
 4. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files (and when a changed file needs reformatting, run `oxfmt` on the isolated LF copy and hand-apply the wrap changes back). Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
-4. **Migration count (2026-09-10): 55 files on disk, 55 applied to the linked project, 0 pending.** Was 53 after Stage 3; +`20260910140000_ingredient_form_conversions` +`20260910150000_ingredient_form_conversions_policy_role_scope` (Concept 2) = 55. Both pushed via `supabase db push --linked` (clean, no history mismatch this session). History intact (unique ordered timestamps, no gaps/dupes). **The Ingredient Forms admin UX rework (2026-09-10) added no migration** — it only touches `src/components/admin/IngredientFormsTab.jsx`.
+4. **Migration count (2026-09-10): 56 files on disk, 56 applied to the linked project, 0 pending.** Was 53 after Stage 3; +`20260910140000_ingredient_form_conversions` +`20260910150000_..._policy_role_scope` (Concept 2) +`20260910160000_ingredient_form_conversions_moderator_writes` (substitutes-and-variations Stage A — write policy `is_admin()` → `is_admin_or_moderator()`) = 56. All pushed via `supabase db push --linked` (clean, no history mismatch this session). History intact (unique ordered timestamps, no gaps/dupes).
 
 5. **Migration count reconciled 2026-09-09.** 48 migration files on disk, 48 ledger rows, every one `local == remote`, 0 pending. The Speed Rack chunk's "47/47" was correct for its time (46 synced + `20260906130000`); Stage 1's chunk originally said "47/47" which was a **miscount** — with `20260909120000` it is **48/48**. Migration history itself is intact (unique ordered timestamps, no gaps, no dupes) — nothing was repaired, only the recorded count corrected.
 
@@ -67,7 +68,69 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## Last planning chunk (Substitutes & Variations proposal — 2026-09-10, planning only, no code / no live-data change)
+## Last completed chunk (Substitutes & Variations — Stage A: "Can provide" into the ingredient editor + tab retired, 2026-09-10, committed + pushed)
+
+**Decisions D1–D6 approved by the user** (see the "Exact next action" item 2
+above and `docs/plans/substitutes-and-variations.md` → "Decisions"). Stages
+B (Suggested substitutes) and C (Linked variations) are **not started**.
+
+**Stage A — shipped:**
+- **Guidance autofill removed.** The old standalone tab auto-filled the
+  add-conversion guidance box with "Squeeze fresh juice from &lt;raw&gt;"
+  (nonsense for e.g. White Sugar). The new add UI starts **blank** with
+  `placeholder="e.g. Squeeze fresh juice from Lemon"`. Existing saved
+  guidance is untouched — the edit path seeds from the stored value.
+- **"Can provide" moved into `IngredientTypeEditor.jsx`.** New section after
+  Aliases, scoped to the ingredient being edited as the **raw** side. View /
+  add / edit-guidance / remove, each writing **immediately** through the
+  existing `src/services/ingredientForms.js` (same immediate-write pattern
+  as inline alias management), independent of the type's own Save button.
+  Entered text is preserved on failure with the error shown inline. The add
+  picker excludes the type itself, already-linked prepared types, and any
+  type that already provides this one (the inverse the DB trigger rejects).
+  New props on the editor: `formConversions`, `onConversionsChanged` (wired
+  from `TypesTab` as `catalog.formConversions` / `catalog.refetch`, mirroring
+  the alias props).
+- **`TypeComboBox` extracted** from the old tab into
+  `src/components/admin/TypeComboBox.jsx` (collapsed trigger → inline search
+  + bounded `max-h-56 overflow-y-auto` list → collapse on pick; 44px
+  targets; `label` now optional; `placeholder` prop added).
+- **Standalone "Ingredient forms" admin tab retired.**
+  `src/components/admin/IngredientFormsTab.jsx` deleted; `AdminScreen`
+  `TABS` entry `{ id: "forms", … }`, its import, and its render guard
+  removed. Grep confirms no other reference and no `?tab=forms` deep link
+  ever existed.
+- **Migration `20260910160000_ingredient_form_conversions_moderator_writes.sql`**
+  — `alter policy "ingredient_form_conversions: admin writes"` predicate
+  `is_admin()` → `public.is_admin_or_moderator()` (D3: admins **and**
+  moderators manage "Can provide", enforced in the DB). Members-read policy
+  untouched → ordinary members stay read-only. No GRANT change (the table
+  already carries the blanket `authenticated` SELECT/INSERT/UPDATE/DELETE
+  every table has; RLS is the gate). No new function
+  (`is_admin_or_moderator()` exists since `20260825100000`). Policy name
+  kept; comment updated.
+- **Unchanged:** `computeAvail` and its `formConversions` tier, the
+  `forbid_inverse_form_conversion()` trigger, the CHECK/UNIQUE constraints,
+  `user_inventory`, and all existing conversion rows (Lemon→Lemon Juice,
+  Lime→Lime Juice still live).
+
+**Verification:** `corepack pnpm@10.34.3 test` **242/242** (no domain
+change). `pnpm build` clean (168 modules — one file deleted, one added).
+Isolated-LF `oxfmt --check` clean on the 4 changed/new JS files (no repo-wide
+format run). Migration pushed via `supabase db push --linked` (clean). **RLS
+suite** extended — the moderator-role section now also asserts a moderator
+can insert/update/delete a form conversion; the dedicated
+`ingredient_form_conversions` block's "a member cannot insert/delete"
+assertions still pass. Full suite passes (exit 0, no `FAIL:`). Live policy
+re-checked: writes `is_admin_or_moderator()`, reads `is_member()`.
+`supabase db advisors --type security` — no new finding (policy-only change).
+**Not verified here:** no browser tooling in this sandbox — the on-screen
+editor layout (desktop / narrow phone) and the add/edit/remove flow in the
+running app are unverified. Reused confirmed checks only (Lemon supplies
+Lemon Juice; juice does not supply whole Lime; compact layout comfortable;
+guidance edits persist after reload). `project.md` unchanged.
+
+### Earlier this day — Substitutes & Variations proposal (planning only, no code)
 
 **New doc: `docs/plans/substitutes-and-variations.md`.** Audited live schema
 + code for all three areas before proposing:

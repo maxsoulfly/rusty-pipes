@@ -38,7 +38,6 @@ import { fetchAllUsers } from "@/services/membership"
 import { CatalogTab } from "@/components/admin/CatalogTab"
 import { ClassicRecipesTab } from "@/components/admin/ClassicRecipesTab"
 import { ImportTab } from "@/components/admin/ImportTab"
-import { IngredientFormsTab } from "@/components/admin/IngredientFormsTab"
 import { InvitesTab } from "@/components/admin/InvitesTab"
 import { ModerationTab } from "@/components/admin/ModerationTab"
 import { OnboardingTab } from "@/components/admin/OnboardingTab"
@@ -63,7 +62,6 @@ const TABS = [
   { id: "catalog", label: "Catalog" },
   { id: "types", label: "Ingredient Types" },
   { id: "onboarding", label: "Onboarding ingredients", adminOnly: true },
-  { id: "forms", label: "Ingredient forms", adminOnly: true },
   { id: "import", label: "Batch Import" },
   { id: "requests", label: "Requests" },
   { id: "users", label: "Users", adminOnly: true },
@@ -817,8 +815,6 @@ export default function AdminScreen() {
         {tab === "catalog" && <CatalogTab catalog={catalog} />}
 
         {tab === "onboarding" && isAdmin && <OnboardingTab catalog={catalog} />}
-
-        {tab === "forms" && isAdmin && <IngredientFormsTab catalog={catalog} />}
 
         {tab === "types" && (
           <TypesTab

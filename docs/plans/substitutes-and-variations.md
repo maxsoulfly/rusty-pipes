@@ -1,16 +1,17 @@
 # Suggested Substitutes & Linked Cocktail Variations
 
-**Planning document — 2026-09-10. Not started. Review before implementation.**
+**Planning document — 2026-09-10. Decisions D1–D6 approved 2026-09-10.
+Stage A DONE + pushed 2026-09-10. Stages B and C not started.**
 
 Covers three related pieces of "what else can satisfy or stand in for a
 recipe":
 
-1. **Ingredient forms ("Can provide")** — already shipped as Concept 2 in
+1. **Ingredient forms ("Can provide")** — shipped as Concept 2 in
    `docs/plans/household-basics-ingredient-forms-preparations.md`; this doc
-   revises *where it is managed* and fixes one bug. The table, engine, and
-   one-direction rule are unchanged.
-2. **Suggested substitutes** — new.
-3. **Linked cocktail variations** — new.
+   revised *where it is managed* (**Stage A, done**) and fixed one bug. The
+   table, engine, and one-direction rule are unchanged.
+2. **Suggested substitutes** — new. Not started (Stage B).
+3. **Linked cocktail variations** — new. Not started (Stage C).
 
 **Homemade Preparations (Concept 3) stays in the other plan doc, separate and
 unstarted.** This doc only notes where it touches the same UI slot so it can
@@ -178,7 +179,7 @@ cocktails where a curator said so.
 
 ---
 
-## Part 1 — Ingredient forms: "Can provide" moves into the ingredient type editor
+## Part 1 — Ingredient forms: "Can provide" moves into the ingredient type editor — DONE (see "Stage A — DONE" below for what actually shipped)
 
 **No schema change. No engine change.** `ingredient_form_conversions`, the
 trigger, RLS, and `computeAvail`'s tier 2 all stay as they are.
@@ -281,11 +282,11 @@ ingredient_substitutions (
 
 ### 2c. RLS
 
-- `ingredient_substitutions`: `is_member()` read; **write =** see open
-  decision D3 (admin-only, to match `ingredient_form_conversions`, or
-  admin+moderator, to match the editor's home). Policies scoped
-  `to authenticated` from the start (the `to public` slip cost us a
-  follow-up migration twice already).
+- `ingredient_substitutions`: `is_member()` read; **write =
+  `is_admin_or_moderator()`** (D3, approved) — in the table's first
+  migration, not a follow-up. Policies scoped `to authenticated` from the
+  start (the `to public` slip cost us a follow-up migration twice already).
+  Ordinary-member access is not broadened.
 - `recipe_component_alternatives.note`: no policy change — the existing
   `recipe_is_editable` insert/delete already governs the row. (Editing a
   note = delete + re-insert, like every other field on that table.)
@@ -486,37 +487,84 @@ are independent enough to ship one at a time.
 
 ---
 
-## Open decisions — need your answer before implementation
+## Decisions — approved 2026-09-10
 
-- **D1 — General substitutions are suggestion-only.** Confirm: a
+- **D1 — General catalogue substitutes are suggestions only.** A
   catalogue-level "X can stand in for Y" never changes a recipe's
-  Perfect/Almost/Unavailable state. It only *counts* toward availability
-  when a recipe editor explicitly attaches it to a specific component of a
-  specific recipe. (This is the reading of your rum example; it's the
-  pivotal design fork.)
-- **D2 — Recipe-scoped substitutions reuse `recipe_component_alternatives`**
-  (with a new optional `note`), rather than a second parallel table. OK?
-- **D3 — Who curates catalogue-level "Can provide" and "Suggested
-  substitutes"?** Admin only (matches `ingredient_form_conversions` today),
-  or admin **+ moderator** (matches the ingredient type editor they live in,
-  and the Household-basic toggle already there)? Recommend admin + moderator
-  for consistency with the editor's home.
-- **D4 — Variation linking needs no approval from the original's owner.** A
-  variation one-way-links itself; the original just displays it (only to
-  viewers already allowed to see the variation). OK, or should the
-  original's owner be able to hide/curate links on their recipe?
-- **D5 — When to show the "Variations" block.** Always, or only when the
-  current recipe isn't already `Perfect` for the viewer (so it reads as a
-  fallback)? Recommend: show whenever ≥1 visible variation exists, but sort
-  makeable ones first and collapse the rest.
-- **D6 — Suggestion count.** How many catalogue suggestion chips on a
-  missing row before "+N more"? Recommend 3.
+  Perfect/Almost/Unavailable state. Recipe-specific alternatives
+  (`recipe_component_alternatives`) do affect availability. **On a missing
+  row, show owned/available suggestions first**, then the rest.
+- **D2 — APPROVED.** Recipe-scoped substitutions reuse
+  `recipe_component_alternatives` with a new optional `note` column — no
+  second parallel availability path.
+- **D3 — Admins AND moderators** manage "Can provide" and general
+  substitutes. **Enforce in the database as well as the UI** — the RLS write
+  policy is the real gate, the tab/section visibility is secondary. Do not
+  broaden ordinary-member access. (Stage A already did this for
+  `ingredient_form_conversions` via `20260910160000`; Stage B's
+  `ingredient_substitutions` table ships with the same `is_admin_or_moderator()`
+  write policy from its first migration.)
+- **D4 — The original's owner does not control other members' variations.** A
+  variation one-way-links itself; the original just displays every linked
+  variation the viewer is permitted to see, with clear attribution.
+  **Misleading links stay a moderation matter** (a moderator can act on a
+  bad link/recipe), not something the original owner curates.
+- **D5 — Show all linked variations the viewer may see**, makeable ones
+  first, then by name; keep clear per-variation attribution and each
+  variation's own availability badge. (Collapsing the long tail is a UI
+  detail, not a gate.)
+- **D6 — 3** catalogue suggestion chips on a missing row before "+N more".
+
+---
+
+## Stage A — DONE 2026-09-10 (committed + pushed)
+
+- **Guidance autofill removed.** The add-conversion guidance field starts
+  **blank** with `placeholder="e.g. Squeeze fresh juice from Lemon"`. No
+  more "Squeeze fresh juice from &lt;anything&gt;" auto-text. Existing saved
+  guidance is untouched (the edit path seeds from the stored value).
+- **"Can provide" moved into `IngredientTypeEditor`**, scoped to the
+  ingredient being edited (always the *raw* side). View / add / edit
+  guidance / remove, all writing immediately through the existing
+  `src/services/ingredientForms.js` — same pattern as inline alias
+  management on that form, independent of the type's own Save button.
+  Save/Cancel are explicit per action; entered text is kept on failure with
+  the error shown inline. The picker excludes the type itself, already-linked
+  prepared types, and any type that already provides this one (the inverse
+  the DB trigger would reject).
+- **`TypeComboBox` extracted** to `src/components/admin/TypeComboBox.jsx`
+  (was inline in the old tab) — collapsed trigger → inline search + bounded
+  scrollable list → collapse on pick; 44px targets; `label` now optional.
+- **Standalone "Ingredient forms" admin tab retired.**
+  `src/components/admin/IngredientFormsTab.jsx` deleted; the `AdminScreen`
+  `TABS` entry `{ id: "forms", … }`, its import, and its render guard
+  removed. No other navigation referenced it (no deep link ever existed).
+- **Migration `20260910160000_ingredient_form_conversions_moderator_writes.sql`**
+  — the write policy predicate widened from `is_admin()` to
+  `public.is_admin_or_moderator()` (per D3); members-read policy untouched;
+  no GRANT change (table already carries the blanket `authenticated`
+  privileges every table has — RLS is the gate); no new function. Policy
+  name kept, comment updated.
+- **Engine, directionality, one-direction trigger, inventory, and all
+  existing conversion rows are unchanged.**
+- **Verified:** `corepack pnpm@10.34.3 test` 242/242 (no domain change);
+  `pnpm build` clean (168 modules); isolated-LF `oxfmt --check` clean on the
+  4 changed/new JS files. RLS suite extended (moderator can
+  insert/update/delete a form conversion; the dedicated block's
+  member-write-denied assertions still hold) — **full suite passes**.
+  `supabase db advisors --type security` — no new finding.
+- **Not verified here** (no browser tooling in this sandbox): the on-screen
+  editor layout on desktop / a narrow phone, and the add/edit/remove flow in
+  the running app. Reused confirmed checks only: Lemon supplies Lemon Juice;
+  juice does not supply whole Lime; the compact layout is more comfortable;
+  guidance edits persist after reload.
 
 ---
 
 ## Exact next action
 
-**Review this proposal.** Answer D1–D6 (D1, D4, D5 are the ones that change
-scope; the rest have a recommended default). On approval, implementation
-starts at **Stage A** (the no-migration Ingredient Forms tidy-up), then B,
-then C. Homemade Preparations stays untouched.
+**Stages B and C are not started.** On the go-ahead, Stage B (Suggested
+substitutes — M1 `note` column on `recipe_component_alternatives` + M2
+`ingredient_substitutions` table, `is_admin_or_moderator()` write from the
+first migration) then Stage C (Linked variations — `recipe_relationships`).
+Homemade Preparations stays untouched.

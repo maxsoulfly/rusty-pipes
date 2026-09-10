@@ -1,5 +1,6 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { ShapePicker } from "@/components/admin/ShapePicker"
+import { TypeComboBox } from "@/components/admin/TypeComboBox"
 import {
   Btn,
   Card,
@@ -19,6 +20,11 @@ import {
   deleteIngredientAlias,
   updateIngredientType,
 } from "@/services/catalog"
+import {
+  createIngredientFormConversion,
+  deleteIngredientFormConversion,
+  updateIngredientFormConversionGuidance,
+} from "@/services/ingredientForms"
 
 // Shared "edit an existing ingredient type" form - used by both My Bar's
 // inline admin edit pencil and Admin's Ingredient Types tab, so the one real
@@ -27,17 +33,23 @@ import {
 // Aliases live here too (not a separate admin-wide list) per user request -
 // managing "Sec -> Triple Sec" reads more naturally next to Triple Sec's own
 // name/category/color than in a global table of every alias for every type.
-// Only possible on Edit, not the Single Ingredient add form: an alias needs
-// a real ingredient_type_id to attach to, which doesn't exist until the type
-// itself has been created.
+// "Can provide" (ingredient_form_conversions) lives here for the same reason
+// (2026-09-10) - it replaced a standalone admin tab. Each row is a
+// directional raw -> prepared conversion whose raw side is this type, with
+// the guidance line members see on the recipe. Adds/edits/removals write
+// immediately (like aliases), independent of the type's own Save button.
+// Both aliases and Can-provide are Edit-only: the row must already exist to
+// attach to.
 export function IngredientTypeEditor({
   type,
   categories,
   types,
   aliases,
   liquidColors,
+  formConversions,
   onSaved,
   onAliasesChanged,
+  onConversionsChanged,
   onCancel,
   style,
 }) {
@@ -61,6 +73,122 @@ export function IngredientTypeEditor({
   const [deletingAliasId, setDeletingAliasId] = useState(null)
 
   const otherTypes = types.filter((t) => t.id !== type.id)
+
+  // ── "Can provide" (ingredient_form_conversions, raw side = this type) ──
+  const conversions = formConversions ?? []
+  const refreshConversions = onConversionsChanged ?? (() => {})
+  const typeNameById = useMemo(
+    () => new Map(types.map((t) => [t.id, t.name])),
+    [types],
+  )
+  const aliasesByTypeId = useMemo(() => {
+    const m = new Map()
+    for (const a of aliases ?? []) {
+      if (!m.has(a.ingredient_type_id)) m.set(a.ingredient_type_id, [])
+      m.get(a.ingredient_type_id).push(a.alias)
+    }
+    return m
+  }, [aliases])
+  const myConversions = useMemo(
+    () =>
+      conversions
+        .filter((c) => c.raw_type_id === type.id)
+        .sort((a, b) =>
+          (typeNameById.get(a.prepared_type_id) ?? "").localeCompare(
+            typeNameById.get(b.prepared_type_id) ?? "",
+          ),
+        ),
+    [conversions, type.id, typeNameById],
+  )
+  // Pickable "prepared" types: not this type, not already linked from it, and
+  // not one that already provides THIS type (the DB trigger would reject that
+  // inverse anyway - filtering it out avoids a confusing error).
+  const addablePreparedTypes = useMemo(() => {
+    const linked = new Set(myConversions.map((c) => c.prepared_type_id))
+    const providesThis = new Set(
+      conversions
+        .filter((c) => c.prepared_type_id === type.id)
+        .map((c) => c.raw_type_id),
+    )
+    return types.filter(
+      (t) => t.id !== type.id && !linked.has(t.id) && !providesThis.has(t.id),
+    )
+  }, [types, myConversions, conversions, type.id])
+
+  const [addingConv, setAddingConv] = useState(false)
+  const [newConvPreparedId, setNewConvPreparedId] = useState(null)
+  const [newConvGuidance, setNewConvGuidance] = useState("")
+  const [editingConvId, setEditingConvId] = useState(null)
+  const [convEditText, setConvEditText] = useState("")
+  const [convSaving, setConvSaving] = useState(false)
+  const [convError, setConvError] = useState(null)
+  const [removingConvId, setRemovingConvId] = useState(null)
+
+  const openAddConv = () => {
+    setAddingConv(true)
+    setNewConvPreparedId(null)
+    setNewConvGuidance("")
+    setConvError(null)
+  }
+  const closeAddConv = () => {
+    setAddingConv(false)
+    setConvError(null)
+  }
+  const handleAddConv = async () => {
+    setConvSaving(true)
+    setConvError(null)
+    try {
+      await createIngredientFormConversion({
+        rawTypeId: type.id,
+        preparedTypeId: newConvPreparedId,
+        guidance: newConvGuidance.trim(),
+      })
+      await refreshConversions()
+      setAddingConv(false)
+      setNewConvPreparedId(null)
+      setNewConvGuidance("")
+    } catch (err) {
+      // Keep the picked type + typed guidance so the admin can retry.
+      setConvError(err.message)
+    } finally {
+      setConvSaving(false)
+    }
+  }
+  const startConvEdit = (c) => {
+    setEditingConvId(c.id)
+    setConvEditText(c.guidance)
+    setConvError(null)
+  }
+  const cancelConvEdit = () => {
+    setEditingConvId(null)
+    setConvError(null)
+  }
+  const handleSaveConvEdit = async (id) => {
+    setConvSaving(true)
+    setConvError(null)
+    try {
+      await updateIngredientFormConversionGuidance(id, convEditText.trim())
+      await refreshConversions()
+      setEditingConvId(null)
+    } catch (err) {
+      // Stay in edit mode with the text intact.
+      setConvError(err.message)
+    } finally {
+      setConvSaving(false)
+    }
+  }
+  const handleRemoveConv = async (id) => {
+    setRemovingConvId(id)
+    setConvError(null)
+    try {
+      await deleteIngredientFormConversion(id)
+      await refreshConversions()
+    } catch (err) {
+      setConvError(err.message)
+    } finally {
+      setRemovingConvId(null)
+    }
+  }
 
   const handleAddAlias = async () => {
     const aliasText = newAlias.trim()
@@ -266,6 +394,134 @@ export function IngredientTypeEditor({
         </div>
         {aliasError && <p className="text-xs text-coral">{aliasError}</p>}
       </div>
+
+      {/* "Can provide" - directional raw -> prepared conversions whose raw
+          side is this ingredient. Writes immediately, like Aliases above,
+          independent of the type's own Save button. */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-bold text-tx2 font-display uppercase tracking-[0.06em]">
+          Can provide
+        </label>
+        <p className="text-xs text-tx3 leading-snug">
+          Owning {type.name} counts toward a recipe that needs one of these
+          prepared forms, shown with your guidance text. One-way — the prepared
+          form never counts as {type.name}.
+        </p>
+
+        {myConversions.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            {myConversions.map((c) => {
+              const preparedName =
+                typeNameById.get(c.prepared_type_id) ?? "(unknown)"
+              const isEditingRow = editingConvId === c.id
+              return (
+                <div
+                  key={c.id}
+                  className="rounded-sm border border-bdr bg-surface p-2 flex flex-col gap-1.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-[13px] text-tx font-display font-semibold min-w-0 break-words">
+                      → {preparedName}
+                    </span>
+                    {!isEditingRow && (
+                      <div className="flex gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => startConvEdit(c)}
+                          aria-label={`Edit guidance for ${type.name} provides ${preparedName}`}
+                          className="min-h-11 px-2 text-xs text-cyan font-display font-semibold bg-transparent border-none cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveConv(c.id)}
+                          disabled={removingConvId === c.id}
+                          aria-label={`Remove: ${type.name} provides ${preparedName}`}
+                          className="min-h-11 px-2 text-xs text-coral font-display font-semibold bg-transparent border-none cursor-pointer disabled:opacity-50"
+                        >
+                          {removingConvId === c.id ? "Removing..." : "Remove"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {isEditingRow ? (
+                    <div className="flex flex-col gap-1.5">
+                      <Input
+                        placeholder="e.g. Squeeze fresh juice from Lemon"
+                        value={convEditText}
+                        onChange={setConvEditText}
+                      />
+                      {convError && (
+                        <p className="text-xs text-coral">{convError}</p>
+                      )}
+                      <div className="flex gap-2">
+                        <Btn
+                          variant="primary"
+                          small
+                          disabled={convSaving || !convEditText.trim()}
+                          onClick={() => handleSaveConvEdit(c.id)}
+                        >
+                          {convSaving ? "Saving..." : "Save"}
+                        </Btn>
+                        <Btn variant="ghost" small onClick={cancelConvEdit}>
+                          Cancel
+                        </Btn>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-tx2 italic break-words">
+                      &quot;{c.guidance}&quot;
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {convError && !addingConv && editingConvId === null && (
+          <p className="text-xs text-coral">{convError}</p>
+        )}
+
+        {addingConv ? (
+          <div className="rounded-sm border border-cyan/40 bg-surface p-2 flex flex-col gap-1.5">
+            <TypeComboBox
+              valueId={newConvPreparedId}
+              onPick={setNewConvPreparedId}
+              types={addablePreparedTypes}
+              aliasesByTypeId={aliasesByTypeId}
+              placeholder="Search prepared ingredient..."
+            />
+            <Input
+              placeholder="e.g. Squeeze fresh juice from Lemon"
+              value={newConvGuidance}
+              onChange={setNewConvGuidance}
+            />
+            {convError && <p className="text-xs text-coral">{convError}</p>}
+            <div className="flex gap-2">
+              <Btn
+                variant="primary"
+                small
+                disabled={
+                  convSaving || !newConvPreparedId || !newConvGuidance.trim()
+                }
+                onClick={handleAddConv}
+              >
+                {convSaving ? "Adding..." : "Add"}
+              </Btn>
+              <Btn variant="ghost" small onClick={closeAddConv}>
+                Cancel
+              </Btn>
+            </div>
+          </div>
+        ) : (
+          <Btn variant="ghost" small onClick={openAddConv}>
+            + Add
+          </Btn>
+        )}
+      </div>
+
       {error && <p className="text-xs text-coral">{error}</p>}
       <div className="flex gap-2">
         <Btn
