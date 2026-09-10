@@ -3,7 +3,9 @@
 **Planning document — 2026-09-10. Decisions D1–D6 approved 2026-09-10.
 Stage A DONE + pushed 2026-09-10, plus a Stage A follow-up (editor UI rework
 + atomic local-draft save via `save_ingredient_type()`) DONE + pushed
-2026-09-10. Stages B and C not started.**
+2026-09-10. Stage B (Suggested Substitutes) DONE + pushed 2026-09-10 —
+mobile/browser verification pending. Stage C (Linked Variations) NOT
+started.**
 
 Covers three related pieces of "what else can satisfy or stand in for a
 recipe":
@@ -639,10 +641,112 @@ Stage B. Delivered:
 
 ---
 
+## Stage B — DONE 2026-09-10 (committed + pushed; mobile/browser check pending)
+
+**Two layers, kept separate exactly as designed:**
+
+**Recipe-scoped (affects availability).** `recipe_component_alternatives`
+gains a nullable `note text` column (migration `20260910180000`, ≤200,
+no policy change — the row's existing `recipe_is_editable`/`recipe_is_visible`
+gate covers it). `RECIPE_SELECT` embeds `recipe_component_alternatives(
+ingredient_type_id, note)`; `mapRecipe` produces `component.alternativeNotes`
+(`{ altId: note }`, only for alternatives that carry one). `computeAvail`'s
+`substitutions[ingId]` gains `note` — **passive metadata only**: the match
+decision, the four `avail` tiers, and the precedence *exact → Can provide →
+recipe-scoped substitution* are all unchanged (an existing note-less row
+renders exactly as before). `IngredientsSection` appends it:
+"Substituting: Rye — spicier, drier". The recipe editor's alternatives are
+now `[{ name, note }]`; each chip has a one-line flavor-note field, and each
+catalogue suggestion for that component shows as a one-tap **+ &lt;name&gt;**
+button that adopts it (name + note) into the component. Adopted rows are the
+**only** substitutions that change availability, saved through the editor's
+existing save flow (`insertComponentsWithAlternatives` writes `note`).
+
+**General / catalogue (suggestion only, never availability).** New table
+`ingredient_substitutions (id, from_type_id, to_type_id, flavor_note)` —
+migration `20260910190000`. Directional, **not symmetric, no inverse guard,
+no chaining**: "White Rum → Spiced Rum" and "Spiced Rum → White Rum" are
+separate legitimate rows; nothing auto-derives one from the other. RLS
+scoped `to authenticated` from the first migration — `is_member()` read,
+`is_admin_or_moderator()` write (D3). Written **only** through
+`save_ingredient_type()` — dropped + recreated as a 5-arg function (added
+`p_substitutions jsonb default '[]'`), reconciling this type's `from`-side
+set inside the same atomic transaction as fields/aliases/conversions. It is
+**never handed to `computeAvail`** — no path from this table changes a
+recipe's Perfect/Almost/Unavailable state, its makeable count, or Buy Next.
+`buildSubstituteSuggester` (pure, `src/domain/substituteSuggestions.js`)
+turns the rows into a `(missingTypeId) => [{ toId, toName, note, owned }]`
+lookup, **owned stand-ins first** then alphabetical, capped at 3 (D6);
+`DetailScreen` builds it from `catalog.ingredientSubstitutions` + the
+resolved `owned` set and passes it to `IngredientsSection`, which renders a
+muted "Try: &lt;name&gt; (in your bar) — &lt;note&gt; · …" line **only on
+genuinely missing rows** (no green dot, not in the "Substituting:" slot).
+
+**Editor.** `IngredientTypeEditor` gains a **"Can be replaced by"** section
+mirroring "Can provide": compact rows (`{type.name} → {stand-in}` + note
+beneath), a `⋯` `BottomSheet` menu (Edit note / Remove), a collapsed
+`TypeComboBox` + note field behind a compact **+ Add**, all in the same
+local draft committed by the one atomic **Save changes**. The picker has
+**no inverse filter** (both directions are valid rows). `TypesTab` passes
+`ingredientSubstitutions`; `useCatalog` fetches it.
+
+**Recipe path audit (flavor notes not silently lost):**
+- **Save** (`insertComponentsWithAlternatives`) — writes `note`; accepts the
+  editor's `alternatives: [{ ingredientTypeId, note }]`, still tolerates a
+  bare `alternativeIds` array (note-less) defensively.
+- **Load** (`RECIPE_SELECT` / `mapRecipe`) — carries `note` →
+  `alternativeNotes`.
+- **Clone / Edit prefill** — maps `alternativeIds` + `alternativeNotes` →
+  `alternatives: [{ name, note }]`, so notes survive a clone or a re-save.
+- **localStorage draft restore** — migrates an old `alternativeNames: []`
+  draft to `alternatives: [{ name, note: "" }]` on restore.
+- **Batch recipe import** (`recipeImport.js` / `createClassicRecipes`) —
+  never sets alternatives at all; nothing to lose (unchanged).
+- **Plain-text share** (`recipeShareText.js`) — ingredient name + amount
+  only, never listed substitutes; nothing to lose (unchanged).
+- **Public share** (`get_shared_recipe` RPC) — its `ings` projection is
+  name/amount/unit/role only, no alternatives; nothing to lose (unchanged).
+
+**Preserved:** inventory, existing alternatives (note defaults null →
+identical rendering), household basics, ingredient forms, recipe
+visibility/edit permissions, the `recipes` column-update grant (relationships
+untouched).
+
+**Verified:** `corepack pnpm@10.34.3 test` **251/251** (+9: 3 in
+`availability.test.js` for the note — carried for the matched alternative,
+null when the matched one has none, never changes `avail`; 6 in
+`substituteSuggestions.test.js` — directional, no reverse leak, owned-first
++ alphabetical + cap, custom limit, empty/null-safe, note pass-through).
+`pnpm build` clean (170 modules). Isolated-LF `oxfmt --check` clean on all
+14 changed/new JS files (3 reflows hand-applied). Migrations pushed via
+`supabase db push --linked` (clean). **RLS suite** extended — an
+`ingredient_substitutions` block (member read / anon denied / member direct
+write denied / admin write / self-pair rejected / blank note rejected /
+**inverse pair allowed** / duplicate rejected; `save_ingredient_type`'s
+`p_substitutions` reconcile only touches the edited type's `from` side; **a
+substitution self-pair in the payload rolls the whole save back** — name and
+prior set both verified unchanged; a 5-arg member call raises
+`insufficient_privilege`) plus a `note` round-trip on the
+`recipe_component_alternatives` block. Full suite passes.
+`supabase db advisors --type security` — no new finding. Live REST checks:
+the `RECIPE_SELECT` embed with `note` → HTTP 200; anon read of
+`ingredient_substitutions` → `200 []` (RLS `to authenticated`, matches every
+other member-read table).
+
+**Not verified here (no browser tooling in this sandbox):** the editor's
+"Can be replaced by" section on desktop / a narrow phone; the muted "Try:"
+hint on a real recipe's missing rows; the recipe editor's one-tap adopt +
+flavor-note field and that an adopted row then flips availability while a
+mere catalogue suggestion does not; clone/edit note round-trip in the
+running app.
+
+---
+
 ## Exact next action
 
-**Stages B and C are not started.** On the go-ahead, Stage B (Suggested
-substitutes — M1 `note` column on `recipe_component_alternatives` + M2
-`ingredient_substitutions` table, `is_admin_or_moderator()` write from the
-first migration) then Stage C (Linked variations — `recipe_relationships`).
-Homemade Preparations stays untouched.
+**Stage B is done + pushed; mobile/browser verification is pending** (see
+the checklist handed over). **Stage C (Linked Variations) is NOT started** —
+on the go-ahead: migration `20260910200000_recipe_relationships.sql`
+(`recipe_relationships`, RLS via `recipe_is_visible`/`recipe_is_editable`,
+RLS-suite block), recipe editor "Variation of" field, `DetailScreen`
+"Variations" block. Homemade Preparations stays untouched.
