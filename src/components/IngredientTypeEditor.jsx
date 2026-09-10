@@ -457,9 +457,9 @@ export function IngredientTypeEditor({
                         </div>
                       </div>
                     ) : (
-                      <div className="text-xs text-tx3 break-words mt-0.5">
+                      <div className="text-xs text-tx2 break-words mt-0.5">
                         {c.guidance || (
-                          <span className="italic">No guidance</span>
+                          <span className="italic text-tx3">No guidance</span>
                         )}
                       </div>
                     )}
@@ -469,7 +469,7 @@ export function IngredientTypeEditor({
                       type="button"
                       onClick={(e) => openMenu(e, idx)}
                       aria-label={`Actions for ${preparedName}`}
-                      className="w-11 h-11 -mr-1 -mt-1 shrink-0 rounded-sm text-tx3 flex items-center justify-center cursor-pointer"
+                      className="w-11 h-11 -mr-1 -mt-1 shrink-0 rounded-sm border border-bdr text-tx2 flex items-center justify-center cursor-pointer hover:text-tx active:bg-bg2"
                     >
                       <IconDots size={18} />
                     </button>
