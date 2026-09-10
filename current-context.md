@@ -36,10 +36,10 @@ Each numbered step is a development chunk boundary for this file.
 ## Exact next action (2026-09-10)
 
 1. **Household Basics is COMPLETE — Stages 1–3, closed out 2026-09-10.** See the "Household Basics Stage 3 — CLOSE-OUT" chunk below (two non-blocking limits: Home "Edit list" visual check; offline-save handling).
-2. **Concept 2 — Ingredient Forms: CODE COMPLETE + pushed 2026-09-10. NEXT ACTION = the user runs the mobile checklist** (below). Only after that is Concept 2 done. Re-audit was done live (4 type ids confirmed; the old "no recipe uses Garnish types" note is wrong — Lemon is `required` in Whiskey Sour, Lime `required` in Caipirinha). Built: `computeAvail()` 5th arg `formConversions` with precedence exact → conversion → substitution + a `formConversions` output map; `ingredient_form_conversions` table (member read / admin write + one-direction trigger, migrations `20260910140000` + `20260910150000` policy-scope fix); `services/ingredientForms.js`; `catalog.formConversions` via `useCatalog`; "Ingredient forms" admin tab (`adminOnly`, after Onboarding); `IngredientsSection.jsx` renders the guidance inline. `pnpm test` 242/242, build clean, RLS suite passes (new `ingredient_form_conversions` block), advisors clean, anon REST `200 []`. Seed: Lemon→Lemon Juice, Lime→Lime Juice. See the "Ingredient Forms (Concept 2)" chunk below.
+2. **Concept 2 — Ingredient Forms: engine + data + admin tab (incl. the 2026-09-10 UX rework) done + pushed.** The user has **confirmed** three checks: Lemon→Lemon Juice satisfies the Lemon Juice component in Whiskey Sour (green + guidance) while Simple Syrup still reads missing; owning Lime Juice does NOT satisfy whole Lime in Caipirinha; both seeded pairs appear in the Ingredient Forms tab. **STILL UNVERIFIED (next action = the user):** admin add/cancel/edit-guidance/save/delete in the tab, plus the reworked layout on desktop and a narrow phone — no browser tooling in this sandbox to check it here. Built: `computeAvail()` 5th arg `formConversions` (precedence exact → conversion → substitution) + a `formConversions` output map; `ingredient_form_conversions` table (member read / admin write + one-direction trigger; migrations `20260910140000` + `20260910150000` policy-scope fix); `services/ingredientForms.js`; `catalog.formConversions` via `useCatalog`; "Ingredient forms" admin tab (`adminOnly`, after Onboarding); `IngredientsSection.jsx` renders guidance inline. `pnpm test` 242/242, build clean, RLS suite passes, advisors clean, anon REST `200 []`. See the "Ingredient Forms admin UX rework" and "Ingredient Forms (Concept 2)" chunks below.
 3. Homemade Preparations (Concept 3) stays "agreed direction, not started" until Concept 2 is user-confirmed. Do NOT start it.
 4. **Follow-up (infra, non-blocking): `oxfmt` 0.2.0 mangles CRLF files.** See the Stage 1 chunk below for the full diagnosis. `pnpm format` must not be run on a working tree with CRLF line endings (this machine's clone has `core.autocrlf=true`, so every checked-out file is CRLF) — it inserts a blank line after every source line. Until this is resolved, verify formatting with `oxfmt --check` on isolated LF copies of only the changed files (and when a changed file needs reformatting, run `oxfmt` on the isolated LF copy and hand-apply the wrap changes back). Resolution options (a repo decision, deferred): upgrade `oxfmt` past the bug, or add a `.gitattributes` `* text=auto eol=lf` rule + one-time renormalize.
-4. **Migration count (2026-09-10): 55 files on disk, 55 applied to the linked project, 0 pending.** Was 53 after Stage 3; +`20260910140000_ingredient_form_conversions` +`20260910150000_ingredient_form_conversions_policy_role_scope` (Concept 2) = 55. Both pushed via `supabase db push --linked` (clean, no history mismatch this session). History intact (unique ordered timestamps, no gaps/dupes).
+4. **Migration count (2026-09-10): 55 files on disk, 55 applied to the linked project, 0 pending.** Was 53 after Stage 3; +`20260910140000_ingredient_form_conversions` +`20260910150000_ingredient_form_conversions_policy_role_scope` (Concept 2) = 55. Both pushed via `supabase db push --linked` (clean, no history mismatch this session). History intact (unique ordered timestamps, no gaps/dupes). **The Ingredient Forms admin UX rework (2026-09-10) added no migration** — it only touches `src/components/admin/IngredientFormsTab.jsx`.
 
 5. **Migration count reconciled 2026-09-09.** 48 migration files on disk, 48 ledger rows, every one `local == remote`, 0 pending. The Speed Rack chunk's "47/47" was correct for its time (46 synced + `20260906130000`); Stage 1's chunk originally said "47/47" which was a **miscount** — with `20260909120000` it is **48/48**. Migration history itself is intact (unique ordered timestamps, no gaps, no dupes) — nothing was repaired, only the recorded count corrected.
 
@@ -64,7 +64,63 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
-## Last completed chunk (Ingredient Forms — Concept 2 — CODE COMPLETE + pushed 2026-09-10; mobile check pending)
+## Last completed chunk (Ingredient Forms — Concept 2, incl. the admin UX rework — pushed 2026-09-10; admin add/edit/save + layout still unverified)
+
+### Ingredient Forms admin UX rework — 2026-09-10 (committed + pushed)
+
+**Why.** The first `IngredientFormsTab.jsx` stretched conversion rows across
+the full desktop width and kept two long ingredient-picker lists permanently
+expanded, so the add form ran several screens tall. Scope kept to this one
+tab — no engine/service/schema/RLS change, saved data untouched.
+
+**Now (`src/components/admin/IngredientFormsTab.jsx` only):**
+- Capped `max-w-2xl`. Helper copy is one line: "Whole ingredients can satisfy
+  their prepared forms. Conversions work one way."
+- **Compact conversion rows** — a `Card` per row: "&lt;raw&gt; → &lt;prepared&gt;"
+  heading, the guidance line directly beneath, and 44×44 edit / delete icon
+  buttons alongside. Edit expands an inline guidance `Input` + Save/Cancel;
+  delete uses the shared `ConfirmPanel` (`layout="stack"`).
+- **`+ Add conversion` button** reveals the form only when needed; the form
+  has its own Cancel (and an ✕). `openAddForm` resets the draft;
+  `closeAddForm` only fires on success or an explicit cancel.
+- **Collapsed searchable pickers** — new local `TypeComboBox`: a single-line
+  trigger showing the current pick (or "Choose an ingredient") + chevron;
+  tapping it opens an **inline** search `Input` + a bounded
+  `max-h-56 overflow-y-auto` result list (name+alias match, capped at 8 with
+  a "N more — keep typing" hint), and picking a row collapses it back. Kept
+  inline rather than reusing `BottomSheet` so the results and the form's
+  Save/Cancel stay reachable with a mobile keyboard open. While open it also
+  shows "Currently &lt;name&gt;" so the existing pick stays visible.
+- **Desktop:** the two pickers sit side by side (`grid grid-cols-1
+  sm:grid-cols-2`); **mobile:** stacked, uppercase field labels with a
+  lowercase hint ("what you own" / "what the recipe asks for"), all tap
+  targets ≥44px, `min-w-0`/`truncate`/`break-words` so nothing overflows
+  horizontally.
+- **Save-failure handling** unchanged in intent and now explicit: on a failed
+  add the draft (both picks + guidance text) stays put and `addError` shows
+  beside the form; same for edit (`editError`) and delete (`deleteError`).
+- DB errors (self-pair / duplicate / inverse) still surface as-is. Conversion
+  rules, permissions (`adminOnly` tab + `is_admin()` RLS), and validation are
+  all unchanged.
+
+**Reused, after checking behavior:** `Card`, `Btn` (default size for the real
+actions; 44×44 for icon-only), `Input`, `ConfirmPanel` (`layout="stack"`),
+`Icon{Plus,Edit,Trash,X,ChevD}`. `BottomSheet` was considered and rejected
+for the pickers (fixed-position overlay fights the mobile keyboard).
+
+**Verified:** `corepack pnpm@10.34.3 test` 242/242 (unchanged — no domain
+touch), `pnpm build` clean, isolated-LF `oxfmt --check` clean on
+`IngredientFormsTab.jsx` (4 reflows hand-applied). **NOT verified:** no
+browser tooling in this sandbox (no Playwright/Puppeteer/Chromium, `$PORT`
+unset) — the reworked desktop and narrow-phone layouts, and admin
+add/cancel/edit-guidance/save/delete, are unverified. Desktop screenshots (if
+later taken) are not iPhone verification.
+
+**User-confirmed (2026-09-10), engine/data only:** Lemon → Lemon Juice
+satisfies the Lemon Juice component in Whiskey Sour with a green indicator +
+guidance, and Simple Syrup still reads as missing; owning Lime Juice does not
+satisfy whole Lime in Caipirinha; both seeded pairs appear in the Ingredient
+Forms tab.
 
 ### Ingredient Forms (Concept 2) — 2026-09-10 (committed + pushed)
 
@@ -2197,6 +2253,8 @@ Newest: `20260905130000_fix_topup_part_corruption.sql` - data-correction only (n
 Sixteen migrations total across this session's work (thirteen prior to today, three more today) - backlog #4 (substitutions) needed **no new migration**, it reuses the existing `recipe_component_alternatives` RLS policies (read/insert/delete via `recipe_is_editable()`) that had simply never been called. Newest: `20260822170000_full_glass_catalog.sql` renames the 5 originally-matching glasses in place and inserts the other 14, widening `glasses_shape_check` to 19 shape keys first (had to drop the constraint, run the renames, then re-add it - `add constraint check` validates existing rows immediately, and the old "wine" row would have failed against the new list until its own rename ran first; caught this the first push attempt, which rolled back cleanly with no partial state). Previous: `20260822160000_glass_shape.sql` added the `glasses.shape` column itself. All migrations applied via `supabase db push`. No new environment variables.
 
 ## Tests / build checks last run
+
+2026-09-10 (Ingredient Forms admin UX rework - `IngredientFormsTab.jsx` only: compact rows, reveal-on-demand add form, collapsed inline searchable `TypeComboBox` pickers, `max-w-2xl`, side-by-side-on-desktop fields): `corepack pnpm@10.34.3 test` - **242/242** (unchanged, no domain/service change). `pnpm build` clean (168 modules). `pnpm format` not run (oxfmt CRLF bug); isolated-LF `oxfmt --check` clean on `IngredientFormsTab.jsx` (4 reflows hand-applied). No migration, no schema/RLS/service change. **No browser tooling in this sandbox** (no Playwright/Puppeteer/Chromium, `$PORT` unset) - reworked layout + admin add/edit/save NOT visually verified. User confirmed the three engine/data checks (Whiskey Sour / Caipirinha / seeded pairs listed).
 
 2026-09-10 (Ingredient Forms - Concept 2: computeAvail form-conversion matching + ingredient_form_conversions table + admin "Ingredient forms" tab + inline recipe guidance): `corepack pnpm@10.34.3 test` - **242/242** passing (232 prior + 9 in `availability.test.js` + 1 in `recommendations.test.js`). `pnpm build` clean. `pnpm format` not run (oxfmt CRLF bug); isolated-LF `oxfmt --check` clean on all 10 changed files (availability.js / IngredientFormsTab.jsx / AdminScreen.jsx needed reflow, hand-applied). Migrations `20260910140000` + `20260910150000` pushed via `supabase db push --linked` (clean). `db advisors --type security` - no new finding. RLS suite (`supabase/tests/rls_suite.sql`) extended with an `ingredient_form_conversions` block - full suite passes. Live REST: anon GET on the table -> `200 []`; seed rows (Lemon->Lemon Juice, Lime->Lime Juice) present. **Mobile verification pending** - checklist handed over with the commit.
 

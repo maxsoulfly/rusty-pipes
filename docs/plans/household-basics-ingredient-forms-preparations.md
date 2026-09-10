@@ -14,10 +14,14 @@ found the old "no recipe uses Garnish types" note is wrong — Lemon is
 exactly why the one-direction rule matters). Implemented: `computeAvail()`
 form-conversion matching with the approved precedence, admin-managed
 `ingredient_form_conversions` table (member read / admin write + a
-one-direction trigger), "Ingredient forms" admin tab, inline recipe
-guidance. `pnpm test` 242/242, build clean, RLS suite passes, advisors
-clean. See the Concept 2 close-out note below. **Pending: the user's mobile
-check.** Concept 3 stays direction-only until Concept 2 is confirmed.
+one-direction trigger), "Ingredient forms" admin tab (**UX reworked
+2026-09-10** — compact rows, reveal-on-demand add form, collapsed inline
+searchable pickers, capped width), inline recipe guidance. `pnpm test`
+242/242, build clean, RLS suite passes, advisors clean. **User has confirmed
+the three engine/data checks** (Whiskey Sour / Caipirinha / seeded pairs
+visible); **admin add/edit/save and the reworked layout are still
+unverified** (no browser tooling in this sandbox). Concept 3 stays
+direction-only until Concept 2 is fully confirmed.
 
 ## Goal
 
@@ -557,12 +561,22 @@ cocktails" / "Find more ingredients" nav — all untouched.
   existing `Promise.all`.
 - **Admin UI — `src/components/admin/IngredientFormsTab.jsx`** + `AdminScreen`
   `TABS` entry `{ id: "forms", label: "Ingredient forms", adminOnly: true }`
-  (after Onboarding) + render guard `{tab === "forms" && isAdmin && …}`. Two
-  searchable type pickers (raw / prepared, name+alias) + a guidance box that
-  defaults to "Squeeze fresh juice from &lt;raw&gt;" until edited; existing
-  rows list "&lt;raw&gt; → &lt;prepared&gt;" with the guidance, an edit-text
-  action, and a confirm-delete. DB errors (self-pair, duplicate, inverse)
-  surface as-is. No shortcut/deep-link — pure admin catalogue config.
+  (after Onboarding) + render guard `{tab === "forms" && isAdmin && …}`. No
+  shortcut/deep-link — pure admin catalogue config. DB errors (self-pair,
+  duplicate, inverse) surface as-is; a save failure keeps the draft and shows
+  the error beside the form. **UX reworked 2026-09-10** (see the "Ingredient
+  Forms admin UX rework" chunk in `current-context.md`): capped `max-w-2xl`;
+  compact conversion rows (pair heading, guidance beneath, 44×44 edit/delete
+  alongside); a `+ Add conversion` button that reveals the form only when
+  needed, with Cancel; the two ingredient pickers are a collapsed
+  single-line `TypeComboBox` (reuses `Input`/`Btn`/`Card`) that opens inline
+  on tap to a search box + a bounded `max-h-56 overflow-y-auto` result list
+  (capped at 8 + a "N more" hint) and collapses on selection, with the pick
+  shown in the trigger and re-openable; pickers side by side from `sm:`,
+  stacked below; delete confirm via the shared `ConfirmPanel` (`layout="stack"`).
+  Helper copy: "Whole ingredients can satisfy their prepared forms.
+  Conversions work one way." Kept inline (no portal/overlay) so results and
+  Save/Cancel stay reachable with a mobile keyboard open.
 - **Recipe display — `IngredientsSection.jsx`** renders
   `formConversions?.[ri.ingId].guidance` in the same single sub-label slot as
   "Substituting: …" / "Household basic" (mutually exclusive), with the green
@@ -573,9 +587,9 @@ cocktails" / "Find more ingredients" nav — all untouched.
 - `corepack pnpm@10.34.3 test` **242/242** (+10: 9 in `availability.test.js`
   covering directionality, all three precedence orderings, category-share
   isolation, arg-omitted parity, multi-raw; 1 in `recommendations.test.js`
-  end-to-end).
-- `pnpm build` clean; isolated-LF `oxfmt --check` clean on all 10 changed
-  files.
+  end-to-end). Unchanged by the UX rework (no domain/service change).
+- `pnpm build` clean; isolated-LF `oxfmt --check` clean on every changed file
+  (engine round + UX-rework round).
 - **RLS suite** — new `ingredient_form_conversions` block (member read / anon
   no read / member write denied / admin insert+update+delete / self-pair
   rejected / blank guidance rejected / duplicate pair rejected / inverse-pair
@@ -584,11 +598,26 @@ cocktails" / "Find more ingredients" nav — all untouched.
   SECURITY INVOKER with a fixed `search_path`).
 - Live REST check: anon GET on the table returns `200 []` (matches every
   other member-read table); seed rows present and correct.
+- **No browser tooling in this sandbox** (no Playwright/Puppeteer/Chromium,
+  `$PORT` unset) — the reworked tab's desktop and narrow-mobile layouts are
+  NOT visually verified here.
 
-### Pending
+### Confirmed by the user (2026-09-10)
 
-- **The user's mobile check** — see the checklist handed over with the
-  commit. Concept 2 is NOT marked complete until then.
+- Lemon → Lemon Juice satisfies the Lemon Juice component in **Whiskey Sour**
+  — green indicator + guidance line; **Simple Syrup still reads as missing**.
+- Owning **Lime Juice** does **not** satisfy the whole-**Lime** requirement in
+  **Caipirinha** (one-direction rule holds).
+- Both seeded pairs (Lemon → Lemon Juice, Lime → Lime Juice) appear in the
+  Ingredient Forms tab.
+
+### Still unverified (non-blocking)
+
+- Admin editing / saving in the Ingredient Forms tab (add a pair, cancel,
+  edit guidance, save, delete) — and the reworked layout on desktop and on a
+  narrow phone viewport.
+- The remaining items from the original mobile checklist (precedence display
+  when a substitution is also owned; Buy Next suppression).
 
 ### Deliberately out of scope (unchanged boundaries)
 
@@ -792,10 +821,13 @@ not just `fetchRecipes()`:
 
 **Household Basics is COMPLETE (Stages 1–3, closed out 2026-09-10).**
 
-**Ingredient Forms (Concept 2) is CODE COMPLETE + pushed 2026-09-10** — see
-the Concept 2 close-out note above for the full change list and verification.
-**Next action: the user runs the mobile checklist** (handed over with the
-commit). Only after that confirmation is Concept 2 done.
+**Ingredient Forms (Concept 2)** — engine + data + admin tab (with the
+2026-09-10 UX rework) done and pushed. The user has confirmed the three
+engine/data checks (Whiskey Sour conversion + Simple Syrup still missing;
+Caipirinha one-direction; both seeded pairs listed). **Next action: the user
+verifies admin add/edit/save and the reworked tab layout on desktop + a
+narrow phone** (checklist handed over with the commit). Only after that is
+Concept 2 done.
 
 **Homemade Preparations (Concept 3) — do NOT start.** Stays direction-only
 until Concept 2 is user-confirmed. When it does begin, run its own pre-stage
