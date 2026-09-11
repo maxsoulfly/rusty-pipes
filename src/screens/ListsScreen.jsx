@@ -16,9 +16,13 @@ export default function ListsScreen() {
   const currentAvail = AVAIL_FILTERS.find((f) => f.key === availFilter)
 
   const listIds = tab === "favorites" ? favorites : wantToMake
+  // Stage D.2: compares against the shared `display.tier`, not raw `avail`
+  // - keeps this screen's filter consistent with Library's, which shares
+  // the same AVAIL_FILTERS list (including "Make With Substitutions").
   const filtered = computed.filter(
     (c) =>
-      listIds.has(c.id) && (availFilter === "all" || c.avail === availFilter),
+      listIds.has(c.id) &&
+      (availFilter === "all" || (c.display?.tier ?? c.avail) === availFilter),
   )
 
   return (

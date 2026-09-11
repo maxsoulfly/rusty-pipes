@@ -1,29 +1,52 @@
-// Ranks Home's "Almost There" list (recipes missing exactly one required
-// ingredient - see availability.js, `avail === "almost"` is only ever set
-// at that exact count). That means every candidate here is already tied on
-// "how close" by definition - there's no missing-ingredient-count left to
-// sort by within this bucket, so real cross-user popularity (favoriteCount
-// + wantToMakeCount, a denormalized counter - see
-// 20260826110000_recipe_popularity_counters.sql) is the only signal that
-// actually differentiates them. User request, framed like a save/like
-// count rather than a live aggregate query.
+// Ranks Home's "Almost There" and "Make With Substitutions" (Stage D.2)
+// lists. Both buckets are read off the shared `display.tier` (Stage D.1,
+// domain/makeability.js), not raw `avail` - a recipe resolvable via a
+// configured, owned general substitute has `display.tier === "adapted"`
+// and belongs in the second list, never the first, even though its
+// underlying `strict.avail` may still be exactly "almost" (see
+// makeability.js: adaptation is only attempted on a component `strict`
+// already left missing, so an adapted recipe's own strict tier is
+// unaffected and can be "almost" or "unavail" underneath).
 //
-// Returns the full ranked list, not pre-sliced - the caller (HomeScreen)
-// owns how many to show and any "load more" reveal, this function only
-// owns the order.
+// "Almost There" (`avail === "almost"`, see availability.js) is only ever
+// set at exactly one missing required ingredient - every candidate left in
+// that bucket after excluding adapted ones is still tied on "how close" by
+// that same definition, so real cross-user popularity (favoriteCount +
+// wantToMakeCount, a denormalized counter - see
+// 20260826110000_recipe_popularity_counters.sql) is the only signal that
+// actually differentiates them. "Make With Substitutions" has no such
+// single shared "closeness" number (an adapted recipe can have resolved
+// any number of components), so it uses the same popularity tie-break for
+// consistency rather than inventing a second ranking rule.
+//
+// Both return the full ranked list, not pre-sliced - the caller
+// (HomeScreen) owns how many to show and any "load more" reveal.
+
+function sortByPopularityThenName(items) {
+  return items.slice().sort((a, b) => {
+    const popularityA = (a.favoriteCount ?? 0) + (a.wantToMakeCount ?? 0)
+    const popularityB = (b.favoriteCount ?? 0) + (b.wantToMakeCount ?? 0)
+    if (popularityA !== popularityB) return popularityB - popularityA
+    return a.name.localeCompare(b.name) // deterministic tiebreak
+  })
+}
 
 /**
- * @param {{ id: string, name: string, avail: string, favoriteCount?: number, wantToMakeCount?: number }[]} computed
+ * @param {{ id: string, name: string, avail: string, display?: { tier: string }, favoriteCount?: number, wantToMakeCount?: number }[]} computed
  * @returns {object[]}
  */
 export function rankAlmostThere(computed) {
-  return computed
-    .filter((c) => c.avail === "almost")
-    .slice()
-    .sort((a, b) => {
-      const popularityA = (a.favoriteCount ?? 0) + (a.wantToMakeCount ?? 0)
-      const popularityB = (b.favoriteCount ?? 0) + (b.wantToMakeCount ?? 0)
-      if (popularityA !== popularityB) return popularityB - popularityA
-      return a.name.localeCompare(b.name) // deterministic tiebreak
-    })
+  return sortByPopularityThenName(
+    computed.filter((c) => (c.display?.tier ?? c.avail) === "almost"),
+  )
+}
+
+/**
+ * @param {{ id: string, name: string, avail: string, display?: { tier: string }, favoriteCount?: number, wantToMakeCount?: number }[]} computed
+ * @returns {object[]}
+ */
+export function rankAdapted(computed) {
+  return sortByPopularityThenName(
+    computed.filter((c) => (c.display?.tier ?? c.avail) === "adapted"),
+  )
 }

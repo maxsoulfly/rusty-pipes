@@ -22,6 +22,7 @@ import {
   SectionTitle,
 } from "@/components/primitives"
 import { AVAIL_FILTERS, SORT_FILTERS, SOURCE_FILTERS } from "@/data/constants"
+import { groupByDisplayTier } from "@/domain/availabilityGroups"
 import { findRecipesUsingIngredient } from "@/domain/ingredientRecipeMatches"
 
 // Availability grouping is now the default Library view (plain /library
@@ -32,7 +33,14 @@ import { findRecipesUsingIngredient } from "@/domain/ingredientRecipeMatches"
 // than "name" means availability (see sortMode below). Name A-Z is the
 // other option, picked via the visible Sort control - not a third silent
 // default, an explicit member choice.
-const AVAIL_GROUP_ORDER = ["perfect", "good", "almost", "unavail"]
+//
+// The tier order and grouping itself live in
+// domain/availabilityGroups.js (Stage D.2) - grouped by `display.tier`, not
+// raw `avail`, so a recipe resolvable via a configured, owned substitute
+// ranks ahead of one that's genuinely still missing something, and never
+// appears under "Almost There" once it's adapted. Only the group HEADING
+// text is screen-specific, kept here.
+//
 // Matches HomeScreen.jsx's own section names exactly, for the same
 // availability tiers - AVAIL_CFG's own `label` ("Perfect", not "Ready to
 // Pour") is a different, shorter string used on the per-card badge, kept
@@ -40,6 +48,7 @@ const AVAIL_GROUP_ORDER = ["perfect", "good", "almost", "unavail"]
 const AVAIL_GROUP_LABEL = {
   perfect: "Ready to Pour",
   good: "Good Enough",
+  adapted: "Make With Substitutions",
   almost: "Almost There",
   unavail: "Unavailable",
 }
@@ -131,7 +140,15 @@ export default function LibraryScreen() {
           !c.taste.some((t) => t.toLowerCase().includes(query.toLowerCase()))
         )
           return false
-        if (availFilter !== "all" && c.avail !== availFilter) return false
+        // Stage D.2: compares against the shared `display.tier`, not raw
+        // `avail` - selecting "Almost" must not surface a recipe that's
+        // actually adapted (display.tier === "adapted"), and selecting
+        // "Make With Substitutions" must actually find something.
+        if (
+          availFilter !== "all" &&
+          (c.display?.tier ?? c.avail) !== availFilter
+        )
+          return false
         if (sourceFilters.length && !sourceFilters.includes(c.source))
           return false
         if (
@@ -157,15 +174,10 @@ export default function LibraryScreen() {
   // entirely (not rendered as an empty heading) rather than filtered out of
   // `filtered` itself, so the "No cocktails found" empty state below still
   // only fires when there's truly nothing to show, grouped or not.
-  const groups = useMemo(() => {
-    if (sortMode !== "availability") return null
-    const byTier = { perfect: [], good: [], almost: [], unavail: [] }
-    filtered.forEach((c) => byTier[c.avail]?.push(c))
-    return AVAIL_GROUP_ORDER.map((tier) => ({
-      tier,
-      items: byTier[tier],
-    })).filter((g) => g.items.length > 0)
-  }, [filtered, sortMode])
+  const groups = useMemo(
+    () => (sortMode === "availability" ? groupByDisplayTier(filtered) : null),
+    [filtered, sortMode],
+  )
 
   // Name A-Z: the same already-filtered set, just alphabetically ordered
   // instead of grouped. Only actually used when sortMode is "name" (the

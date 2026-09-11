@@ -5,8 +5,11 @@ Stage A DONE + pushed 2026-09-10, plus a Stage A follow-up (editor UI rework
 + atomic local-draft save via `save_ingredient_type()`) DONE + pushed
 2026-09-10. Stage B (Suggested Substitutes) DONE + pushed 2026-09-10. Stage D
 revised to v2 2026-09-11; **Stage D.1 (Adapted Availability, substitutes
-only) DONE + pushed 2026-09-11** - see "Stage D.1 — DONE" below. Stage D.2-D.4
-NOT started. Stage C (Linked Variations) NOT started.**
+only) DONE + pushed 2026-09-11** - see "Stage D.1 — DONE" below. **Stage D.2
+(Library/Home discovery, grouping, ordering by `display.tier`) DONE + pushed
+2026-09-11** - see "Stage D.2 — DONE" below; stages resequenced, D.3-D.5
+NOT started (see the resequencing note under "Staged implementation plan").
+Stage C (Linked Variations) NOT started.**
 
 > **D1 is SUPERSEDED, 2026-09-11 — planning only, not yet implemented.** The
 > user has decided general catalogue substitutes should be able to affect
@@ -1060,11 +1063,11 @@ Explicit checklist against the request to confirm this before implementation:
 | **Every badge/card/group/count below** | Reads `display.tier`/`display.label`, **not** `strict.tier`, as the primary status. `display.tier === "adapted"` renders as its own distinct badge state (own color/icon - not green "perfect," not the red/grey "unavailable" one) carrying `display.label` ("Make with substitutions · Prepare syrup first") as the **primary** text. Nothing ever shows "Unavailable" as the primary badge next to a contradictory makeable message. |
 | `IngredientsSection` (detail page) | A component resolved at tier 4/5 renders with a **new, distinct accent** (not the green "owned" dot, not the muted "Try:" hint) — e.g. violet, reusing the existing note-line slot: "Adapted: Spiced Rum — sweeter, warm spice" / "Adapted: needs preparation — [link to Simple Syrup's ingredients/steps]". Explains each replacement's flavor note and links to the preparation, per the acceptance scenario. The rest of the ingredient list still shows the honest `strict` state (a required row genuinely reads "missing" until owned) - "original preserved and clearly marked as adapted" per the acceptance scenario means the detail page shows *both*: the real ingredient list plus the adaptation explanation, never a rewritten recipe. |
 | Recipe card / `HeroCard` | The **primary** badge is `display.label`/`display.tier` (e.g. "Make with substitutions · Prepare syrup first" in the adapted accent color) - not the strict badge with an addition bolted on. The strict "needs White Rum, Lime Juice, Simple Syrup" detail is still reachable (tapping in / the detail page's honest ingredient rows), but it is not what leads on the card. |
-| **Library** (grouped + sorted view) | One new group, **"Make With Substitutions"**, positioned after "Good Enough" and before "Almost There" - i.e. **adapted recipes rank after drinks needing no adaptation, but are part of the main "possible" set**, ahead of "Almost"/"Unavailable." A recipe with `display.tier === "adapted"` is shown there and **not** in Almost/Unavailable (no duplication). Filtering "show what I can make" includes Perfect + Good + Adapted. Sorting-by-availability uses `display.tier`'s rank (perfect > good > adapted > almost > unavailable), not `strict.tier`'s. |
-| **Counts (Library, Home, Build Your Bar) — one shared shape** | The **primary "possible" total is `perfect + good + adapted`**, always shown with an explicit breakdown, e.g. **"8 cocktails possible · 5 ready, 3 with substitutions or preparation."** "Almost"/"Unavailable" counts are unaffected (they already exclude adapted, since a recipe is in exactly one `display.tier` bucket). This is the same one shared count object every screen renders - no screen invents its own phrasing. |
-| **Home** | New "Make With Substitutions" section, same position as in Library, feeding from `display.tier === "adapted"`. `almostRanked` reads `display.tier === "almost"` (already excludes adapted, since tiers are mutually exclusive) — previously Home-invisible `unavail` recipes that are actually `adapted` newly appear, which *is* the intended discoverability win. |
-| **Build Your Bar makeable count** | Uses the same shared breakdown as Library/Home: primary number = `perfect + good + adapted`, sub-line spells out the split ("5 ready, 3 with substitutions or preparation"). Resolves the v1 open question per the user's explicit instruction — no longer a strictly-literal-only number with adapted hidden in a secondary "+N" line. |
-| **Buy Next (`recommendations.js`)** | **Ranking changes, not just rendering** — see the dedicated section below. A recipe already at `display.tier === "adapted"` is never counted as a candidate's "unlock"; buying its one remaining strict-missing ingredient is tracked as *restoring the original*, a separate, lower-weighted signal with its own reason text. |
+| **Library** (grouped + sorted view) — **DONE, Stage D.2, 2026-09-11** | One new group, **"Make With Substitutions"**, positioned after "Good Enough" and before "Almost There" - i.e. **adapted recipes rank after drinks needing no adaptation, but are part of the main "possible" set**, ahead of "Almost"/"Unavailable." A recipe with `display.tier === "adapted"` is shown there and **not** in Almost/Unavailable (no duplication). The availability filter picker gained a matching "Make With Substitutions" option, comparing against `display.tier`. Sorting-by-availability uses `display.tier`'s rank (perfect > good > adapted > almost > unavailable, `domain/availabilityGroups.js`), not `strict.tier`'s. |
+| **Counts (Library, Home, Build Your Bar) — one shared shape** — **PENDING, not part of D.2** | The **primary "possible" total is `perfect + good + adapted`**, always shown with an explicit breakdown, e.g. **"8 cocktails possible · 5 ready, 3 with substitutions or preparation."** "Almost"/"Unavailable" counts are unaffected (they already exclude adapted, since a recipe is in exactly one `display.tier` bucket). This is the same one shared count object every screen renders - no screen invents its own phrasing. Per-group item counts (the small number beside each group heading, e.g. "⇄ 3" beside "Make With Substitutions") are **not** this - that's the same per-tier count every existing group already showed, not a new aggregate breakdown, and shipped as part of D.2 since a group needs one to render at all. |
+| **Home** — **DONE, Stage D.2, 2026-09-11** | New "Make With Substitutions" section, same position as in Library (between Good Enough and Almost There), feeding from `rankAdapted()` (`domain/almostThere.js`, `display.tier === "adapted"`). `almostRanked` now reads `display.tier === "almost"` (excludes adapted - tiers are mutually exclusive) instead of raw `avail === "almost"` — previously Home-invisible `unavail` recipes that are actually `adapted` newly appear, which *is* the intended discoverability win. |
+| **Build Your Bar makeable count** — **PENDING, not part of D.2** | Uses the same shared breakdown as Library/Home: primary number = `perfect + good + adapted`, sub-line spells out the split ("5 ready, 3 with substitutions or preparation"). Resolves the v1 open question per the user's explicit instruction — no longer a strictly-literal-only number with adapted hidden in a secondary "+N" line. `BuildYourBar.jsx`'s `makeableCount` is untouched by D.2 (still `perfect`/`good` only, unchanged formula), by explicit instruction. |
+| **Buy Next (`recommendations.js`)** — **PENDING, not part of D.2** | **Ranking changes, not just rendering** — see the dedicated section below. A recipe already at `display.tier === "adapted"` is never counted as a candidate's "unlock"; buying its one remaining strict-missing ingredient is tracked as *restoring the original*, a separate, lower-weighted signal with its own reason text. `recommendations.js` is untouched by D.2, by explicit instruction. |
 | Ingredient/bottle detail (`findRecipesUsingIngredient`) | **Unchanged, deliberately out of scope** — stays ownership-blind like household basics and Can-provide already are; revisit only if real usage asks for it. |
 
 ### Buy Next: "unlocks a new drink" vs. "restores the original" (requirement 3)
@@ -1147,36 +1150,48 @@ existing behavior are provably unchanged (existing tests still pass
 unmodified) - only *new* consumers read `display`. **See "Stage D.1 — DONE"
 below for exactly what shipped.**
 
-**Stage D.2 — Minimal homemade preparations.** Migrations D.2 + D.3, the
-"Homemade preparation" editor section, `isPreparationSatisfiable()`. Depth-1
-guard tests (self-reference; new preparation whose input is already
-produced; editing an existing one into either violation). *Acceptance:*
-configuring Simple Syrup from White Sugar + Water (both household basics)
-makes it "preparable"; a recipe missing only Simple Syrup shows "Prepare
-Simple Syrup first" as its primary badge with zero general substitutes
-involved; a recipe missing only White Sugar (not the full preparation) shows
-nothing (Sugar alone does not imply Simple Syrup).
+> **Stages resequenced 2026-09-11, by explicit user instruction.** The
+> discovery/grouping/ordering slice originally folded into "D.3 — Combine,
+> Library/Home/Build Your Bar grouping + counts" below was pulled forward,
+> narrowed to exclude preparations/counts-breakdown/Buy-Next, and shipped
+> as **"Stage D.2"** (see "Stage D.2 — DONE" below for exactly what that
+> means). The stages below are renumbered D.3/D.4/D.5 to keep a single
+> sequential record of what's actually left; their CONTENT is otherwise
+> unchanged from the original v2 proposal, minus the pieces D.2 already
+> covered (noted inline below).
 
-**Stage D.3 — Combine, Library/Home/Build Your Bar grouping + counts, and
-the full Daiquiri scenario.** `computeMakeability()` consults tiers 4 and 5
-together per component; label composition ("·" join); the new "Make With
-Substitutions" group and the shared count/breakdown ("N possible · X ready,
-Y with substitutions or preparation") land in Library, Home, and Build Your
-Bar together (one shared count object, not three separate implementations);
+**Stage D.3 — Minimal homemade preparations** (originally numbered D.2).
+Migrations D.2 + D.3, the "Homemade preparation" editor section,
+`isPreparationSatisfiable()`. Depth-1 guard tests (self-reference; new
+preparation whose input is already produced; editing an existing one into
+either violation). *Acceptance:* configuring Simple Syrup from White Sugar +
+Water (both household basics) makes it "preparable"; a recipe missing only
+Simple Syrup shows "Prepare Simple Syrup first" as its primary badge with
+zero general substitutes involved; a recipe missing only White Sugar (not
+the full preparation) shows nothing (Sugar alone does not imply Simple
+Syrup).
+
+**Stage D.4 — Combine tiers 4+5, counts/breakdown, and the full Daiquiri
+scenario** (originally numbered D.3; its Library/Home grouping-and-ordering
+piece already shipped as D.2 - this stage is now just the remainder).
+`computeMakeability()` consults tiers 4 and 5 together per component; label
+composition ("·" join, e.g. "Make with substitutions · Prepare syrup
+first"); the shared count/breakdown ("N possible · X ready, Y with
+substitutions or preparation") lands in Library, Home, and Build Your Bar
+together (one shared count object, not three separate implementations);
 curate the two missing catalogue rows for the acceptance scenario (Lime
 Juice → Lemon Juice substitute, Simple Syrup preparation) as a **live-data
 verification step, not a seed** (Concept 1/2's own rule — no speculative
 data). *Acceptance:* the exact scenario reproduces "Make with substitutions
 · Prepare syrup first" as Daiquiri's primary status everywhere it's shown;
-Library/Home/Build Your Bar all show the identical count breakdown; sorting
-by availability ranks adapted recipes after perfect/good and before
-almost/unavailable; the detail page explains each replacement's flavor note
-and links to Simple Syrup's ingredients/steps while still showing the
-original ingredient list honestly.
+Library/Home/Build Your Bar all show the identical count breakdown; the
+detail page explains each replacement's flavor note and links to Simple
+Syrup's ingredients/steps while still showing the original ingredient list
+honestly.
 
-**Stage D.4 — Recipe-specific per-substitute exclusion + Buy Next ranking
-change.** Migration D.1 (`excluded_substitute_type_ids`), the
-`IngredientRowsEditor` chip-removal UI, and the Buy Next ranking split
+**Stage D.5 — Recipe-specific per-substitute exclusion + Buy Next ranking
+change** (originally numbered D.4). Migration D.1 (`excluded_substitute_type_ids`),
+the `IngredientRowsEditor` chip-removal UI, and the Buy Next ranking split
 (`unlockedRecipes` vs. `restoresOriginalRecipes`). *Acceptance:* excluding
 one substitute on a component leaves every other configured substitute for
 that component (and any preparation route) unaffected; a recipe with two
@@ -1188,7 +1203,7 @@ already-`adapted` recipe's original ranks below one with a genuine
 one; existing `recommendations.test.js` genuine-unlock cases are unchanged.
 
 Each stage: `corepack pnpm@10.34.3` test + build, isolated-LF `oxfmt --check`,
-RLS suite for D.2/D.4's schema changes, `db advisors --type security` after
+RLS suite for D.3/D.5's schema changes, `db advisors --type security` after
 any migration, commit + push, then a mobile checklist. Meaningful domain
 tests per stage (not just "it builds"): tier-4/5 precedence order, owned-only
 gating on general substitutes, the depth-1 guard, "Sugar alone" non-implication,
@@ -1241,7 +1256,7 @@ untouched (D.3/D.4).
   component tier 4 can't resolve fails the whole adaptation, no partial
   credit); when non-null, `resolvedRequired` lists each replacement
   (`matchedId`/`matchedName`/`note`) and `label` is always `"Make with
-  substitutions"` (the only composition possible until Stage D.2 adds
+  substitutions"` (the only composition possible until Stage D.3 adds
   `"Prepare X first"`). `display` is `{ tier, label, isAdapted }` - `tier`
   equals `strict.avail` when that's already `"perfect"`/`"good"`, else
   `"adapted"` when `adapted` resolved, else falls through to `strict.avail`
@@ -1287,18 +1302,18 @@ untouched (D.3/D.4).
   upgraded from a suggestion to an actionable, resolved replacement.
   `DetailScreen.jsx` passes `c.adapted` through. (The preparation-link half
   of this row - "Adapted: needs preparation — [link to ingredients/steps]"
-  - has no branch yet since no preparation can exist before Stage D.2; the
+  - has no branch yet since no preparation can exist before Stage D.3; the
   code comment at that spot says so explicitly rather than stubbing dead UI.)
-- **Known, deliberate limitation carried into D.1 on purpose (not a bug):**
-  Library's grouped view, Home's Perfect/Good/Almost sections, and Build
-  Your Bar's makeable count still bucket/count purely by `strict.avail`
-  (D.3/D.4 scope, untouched). A recipe that is `display.tier === "adapted"`
-  today therefore still appears wherever its strict tier already put it
-  (e.g. under Library's "Almost There" heading), but the **card itself**,
-  wherever it's rendered, now correctly leads with "Make with
-  substitutions" rather than "Almost"/"Unavailable" - satisfying the "never
-  a contradictory primary badge" requirement at the card level, while the
-  section it sits under is deliberately not yet regrouped (Stage D.3).
+- **Known, deliberate limitation carried into D.1 on purpose (not a bug) -
+  RESOLVED by Stage D.2, see below:** at the end of D.1, Library's grouped
+  view, Home's Perfect/Good/Almost sections, and Build Your Bar's makeable
+  count still bucketed/counted purely by `strict.avail`. A recipe that was
+  `display.tier === "adapted"` therefore still appeared wherever its strict
+  tier already put it (e.g. under Library's "Almost There" heading), even
+  though the **card itself**, wherever it was rendered, already correctly
+  led with "Make with substitutions" rather than "Almost"/"Unavailable".
+  **Stage D.2 (below) fixes the Library/Home half of this** - Build Your
+  Bar's makeable count remains untouched, deferred to Stage D.4.
 - **Verified:** `corepack pnpm@10.34.3 test` **260/260** (+9 -
   `makeability.test.js`: display mirrors strict when already perfect/good
   (no adaptation attempted); the White Rum/Spiced Rum acceptance case
@@ -1317,7 +1332,7 @@ untouched (D.3/D.4).
   on-screen appearance of the violet "adapted" badge/dot on a phone, and
   the end-to-end acceptance scenario in the running app - the live
   catalogue still lacks the `Lime Juice → Lemon Juice` substitute and the
-  Simple Syrup preparation (Stage D.3 curates those), so nothing in the
+  Simple Syrup preparation (Stage D.4 curates those), so nothing in the
   live catalogue is actually `display.tier === "adapted"` yet. The
   narrower, real-today case - White Rum resolving via the already-live
   `White Rum → Spiced Rum` substitute when every *other* required
@@ -1327,17 +1342,112 @@ untouched (D.3/D.4).
 
 ---
 
+## Stage D.2 — DONE 2026-09-11 (committed + pushed; mobile/browser check pending)
+
+**Scope, redefined by explicit user instruction (see the resequencing note
+under "Staged implementation plan" above): the discovery/grouping/ordering
+slice of the original D.3 proposal, pulled forward and narrowed to exclude
+preparations, the aggregate counts/breakdown, the Buy Next ranking split,
+and `excluded_substitute_type_ids`.** No migrations, no schema changes, no
+live-catalogue changes, no `recommendations.js`/`BuildYourBar.jsx` changes -
+`src/**` display/grouping/filtering logic only.
+
+- **`Library`/`Home`/`Lists` now group, order, and filter by the shared
+  `display.tier`, never by raw `avail` independently.** A recipe whose
+  `strict.avail` reads "almost" but resolves via an owned general
+  substitute (`display.tier === "adapted"`) no longer appears under "Almost
+  There" in either screen, or under an "Almost" filter selection in either
+  Library or Lists (Favorites/Want to Make) - it appears only in its own
+  "Make With Substitutions" group/section, exactly once.
+- **New `src/domain/availabilityGroups.js`** — `DISPLAY_TIER_ORDER =
+  ["perfect", "good", "adapted", "almost", "unavail"]` and
+  `groupByDisplayTier(computed)`, a pure function returning non-empty tiers
+  in that order (`{ tier, items }[]`). `LibraryScreen.jsx`'s grouped view
+  now calls this directly instead of keeping its own local
+  `AVAIL_GROUP_ORDER`/`byTier` construction - one shared place decides
+  "cocktails needing no adaptation first, then adapted, then genuinely
+  almost/unavailable," not a screen-local reinterpretation.
+- **`src/domain/almostThere.js`** — `rankAlmostThere()`'s filter changed
+  from `avail === "almost"` to `(display?.tier ?? avail) === "almost"`, so
+  it no longer includes a recipe that's actually adapted underneath. New
+  sibling `rankAdapted()` (same popularity-then-name tie-break, extracted
+  into a shared `sortByPopularityThenName()` helper) filters to
+  `display.tier === "adapted"` for the new Home section.
+- **`HomeScreen.jsx`** — `perfect`/`good` filters switched to read
+  `display.tier` (identical result to `avail` for a genuinely perfect/good
+  recipe - a like-for-like swap, not a behavior change, done so this screen
+  stops independently interpreting `avail` anywhere). New "Make With
+  Substitutions" section (a `SmallCard` carousel, matching Perfect/Good's
+  own style) rendered between "Good Enough" and "Almost There", fed by
+  `rankAdapted()`.
+- **`LibraryScreen.jsx`** — grouped view now imports `groupByDisplayTier()`
+  (removing the old local grouping code); `AVAIL_GROUP_LABEL` gains
+  `adapted: "Make With Substitutions"`; the availability filter comparison
+  changed from `c.avail !== availFilter` to `(c.display?.tier ?? c.avail)
+  !== availFilter`.
+- **`ListsScreen.jsx`** (Favorites/Want to Make) — same filter-comparison
+  fix as Library, for consistency: both screens share the same
+  `AVAIL_FILTERS` list, so leaving one on raw `avail` while the other moved
+  to `display.tier` would have made "Almost" behave differently depending
+  on which screen you filtered from.
+- **`src/data/constants.js`** — `AVAIL_FILTERS` gains `{ key: "adapted",
+  label: "Make With Substitutions" }`, positioned between "Good Enough" and
+  "Almost" (matching `DISPLAY_TIER_ORDER`). This is what makes "Filters...
+  should include adapted-makeable cocktails" concrete: a member can now
+  explicitly filter Library or Lists down to just the adapted set, not only
+  find them mixed into "All".
+- **Explicitly NOT touched, per instruction:** `BuildYourBar.jsx`'s
+  `makeableCount` (still `perfect`/`good` only - no aggregate
+  counts/breakdown this stage), `recommendations.js` (Buy Next ranking
+  untouched), `recipe_components`/`excluded_substitute_type_ids` (no
+  migration), `ingredient_preparations`/preparable-ingredient logic (none
+  exists yet), `findRecipesUsingIngredient`/`IngredientDetailScreen.jsx`
+  (still deliberately ownership-blind and out of scope, unchanged), D.1's
+  own card/HeroCard/IngredientsSection primary-status rendering (untouched,
+  still correct).
+- **Verified:** `corepack pnpm@10.34.3 test` **271/271** (+11 - 6 new in
+  `availabilityGroups.test.js`: `DISPLAY_TIER_ORDER`'s exact order; grouping
+  by `display.tier` not raw `avail`; the explicit regression this stage
+  exists for - groups render in Perfect > Good Enough > Adapted > Almost
+  There > Unavailable order; empty tiers dropped; the `avail`-only
+  fallback; empty input. 5 new in `almostThere.test.js`: `rankAlmostThere`
+  excludes a `display.tier === "adapted"` recipe even when its own
+  `strict.avail` is "almost"; `rankAdapted` filters/ranks/ties/no-mutate).
+  Every pre-existing test in both files still passes unmodified (the
+  `avail`-only fallback keeps old call shapes working). `pnpm build` clean
+  (172 modules, +1 for `availabilityGroups.js`). Isolated-LF `oxfmt --check`
+  clean on all 8 changed/new files (1 reflow hand-applied to the real CRLF
+  `HomeScreen.jsx`). No migrations, so no RLS suite / `db advisors` run
+  this stage.
+- **Not verified here (no browser tooling in this sandbox):** the actual
+  on-screen "Make With Substitutions" group/section and filter chip on a
+  phone. As with D.1, the live catalogue still lacks the curated rows
+  needed for the full Daiquiri scenario, so what CAN be checked live right
+  now is the same narrower case D.1 left open (White Rum resolving via the
+  already-live `White Rum → Spiced Rum` substitute) - that recipe should
+  now additionally appear grouped under "Make With Substitutions" in
+  Library and in its own Home section, not under "Almost There"/the
+  "Almost" filter, once every other required component is separately
+  satisfied.
+
+---
+
 ## Exact next action
 
-**Stage D.1 is DONE** (see the section above) — `computeMakeability()` and
-the primary-status wiring on card/HeroCard/detail are built, tested, and
-pushed. **The user reviews Stage D.1** (code + the one live-app check noted
-above — White Rum resolving via the already-live `White Rum → Spiced Rum`
-substitute), then decides whether to proceed to **Stage D.2** (minimal
-homemade preparations - the two new tables + editor section +
-`isPreparationSatisfiable()`). Stage B's own outstanding manual checks stay
+**Stage D.1 and D.2 are DONE** (see the two sections above) —
+`computeMakeability()`, the primary-status wiring on card/HeroCard/detail
+(D.1), and the display-tier-based discovery/grouping/ordering in
+Library/Home/Lists (D.2) are all built, tested, and pushed. **The user
+reviews both** (code + the one live-app check noted above — White Rum
+resolving via the already-live `White Rum → Spiced Rum` substitute should
+now also show up grouped under "Make With Substitutions"), then decides
+which stage to proceed to next: **D.3** (minimal homemade preparations - the
+two new tables + editor section + `isPreparationSatisfiable()`), or a
+different slice, per the same resequencing precedent set this turn (the
+user is not bound to the original D.3→D.4→D.5 order any more than D.2's own
+scope was). Stage B's own outstanding manual checks stay
 unverified/outstanding, not passed — re-check them once the full Stage D UI
-(through D.3) ships rather than in isolation.
+(through D.4) ships rather than in isolation.
 
 **Stage C (Linked Variations) remains NOT started** and independent of Stage
 D — on a separate go-ahead: migration `..._recipe_relationships.sql`

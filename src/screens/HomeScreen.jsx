@@ -12,7 +12,7 @@ import { BuildYourBar } from "@/components/home/BuildYourBar"
 import { GlassSvg } from "@/components/GlassSvg"
 import { SmallCard } from "@/components/CocktailCard"
 import { Card, SectionTitle } from "@/components/primitives"
-import { rankAlmostThere } from "@/domain/almostThere"
+import { rankAdapted, rankAlmostThere } from "@/domain/almostThere"
 import { rankPurchaseRecommendations } from "@/domain/recommendations"
 
 // Capped so a member with dozens of "almost" recipes doesn't get a Home
@@ -75,17 +75,32 @@ export default function HomeScreen() {
     inventory.ownedProductIds,
   ])
 
-  const perfect = computed.filter((c) => c.avail === "perfect")
-  const good = computed.filter((c) => c.avail === "good")
+  // Stage D.2: filtered by the shared `display.tier`, not raw `avail` - for
+  // a genuinely perfect/good recipe the two are always identical
+  // (computeMakeability only attempts adaptation when `strict` isn't
+  // already perfect/good), so this is a like-for-like swap, not a
+  // behavior change - it just stops this screen from independently
+  // re-interpreting `avail` alongside the shared result.
+  const perfect = computed.filter(
+    (c) => (c.display?.tier ?? c.avail) === "perfect",
+  )
+  const good = computed.filter((c) => (c.display?.tier ?? c.avail) === "good")
   // Ranked by real cross-user popularity (favoriteCount + wantToMakeCount) -
   // every recipe here is already tied on "how close" by definition (avail
   // === "almost" only ever means exactly 1 missing required ingredient, see
   // availability.js), so popularity is the only signal that actually
-  // differentiates them.
+  // differentiates them. Excludes anything now `display.tier === "adapted"`
+  // (see domain/almostThere.js) - that has its own section below instead.
   const almostRanked = useMemo(() => rankAlmostThere(computed), [computed])
   const almost = showAllAlmost
     ? almostRanked
     : almostRanked.slice(0, ALMOST_INITIAL_LIMIT)
+  // Stage D.2 - "Make With Substitutions": resolvable via a configured,
+  // owned general substitute. Shown as its own section, ranked between
+  // Good Enough and Almost There (see HomeScreen's render order below),
+  // never mixed into Almost There even when the underlying `strict.avail`
+  // happens to be "almost" too.
+  const adaptedRanked = useMemo(() => rankAdapted(computed), [computed])
 
   const buyNext = useMemo(
     () =>
@@ -181,6 +196,32 @@ export default function HomeScreen() {
             </div>
             <div className="flex gap-2.5 overflow-x-auto pb-1">
               {good.map((c) => (
+                <SmallCard
+                  key={c.id}
+                  c={c}
+                  onClick={() => navigate(`/library/${c.id}`)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Stage D.2 - "Make With Substitutions": ranked after Perfect/Good
+            Enough (cocktails needing no adaptation still come first) and
+            ahead of Almost There, matching Library's own group order
+            (domain/availabilityGroups.js). SmallCard already renders each
+            recipe's own violet "adapted" primary status (Stage D.1) -
+            nothing further to distinguish here beyond the section itself. */}
+        {adaptedRanked.length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <SectionTitle>Make With Substitutions</SectionTitle>
+              <span className="text-xs font-mono text-violet">
+                ⇄ {adaptedRanked.length}
+              </span>
+            </div>
+            <div className="flex gap-2.5 overflow-x-auto pb-1">
+              {adaptedRanked.map((c) => (
                 <SmallCard
                   key={c.id}
                   c={c}

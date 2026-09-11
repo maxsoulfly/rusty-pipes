@@ -1,10 +1,17 @@
 // Pure UI vocabulary (not admin-managed catalog data, unlike taste tags and
 // glasses - those are real Supabase tables now, fetched via useCatalog()).
 
+// Keys match computeMakeability()'s `display.tier` (Stage D.1/D.2,
+// src/domain/makeability.js) - "adapted" was added 2026-09-11 for a recipe
+// resolvable via a configured, owned general substitute. Every consumer of
+// this list (LibraryScreen, ListsScreen) must compare against a recipe's
+// `display.tier`, not its raw `avail`, or a filter like "Almost" would
+// wrongly surface an adapted recipe that no longer belongs there.
 export const AVAIL_FILTERS = [
   { key: "all", label: "All" },
   { key: "perfect", label: "Perfect" },
   { key: "good", label: "Good Enough" },
+  { key: "adapted", label: "Make With Substitutions" },
   { key: "almost", label: "Almost" },
   { key: "unavail", label: "Unavailable" },
 ]
