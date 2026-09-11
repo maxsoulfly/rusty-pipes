@@ -189,7 +189,7 @@ The live catalogue still lacks any real preparation (D.4 curates the
 first one), so nothing in the running app can exercise tier 5 yet outside
 the automated tests and the RLS suite's throwaway fixtures.
 
-**Commit:** see the git log for the exact hash (this file and
+**Commit:** `24e0cb5` (this file and
 `docs/plans/substitutes-and-variations.md` updated in the same commit/push).
 
 ---
