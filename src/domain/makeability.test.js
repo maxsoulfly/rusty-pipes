@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { computeMakeability } from "./makeability"
+import { computeMakeability, isPreparationSatisfiable } from "./makeability"
 
 function component(overrides) {
   return {
@@ -19,6 +19,8 @@ const NAMES = {
   "lime-juice": "Lime Juice",
   "lemon-juice": "Lemon Juice",
   "simple-syrup": "Simple Syrup",
+  "white-sugar": "White Sugar",
+  water: "Water",
   lime: "Lime",
 }
 const name = (id) => NAMES[id] ?? id
@@ -28,6 +30,20 @@ const WHITE_RUM_TO_SPICED = {
   to_type_id: "spiced-rum",
   flavor_note: "Adds sweetness and spice.",
 }
+
+const LIME_JUICE_TO_LEMON = {
+  from_type_id: "lime-juice",
+  to_type_id: "lemon-juice",
+  flavor_note: "Tangier, less floral.",
+}
+
+const SIMPLE_SYRUP_PREP = {
+  id: "prep-simple-syrup",
+  name: "Simple Syrup",
+  instructions: ["Combine equal parts sugar and water", "Heat until dissolved"],
+  inputs: [{ ingredientTypeId: "white-sugar" }, { ingredientTypeId: "water" }],
+}
+const SIMPLE_SYRUP_BY_PRODUCED = new Map([["simple-syrup", SIMPLE_SYRUP_PREP]])
 
 describe("computeMakeability", () => {
   it("display mirrors strict when the recipe is already perfect - no adaptation attempted", () => {
@@ -192,5 +208,228 @@ describe("computeMakeability", () => {
     const { adapted, display } = computeMakeability(cocktail, new Set(), name)
     expect(adapted).toBeNull()
     expect(display).toEqual({ tier: "almost", label: null, isAdapted: false })
+  })
+
+  // ── Stage D.3: tier 5, satisfiable preparations ──────────────────────
+
+  it("adapts via a satisfiable preparation - all inputs owned", () => {
+    const cocktail = { ings: [component({ ingId: "simple-syrup" })] }
+    const { strict, adapted, display } = computeMakeability(
+      cocktail,
+      new Set(["white-sugar", "water"]),
+      name,
+      undefined,
+      undefined,
+      [],
+      SIMPLE_SYRUP_BY_PRODUCED,
+    )
+    expect(strict.missingRequiredIds).toEqual(["simple-syrup"])
+    expect(adapted).toEqual({
+      tier: "perfect",
+      label: "Prepare Simple Syrup first",
+      resolvedRequired: [
+        {
+          ingId: "simple-syrup",
+          via: "preparation",
+          preparationId: "prep-simple-syrup",
+          producedTypeId: "simple-syrup",
+          producedName: "Simple Syrup",
+          instructions: SIMPLE_SYRUP_PREP.instructions,
+          inputs: [
+            {
+              ingredientTypeId: "white-sugar",
+              name: "White Sugar",
+              amount: undefined,
+              unitLabel: undefined,
+            },
+            {
+              ingredientTypeId: "water",
+              name: "Water",
+              amount: undefined,
+              unitLabel: undefined,
+            },
+          ],
+        },
+      ],
+    })
+    expect(display).toEqual({
+      tier: "adapted",
+      label: "Prepare Simple Syrup first",
+      isAdapted: true,
+    })
+  })
+
+  it("does not adapt when only one preparation input is available - Sugar alone must not imply Simple Syrup", () => {
+    const cocktail = { ings: [component({ ingId: "simple-syrup" })] }
+    const { adapted, display } = computeMakeability(
+      cocktail,
+      new Set(["white-sugar"]), // no Water
+      name,
+      undefined,
+      undefined,
+      [],
+      SIMPLE_SYRUP_BY_PRODUCED,
+    )
+    expect(adapted).toBeNull()
+    expect(display.isAdapted).toBe(false)
+  })
+
+  it("resolves a preparation via household basics satisfying its inputs", () => {
+    const cocktail = { ings: [component({ ingId: "simple-syrup" })] }
+    const { adapted } = computeMakeability(
+      cocktail,
+      new Set(),
+      name,
+      new Set(["white-sugar", "water"]), // household basics, not owned
+      undefined,
+      [],
+      SIMPLE_SYRUP_BY_PRODUCED,
+    )
+    expect(adapted).not.toBeNull()
+    expect(adapted.resolvedRequired[0].via).toBe("preparation")
+  })
+
+  it("never marks the produced ingredient itself as owned - strict still reports it missing, and `owned` is never mutated", () => {
+    const cocktail = { ings: [component({ ingId: "simple-syrup" })] }
+    const owned = new Set(["white-sugar", "water"])
+    const { strict, adapted } = computeMakeability(
+      cocktail,
+      owned,
+      name,
+      undefined,
+      undefined,
+      [],
+      SIMPLE_SYRUP_BY_PRODUCED,
+    )
+    expect(adapted).not.toBeNull()
+    expect(strict.missingRequiredIds).toEqual(["simple-syrup"])
+    expect(owned.has("simple-syrup")).toBe(false)
+    expect(owned).toEqual(new Set(["white-sugar", "water"]))
+  })
+
+  it("combines a substitution and a preparation into one composed label - the Daiquiri acceptance scenario", () => {
+    const cocktail = {
+      ings: [
+        component({ ingId: "white-rum" }),
+        component({ ingId: "lime-juice" }),
+        component({ ingId: "simple-syrup" }),
+      ],
+    }
+    const owned = new Set(["spiced-rum", "lemon-juice", "white-sugar", "water"])
+    const { adapted, display } = computeMakeability(
+      cocktail,
+      owned,
+      name,
+      undefined,
+      undefined,
+      [WHITE_RUM_TO_SPICED, LIME_JUICE_TO_LEMON],
+      SIMPLE_SYRUP_BY_PRODUCED,
+    )
+    expect(adapted.resolvedRequired.map((r) => r.via).sort()).toEqual([
+      "preparation",
+      "substitute",
+      "substitute",
+    ])
+    expect(display.tier).toBe("adapted")
+    expect(display.label).toBe(
+      "Make with substitutions · Prepare Simple Syrup first",
+    )
+  })
+
+  it("never chases a preparation input's own preparability - depth capped at exactly one level", () => {
+    // Simple Syrup needs White Sugar + Water. White Sugar hypothetically has
+    // its own configured preparation (from raw cane) - tier 5 must not walk
+    // into it when checking Simple Syrup's own inputs; only strict tiers 1-2
+    // count for an input, never another preparation.
+    const preparations = new Map([
+      ["simple-syrup", SIMPLE_SYRUP_PREP],
+      [
+        "white-sugar",
+        {
+          id: "prep-sugar",
+          name: "White Sugar",
+          inputs: [{ ingredientTypeId: "raw-cane" }],
+        },
+      ],
+    ])
+    const cocktail = { ings: [component({ ingId: "simple-syrup" })] }
+    // Owns raw-cane and water, but genuinely not White Sugar itself - if
+    // chaining happened, White Sugar would incorrectly resolve via its own
+    // preparation and Simple Syrup would wrongly adapt too.
+    const { adapted } = computeMakeability(
+      cocktail,
+      new Set(["raw-cane", "water"]),
+      name,
+      undefined,
+      undefined,
+      [],
+      preparations,
+    )
+    expect(adapted).toBeNull()
+  })
+
+  it("is null-safe with no preparations map provided at all", () => {
+    const cocktail = { ings: [component({ ingId: "simple-syrup" })] }
+    const { adapted } = computeMakeability(
+      cocktail,
+      new Set(["white-sugar", "water"]),
+      name,
+    )
+    expect(adapted).toBeNull()
+  })
+})
+
+describe("isPreparationSatisfiable", () => {
+  it("is true when every input is owned", () => {
+    expect(
+      isPreparationSatisfiable(
+        [{ ingredientTypeId: "white-sugar" }, { ingredientTypeId: "water" }],
+        new Set(["white-sugar", "water"]),
+      ),
+    ).toBe(true)
+  })
+
+  it("is false when any input is missing", () => {
+    expect(
+      isPreparationSatisfiable(
+        [{ ingredientTypeId: "white-sugar" }, { ingredientTypeId: "water" }],
+        new Set(["white-sugar"]),
+      ),
+    ).toBe(false)
+  })
+
+  it("counts a household basic as satisfying an input", () => {
+    expect(
+      isPreparationSatisfiable(
+        [{ ingredientTypeId: "water" }],
+        new Set(),
+        new Set(["water"]),
+      ),
+    ).toBe(true)
+  })
+
+  it("counts a Can-provide form conversion as satisfying an input (tier 2)", () => {
+    expect(
+      isPreparationSatisfiable(
+        [{ ingredientTypeId: "lemon-juice" }],
+        new Set(["lemon"]),
+        undefined,
+        [
+          {
+            rawTypeId: "lemon",
+            preparedTypeId: "lemon-juice",
+            guidance: "Squeeze fresh juice from Lemon",
+          },
+        ],
+      ),
+    ).toBe(true)
+  })
+
+  it("is vacuously true for an empty input list", () => {
+    expect(isPreparationSatisfiable([], new Set())).toBe(true)
+  })
+
+  it("is null-safe when inputs is null/undefined", () => {
+    expect(isPreparationSatisfiable(undefined, new Set())).toBe(true)
   })
 })

@@ -221,7 +221,38 @@ function AppShell({ profile, session }) {
     ],
   )
 
-  // Stage D.1 (docs/plans/substitutes-and-variations.md -> "Stage D"):
+  // Homemade preparations (Stage D.3): joined here, once, from the two
+  // preparation tables - unlike formConversions/generalSubstitutes (single
+  // flat tables, regrouped cheaply inside computeMakeability() itself),
+  // joining preparations to their inputs is worth doing once for every
+  // recipe's render rather than once per recipe. Keyed by `produces_type_id`
+  // (unique - at most one preparation per produced type), each value shaped
+  // for domain/makeability.js's isPreparationSatisfiable().
+  const preparationsByProducedType = useMemo(() => {
+    const inputsByPreparationId = new Map()
+    ;(catalog.ingredientPreparationInputs ?? []).forEach((i) => {
+      if (!inputsByPreparationId.has(i.preparation_id))
+        inputsByPreparationId.set(i.preparation_id, [])
+      inputsByPreparationId.get(i.preparation_id).push({
+        ingredientTypeId: i.ingredient_type_id,
+        amount: i.amount,
+        unitLabel: i.unit_label,
+      })
+    })
+    return new Map(
+      (catalog.ingredientPreparations ?? []).map((p) => [
+        p.produces_type_id,
+        {
+          id: p.id,
+          name: p.name,
+          instructions: p.instructions ?? [],
+          inputs: inputsByPreparationId.get(p.id) ?? [],
+        },
+      ]),
+    )
+  }, [catalog.ingredientPreparations, catalog.ingredientPreparationInputs])
+
+  // Stage D.1/D.3 (docs/plans/substitutes-and-variations.md -> "Stage D"):
   // computeMakeability() wraps computeAvail() - `strict`'s fields are
   // spread at the top level exactly as computeAvail()'s always were (avail,
   // missingRequiredIds, substitutions, ...), so every existing consumer
@@ -239,6 +270,7 @@ function AppShell({ profile, session }) {
           householdBasicTypeIds,
           formConversions,
           catalog.ingredientSubstitutions,
+          preparationsByProducedType,
         )
         return { ...r, ...strict, adapted, display }
       }),
@@ -249,6 +281,7 @@ function AppShell({ profile, session }) {
       householdBasicTypeIds,
       formConversions,
       catalog.ingredientSubstitutions,
+      preparationsByProducedType,
     ],
   )
 

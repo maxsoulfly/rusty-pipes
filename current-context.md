@@ -29,24 +29,24 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
    (Note: item 17's "Stage 1 done, mobile verification pending" / "admin type editing moved to an `IngredientDetailScreen` overflow action" text predates the My Bar redesign's later stages — see the corrected current state in item 18's plan doc: inline admin edit pencils are gone, editing now goes through Admin → Ingredient Types via the ⋯ menu.)
 
-18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms (Concept 2) + Suggested Substitutes (Stage B) shipped via `docs/plans/substitutes-and-variations.md` (Stages A/B, DONE 2026-09-10). Homemade Preparations SUPERSEDED 2026-09-11 by a smaller design in that same doc ("Stage D — Adapted Availability & Minimal Homemade Preparations"). Stage D.1 (adapted availability from curated substitutes, no preparations yet) AND Stage D.2 (display-tier-based Library/Home/Lists discovery, grouping, ordering) DONE + pushed 2026-09-11 - see item 0 and the two new chunk entries below. Stages resequenced this turn; D.3–D.5 planning only, not started. Linked cocktail variations (Stage C) NOT started.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
+18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms (Concept 2) + Suggested Substitutes (Stage B) shipped via `docs/plans/substitutes-and-variations.md` (Stages A/B, DONE 2026-09-10). Homemade Preparations SUPERSEDED 2026-09-11 by a smaller design in that same doc ("Stage D — Adapted Availability & Minimal Homemade Preparations"), then that smaller design itself SHIPPED as Stage D.3 the same day. Stage D.1 (adapted availability from curated substitutes), Stage D.2 (display-tier-based Library/Home/Lists discovery/grouping/ordering), AND Stage D.3 (tier-5 preparations - schema, engine, editor) all DONE + pushed 2026-09-11 - see item 0 and the three chunk entries below. Stages resequenced this session; D.4–D.5 planning only, not started. Linked cocktail variations (Stage C) NOT started.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
 
 Each numbered step is a development chunk boundary for this file.
 
 ## Exact next action (2026-09-11)
 
-0. **`docs/plans/substitutes-and-variations.md` → "Stage D — Adapted Availability & Minimal Homemade Preparations" (revised v2, 2026-09-11). Stage D.1 AND Stage D.2 are DONE + pushed 2026-09-11 (see the new chunk entries below). Stages resequenced this turn (see below); D.3–D.5 remain planning only, not implemented.** The user decided general catalogue substitutes should be able to affect **discoverable makeability** — this **supersedes decision D1** ("general substitutes never affect availability") for a NEW mechanism layered on top of Stage B, not a change to Stage B's own shipped mechanism. **Important, do not misread:** the screenshot showing White Rum as "Try: Spiced Rum (in your bar)" while Daiquiri still reads as missing/unavailable is Stage B working **exactly as specified at the time** — it is **not a bug**, and Stage B's own outstanding manual-verification checklist (editor layout on a real phone; the recipe-editor adopt+note flow; clone/edit note round-trip) is **still not marked passed** and stays outstanding — re-verify it against Stage D's UI once that ships, don't check Stage B twice.
+0. **`docs/plans/substitutes-and-variations.md` → "Stage D — Adapted Availability & Minimal Homemade Preparations" (revised v2, 2026-09-11). Stage D.1, D.2, AND D.3 are DONE + pushed 2026-09-11 (see the three new chunk entries below). Stages resequenced this session (see below); D.4–D.5 remain planning only, not implemented.** The user decided general catalogue substitutes should be able to affect **discoverable makeability** — this **supersedes decision D1** ("general substitutes never affect availability") for a NEW mechanism layered on top of Stage B, not a change to Stage B's own shipped mechanism. **Important, do not misread:** the screenshot showing White Rum as "Try: Spiced Rum (in your bar)" while Daiquiri still reads as missing/unavailable is Stage B working **exactly as specified at the time** — it is **not a bug**, and Stage B's own outstanding manual-verification checklist (editor layout on a real phone; the recipe-editor adopt+note flow; clone/edit note round-trip) is **still not marked passed** and stays outstanding — re-verify it against Stage D's UI once that ships, don't check Stage B twice.
    - **Stages resequenced 2026-09-11, by explicit user instruction:** the discovery/grouping/ordering slice originally folded into the plan's old "D.3" (Library/Home grouping + counts + the full Daiquiri scenario) was pulled forward, narrowed to exclude preparations/the aggregate counts-breakdown/Buy Next/`excluded_substitute_type_ids`, and shipped as **Stage D.2**. The old D.2 (minimal homemade preparations) is renumbered **D.3**; the old D.3's remainder (combine tiers 4+5, counts/breakdown, curate the two missing catalogue rows) is renumbered **D.4**; the old D.4 (per-substitute override + Buy Next ranking split) is renumbered **D.5**. See `docs/plans/substitutes-and-variations.md`'s own resequencing note for the full mapping.
    - **v2 revision (this turn):** the first Stage D draft kept the canonical badge as primary and "adapted" as an additive secondary line (so a card could read "Unavailable" next to "Make with substitutions"), and left Buy Next's ranking untouched. The user rejected that as still missing the point and asked for a rewrite — see full detail in the plan doc's "Stage D revised (v2)" blockquote and the chunk entry below. The open question from v1 is **resolved**, not open anymore (see below).
    - **Concrete target:** own Spiced Rum + Lemon Juice; White Sugar + Water are household basics; Daiquiri needs White Rum + Lime Juice + Simple Syrup. Once `Lime Juice → Lemon Juice` (substitute) and a Simple Syrup preparation (from White Sugar + Water) are curated, Daiquiri's **primary** status everywhere becomes **"Make with substitutions · Prepare syrup first"** — it must never show "Unavailable" as the leading badge next to that.
    - **Model (planning only, revised):** `computeAvail()`/`strict` stay computed exactly as today (still exact → Can-provide → recipe-scoped substitution) but are no longer, by themselves, what any screen renders as the primary status. A new `computeMakeability()` wraps it, returning `{ strict, adapted, display }` — `display.tier` (`perfect`/`good`/`adapted`/`almost`/`unavailable`) is **the one field every surface reads**: it equals `strict.tier` when already perfect/good, else `"adapted"` when tiers 4–5 (owned general substitute; a preparation whose own inputs pass tiers 1–3 only, never chained) fully resolve every remaining required component, else falls through to `strict.tier` unchanged. No recipe ever shows two contradictory primary statuses. `strict` is kept for the detail page's honest per-ingredient rows and internal bookkeeping only.
-   - **Minimal Homemade Preparations (unchanged from v1, now explicitly confirmed against the ask):** two new small tables, `ingredient_preparations` (keyed by `produces_type_id`, unique) + `ingredient_preparation_inputs` (one row per input, own amount+unit), depth-1 guard trigger, `instructions text[]` for steps — **does NOT reuse `recipes`**. Confirmed: supports multiple inputs, per-input quantities, steps, and atomic Save/Cancel through the same `IngredientTypeEditor` local-draft + `save_ingredient_type()` (6th param) pattern already used for aliases/Can-provide/Can-be-replaced-by.
+   - **Minimal Homemade Preparations — DONE + pushed 2026-09-11 as Stage D.3** (see the chunk entry below): `ingredient_preparations` (keyed by `produces_type_id`, unique) + `ingredient_preparation_inputs` (one row per input, own amount+unit), depth-1 guard implemented as TWO triggers (both directions - self/cross-preparation on the input side, and the reverse "already used as an input" check on the produce side), `instructions text[]` for steps — does NOT reuse `recipes`. Confirmed live: supports multiple inputs, per-input quantities, steps, and atomic Save/Cancel through the same `IngredientTypeEditor` local-draft + `save_ingredient_type()` (now 6-arg) pattern.
    - **Recipe-specific override (requirement 2, revised):** v1's whole-component boolean was too coarse — rejecting one bad substitute would've silenced every other valid one on the same component. Revised to `recipe_components.excluded_substitute_type_ids uuid[] default '{}'` — excludes one specific substitute type from tier 4 on one component; every other configured substitute (and any preparation route) for that component is unaffected. Editor UI: removable chips per configured substitute, not a checkbox.
    - **Surfacing (revised — adapted is primary, not additive):** `IngredientsSection` still shows the honest per-ingredient rows from `strict` plus a new distinct "Adapted:" accent row with the flavor note + preparation link; but the **card/HeroCard/Library/Home/Build-Your-Bar primary badge is now `display.label`** — e.g. "Make with substitutions · Prepare syrup first" IS the leading status, not a line beside "Unavailable". **Library/Home** get a new "Make With Substitutions" group ranked after Good Enough and before Almost There (adapted recipes rank after no-adaptation-needed ones, per instruction, but are part of the main "possible" set). **Counts (Library/Home/Build Your Bar, one shared shape)**: primary "possible" total is now `perfect + good + adapted`, always shown with an explicit breakdown — e.g. **"8 cocktails possible · 5 ready, 3 with substitutions or preparation"** — replacing v1's "stays literal + separate +N line."
    - **Buy Next (revised — a ranking change, not just rendering):** `rankPurchaseRecommendations` now splits candidates by the target recipe's `display.tier` at gather time — a recipe already `display.tier === "adapted"` never counts its one remaining strict-missing ingredient as an "unlock" (`unlockCount`/the "Unlocks N" reason); instead it's tracked separately as `restoresOriginalRecipes`, ranked below genuine unlocks, with its own reason text ("Also lets you make the original version of N already-possible recipe(s)"). Genuine not-yet-adapted unlocks are scored exactly as today.
    - **Open question RESOLVED, no longer open:** the user's own instruction directly settled it — counts include adapted in the main total with a breakdown (see above), not a literal-only primary number.
-   - **D.3/D.4/D.5 remain planning only** (the model/preparations/override/Buy-Next/counts detail in this bullet list describes the FULL Stage D design, most of which is not built yet - only D.1's substitutes-only tier-4 adaptation + primary-status wiring, and D.2's display-tier-based Library/Home/Lists discovery/grouping/ordering, have shipped, see the two chunk entries below).
-   - **Exact next action:** the user reviews Stage D.1 + D.2 (code + the one live-app check noted in the chunk entries below), then decides which stage to proceed to next (D.3 minimal homemade preparations is the plan's own next step, but the user is not bound to that order, per this turn's own resequencing precedent).
+   - **D.4/D.5 remain planning only** (the override/Buy-Next/counts detail in this bullet list describes the FULL Stage D design, most of which is not built yet - D.1's substitutes-only tier-4 adaptation + primary-status wiring, D.2's display-tier-based Library/Home/Lists discovery/grouping/ordering, AND D.3's tier-5 preparations (schema + engine + editor) have all shipped, see the three chunk entries below - only the aggregate counts/breakdown, the Buy Next ranking split, and the per-substitute exclusion remain).
+   - **Exact next action:** the user reviews Stage D.1 + D.2 + D.3 (code + the one live-app check noted in the chunk entries below), then decides which stage to proceed to next (D.4 - curate the two missing catalogue rows for the full Daiquiri scenario + the shared counts/breakdown - is the plan's own next step, but the user is not bound to that order, per this session's own resequencing precedent).
 
 1. **Household Basics is COMPLETE — Stages 1–3, closed out 2026-09-10.** See the "Household Basics Stage 3 — CLOSE-OUT" chunk below (two non-blocking limits: Home "Edit list" visual check; offline-save handling).
 2. **`docs/plans/substitutes-and-variations.md` — decisions D1–D6 APPROVED (D1 now superseded for the new Stage D feature, see item 0); Stage A + Stage A follow-up + Stage B all DONE + pushed 2026-09-10. Stage C (Linked Variations) NOT started. Stage D is planning-only (see item 0).**
@@ -87,6 +87,112 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 3. **Google OAuth's consent screen is still in "Testing" mode, not published** - deliberate, per the user's own choice (see below) - real members are added as test users one at a time, same overhead as generating an invitation. Revisit only if the user decides they want unlimited/unmanaged Google sign-in later (would need a real Privacy Policy/Terms of Service page built first).
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
+
+## Last completed chunk (Substitutes & Variations — Stage D.3 implemented, 2026-09-11 — schema + engine + editor, 2 migrations pushed, no live-catalogue changes)
+
+**Scope, per explicit instruction:** tier 5 ("satisfiable preparation")
+only - the two new tables, the depth-1 guard, `isPreparationSatisfiable()`,
+wiring tier 5 into `computeAdaptedResult()`/`composeAdaptedLabel()`, and the
+Ingredient Type editor's "Homemade preparation" block, participating in the
+existing atomic Save/Cancel. Explicitly NOT this stage: the aggregate
+counts/breakdown, the Buy Next unlock-vs-original ranking split,
+`excluded_substitute_type_ids`, and no catalogue/live-data changes (the two
+curated rows the Daiquiri scenario needs - Lime Juice → Lemon Juice,
+a Simple Syrup preparation - are still not added; that's Stage D.4, as a
+verification step, not a seed).
+
+**Schema (migrations `20260911120000`, `20260911130000`, pushed):**
+`ingredient_preparations (id, produces_type_id unique, name, instructions
+text[])` + `ingredient_preparation_inputs (id, preparation_id,
+ingredient_type_id, amount, unit_label, unique(preparation_id,
+ingredient_type_id))` - exactly the shape the plan specified. RLS
+`is_member()` read / `is_admin_or_moderator()` write, `to authenticated`
+from the first migration. **Depth-1 guard implemented bidirectionally**
+(two triggers, tightening beyond the plan doc's single-trigger SQL sketch,
+per the household-basics doc's fuller "carries forward unchanged"
+description): `enforce_preparation_input_depth` rejects an input that is
+itself any preparation's produced type (covers self-reference too, by FK
+insert order); `enforce_preparation_produces_depth` rejects
+creating/editing a preparation to produce a type already in use as some
+OTHER preparation's input. Both directions covered by dedicated RLS-suite
+tests. `save_ingredient_type()` is now **6-arg**
+(`p_preparation jsonb default null`) - same delete-then-insert
+reconciliation as the other three relationships, one transaction; also
+rejects a preparation with zero inputs (would be vacuously "always
+satisfiable," meaningless).
+
+**`src/domain/makeability.js`:** new exported `isPreparationSatisfiable()` -
+reuses `computeAvail()` itself (a synthetic one-component "recipe," no
+alternatives) rather than re-implementing tiers 1-2, so it can't drift from
+the real engine; never consults tier 3 (recipe-scoped, not applicable to a
+raw input) or tiers 4-5 (no chaining). `computeAdaptedResult()` tries tier 4
+then tier 5 per missing component (never both for the same component); a
+`via: "preparation"` entry carries `instructions`/resolved `inputs` fully
+through, matching how a substitute entry already carries
+`matchedName`/`note`. `composeAdaptedLabel()` now actually composes:
+substitute-only → "Make with substitutions"; preparation-only → "Prepare X
+first"; both → joined with " · " - the acceptance scenario's exact text,
+mechanically ready even though nothing live can trigger it yet.
+
+**`App.jsx`:** `preparationsByProducedType` joined once via `useMemo` from
+the two new catalog arrays (unlike the single-table substitutes, joining
+two tables per-recipe-per-render would be wasteful), passed as
+`computeMakeability()`'s 7th argument. `useCatalog.js`/`services/catalog.js`
+gain the two fetches + the `saveIngredientType()` `preparation` param.
+
+**Editor (`IngredientTypeEditor.jsx`):** new "Homemade preparation" section
+- a single optional block (not a list, `produces_type_id` is unique), keyed
+the opposite way from "Can provide"/"Can be replaced by" (produced side,
+not raw/from side). Name + a repeatable input-rows list (`TypeComboBox` +
+amount + unit) excluding self-reference/already-produced types, and
+`StepsEditor` reused as-is (a generic ordered-string-list editor from
+`src/components/editor/`, not recipe-specific) for instructions. Folded
+into the same local draft / dirty-check snapshot / one
+`saveIngredientType()` call as everything else - no independent Save
+button, Cancel discards it with zero writes. Client-side check (non-blank
+name, ≥1 fully-picked input) disables Save with an inline hint rather than
+surfacing a raw cast error.
+
+**Detail page (`IngredientsSection.jsx`):** a `via: "preparation"` row
+shows "Adapted: needs preparation — How to make &lt;name&gt;", never marked
+owned (unreachable through the same `isOwned` gate every other branch
+uses). Tapping it expands an inline panel (local component state, not a
+route) listing every input's amount (via `formatAmount()`, respecting
+ml/oz) and the preparation's own numbered steps.
+
+**D.2 automatically covers this, no screen-specific code needed:**
+`display.tier === "adapted"` is identical regardless of whether tier 4 or
+tier 5 resolved it, so Library's group/Home's section/both filters (all
+built against `display.tier` in D.2) apply with zero additional changes -
+confirmed by the "mixed substitution + preparation" domain test.
+
+**Verified:** `corepack pnpm@10.34.3 test` **284/284** (+13 in
+`makeability.test.js`: satisfiable preparation resolves; one missing input
+blocks it; household basics satisfy an input; produced ingredient never
+marked owned, `owned` never mutated; substitution + preparation combine
+into the exact composed label; no recursive chain (depth capped at one
+level); null-safe with no preparations map; 6 `isPreparationSatisfiable`
+tests). `pnpm build` clean (173 modules). Isolated-LF `oxfmt --check` clean
+on all 9 changed/new files (5 reflows hand-applied). **Migrations pushed**
+(`supabase db push --linked`, clean, 61/61 local==remote). **RLS suite**
+extended with a full preparations block - member read/anon denied (both
+tables); direct member write denied; admin multi-input insert; both
+directions of the depth-1 guard; `save_ingredient_type`'s `p_preparation`
+only touches the edited type; **atomic rollback** on a self-referencing
+preparation input (type name + prior preparation both verified unchanged);
+zero-input preparation rejected; 6-arg member call denied. Full suite
+passes (`{"rows":[]}`). `db advisors --type security` - no new finding.
+
+**Not verified here (no browser tooling):** the editor's "Homemade
+preparation" block and the detail page's expandable panel, on a real phone.
+The live catalogue still lacks any real preparation (D.4 curates the
+first one), so nothing in the running app can exercise tier 5 yet outside
+the automated tests and the RLS suite's throwaway fixtures.
+
+**Commit:** see the git log for the exact hash (this file and
+`docs/plans/substitutes-and-variations.md` updated in the same commit/push).
+
+---
 
 ## Last completed chunk (Substitutes & Variations — Stage D.2 implemented, 2026-09-11 — `src/**` only, no migrations, no live-catalogue changes)
 

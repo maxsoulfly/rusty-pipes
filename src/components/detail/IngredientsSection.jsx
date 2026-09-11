@@ -1,3 +1,4 @@
+import { useState } from "react"
 import clsx from "clsx"
 import { SectionTitle } from "@/components/primitives"
 import { formatAmount } from "@/domain/availability"
@@ -37,6 +38,18 @@ export function IngredientsSection({
   const adaptedByIngId = new Map(
     (adapted?.resolvedRequired ?? []).map((r) => [r.ingId, r]),
   )
+  // Stage D.3 - which preparation "how to make it" panels are open. Local,
+  // per-visit UI state only (never persisted) - collapsed by default so the
+  // ingredient list stays compact; expanding one is what satisfies "enough
+  // instruction for the user to actually do it" without leaving the page.
+  const [expandedPreparations, setExpandedPreparations] = useState(new Set())
+  const togglePreparation = (ingId) =>
+    setExpandedPreparations((prev) => {
+      const next = new Set(prev)
+      if (next.has(ingId)) next.delete(ingId)
+      else next.add(ingId)
+      return next
+    })
   // Computed from the recipe's base stored amounts (never servings-scaled -
   // see domain/parts.js) so the ratio never changes when servings does.
   // A recipe mixing stored ml with a manually-typed "part" component has no
@@ -137,74 +150,109 @@ export function IngredientsSection({
                       scaleIngredientAmount(ri, displayServings),
                       unit,
                     )
+              const preparationExpanded =
+                adaptedMatch?.via === "preparation" &&
+                expandedPreparations.has(ri.ingId)
               return (
-                <div
-                  key={ri.ingId}
-                  className="flex items-center gap-3 py-2.5 border-b border-bdr"
-                >
-                  <div
-                    className={clsx(
-                      "w-2 h-2 rounded-full shrink-0",
-                      isOwned
-                        ? "bg-green shadow-[0_0_6px_rgba(52,211,153,0.6)]"
-                        : adaptedMatch
-                          ? "bg-violet shadow-[0_0_6px_rgba(167,139,250,0.6)]"
-                          : ri.role === "required"
-                            ? "bg-coral"
-                            : "bg-tx3",
-                    )}
-                  />
-                  <span className="flex-1">
-                    <span className="text-sm text-tx font-body">
-                      {ri.name ?? ri.ingId}
-                    </span>
-                    {substitution ? (
-                      <span className="block text-[11px] text-tx3">
-                        Substituting: {substitution.matchedName}
-                        {substitution.note ? ` — ${substitution.note}` : ""}
+                <div key={ri.ingId} className="border-b border-bdr">
+                  <div className="flex items-center gap-3 py-2.5">
+                    <div
+                      className={clsx(
+                        "w-2 h-2 rounded-full shrink-0",
+                        isOwned
+                          ? "bg-green shadow-[0_0_6px_rgba(52,211,153,0.6)]"
+                          : adaptedMatch
+                            ? "bg-violet shadow-[0_0_6px_rgba(167,139,250,0.6)]"
+                            : ri.role === "required"
+                              ? "bg-coral"
+                              : "bg-tx3",
+                      )}
+                    />
+                    <span className="flex-1">
+                      <span className="text-sm text-tx font-body">
+                        {ri.name ?? ri.ingId}
                       </span>
-                    ) : formConversion ? (
-                      <span className="block text-[11px] text-tx3">
-                        {formConversion.guidance}
-                      </span>
-                    ) : householdBasic ? (
-                      <span className="block text-[11px] text-tx3">
-                        Household basic
-                      </span>
-                    ) : adaptedMatch ? (
-                      // Stage D.1 - only `via: "substitute"` exists yet
-                      // (Stage D.2 adds `via: "preparation"`, which will
-                      // need its own branch here linking to the
-                      // preparation's own ingredients/steps).
-                      <span className="block text-[11px] text-violet">
-                        Adapted: {adaptedMatch.matchedName}
-                        {adaptedMatch.note ? ` — ${adaptedMatch.note}` : ""}
-                      </span>
-                    ) : (
-                      suggestions.length > 0 && (
-                        <span className="block text-[11px] text-tx3 leading-snug">
-                          Try:{" "}
-                          {suggestions.map((s, si) => (
-                            <span key={s.toId}>
-                              {si > 0 && " · "}
-                              <span
-                                className={
-                                  s.owned ? "text-tx2 font-medium" : ""
-                                }
-                              >
-                                {s.toName}
-                              </span>
-                              {s.owned ? " (in your bar)" : ""}
-                              {s.note ? ` — ${s.note}` : ""}
-                            </span>
-                          ))}
+                      {substitution ? (
+                        <span className="block text-[11px] text-tx3">
+                          Substituting: {substitution.matchedName}
+                          {substitution.note ? ` — ${substitution.note}` : ""}
                         </span>
-                      )
-                    )}
-                  </span>
-                  <span className="text-[13px] font-mono text-tx2 whitespace-nowrap">
-                    {amountText}
-                  </span>
+                      ) : formConversion ? (
+                        <span className="block text-[11px] text-tx3">
+                          {formConversion.guidance}
+                        </span>
+                      ) : householdBasic ? (
+                        <span className="block text-[11px] text-tx3">
+                          Household basic
+                        </span>
+                      ) : adaptedMatch?.via === "preparation" ? (
+                        // Stage D.3 - resolvable by preparing it from other
+                        // ingredients, never marked owned (the produced type
+                        // itself stays genuinely missing - see `isOwned`
+                        // above, which this branch is never reached through).
+                        <span className="block text-[11px] text-violet leading-snug">
+                          Adapted: needs preparation —{" "}
+                          <button
+                            type="button"
+                            onClick={() => togglePreparation(ri.ingId)}
+                            className="underline underline-offset-2 cursor-pointer bg-transparent border-none p-0 text-violet font-medium"
+                          >
+                            {expandedPreparations.has(ri.ingId)
+                              ? "Hide how to make it"
+                              : `How to make ${adaptedMatch.producedName}`}
+                          </button>
+                        </span>
+                      ) : adaptedMatch ? (
+                        <span className="block text-[11px] text-violet">
+                          Adapted: {adaptedMatch.matchedName}
+                          {adaptedMatch.note ? ` — ${adaptedMatch.note}` : ""}
+                        </span>
+                      ) : (
+                        suggestions.length > 0 && (
+                          <span className="block text-[11px] text-tx3 leading-snug">
+                            Try:{" "}
+                            {suggestions.map((s, si) => (
+                              <span key={s.toId}>
+                                {si > 0 && " · "}
+                                <span
+                                  className={
+                                    s.owned ? "text-tx2 font-medium" : ""
+                                  }
+                                >
+                                  {s.toName}
+                                </span>
+                                {s.owned ? " (in your bar)" : ""}
+                                {s.note ? ` — ${s.note}` : ""}
+                              </span>
+                            ))}
+                          </span>
+                        )
+                      )}
+                    </span>
+                    <span className="text-[13px] font-mono text-tx2 whitespace-nowrap">
+                      {amountText}
+                    </span>
+                  </div>
+                  {preparationExpanded && (
+                    <div className="mb-2.5 -mt-1 ml-5 rounded-sm border border-violet/30 bg-violet/5 p-2.5">
+                      <div className="text-[11px] text-tx2 mb-1.5">
+                        Uses:{" "}
+                        {adaptedMatch.inputs
+                          .map(
+                            (input) =>
+                              `${formatAmount({ amount: input.amount, unitLabel: input.unitLabel }, unit)} ${input.name}`,
+                          )
+                          .join(", ")}
+                      </div>
+                      {adaptedMatch.instructions.length > 0 && (
+                        <ol className="list-decimal list-inside text-[11px] text-tx2 flex flex-col gap-0.5">
+                          {adaptedMatch.instructions.map((step, i) => (
+                            <li key={i}>{step}</li>
+                          ))}
+                        </ol>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             })}

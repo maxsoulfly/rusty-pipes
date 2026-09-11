@@ -1,4 +1,4 @@
-// Pure, framework-free "adapted availability" (Stage D.1 -
+// Pure, framework-free "adapted availability" (Stage D - see
 // docs/plans/substitutes-and-variations.md -> "Stage D"). Wraps
 // computeAvail() rather than replacing it: `strict` below is exactly
 // today's computeAvail() output, byte-for-byte, kept for internal
@@ -8,56 +8,153 @@
 // a recipe never shows a contradictory pair like "Unavailable" next to
 // "Make with substitutions".
 //
-// D.1 scope only: tier 4 ("owned general substitute") is implemented.
-// Tier 5 ("satisfiable preparation") does not exist yet - Stage D.2 adds
-// `ingredient_preparations`/`ingredient_preparation_inputs` and will extend
-// `computeAdaptedResult` below to also try that route, and
-// `composeAdaptedLabel` to produce "Prepare X first" / combined text. Until
-// then, `adapted` (when non-null) always resolves purely through owned
-// general substitutes and always carries the single "Make with
-// substitutions" label.
+// Stage D.1 shipped tier 4 ("owned general substitute"). Stage D.3 adds
+// tier 5 ("satisfiable preparation" - ingredient_preparations /
+// ingredient_preparation_inputs): a still-missing required component can
+// also resolve when a configured preparation exists for it AND every one
+// of that preparation's OWN inputs independently passes tiers 1-2 (exact
+// availability / Can-provide) - never tier 3 (that's a recipe-component
+// concept, meaningless for a preparation's own raw inputs), and never
+// tiers 4-5 again (no chaining - a preparation's inputs can never
+// themselves be another substitute or another preparation; the depth-1 DB
+// guard, 20260911120000, enforces the same rule at the data layer). This is
+// the exact mechanism behind "Sugar alone must not imply owned Simple
+// Syrup": both White Sugar AND Water must independently satisfy tiers 1-2 -
+// one input alone is not the whole preparation.
 
 import { computeAvail } from "./availability"
 import { groupSubstitutionsByFrom } from "./substituteSuggestions"
+
+/**
+ * True only when every one of a preparation's inputs is available through
+ * tiers 1-2 (exact/household-basic, then Can-provide form conversion) -
+ * reuses computeAvail() itself (asking it about a synthetic one-component
+ * "recipe" with no recipe-scoped alternatives) rather than re-implementing
+ * that resolution, so this never drifts from the real engine. Never
+ * consults tier 3 (recipe-scoped substitution - not applicable outside an
+ * actual recipe component) or tiers 4-5 (general substitutes / another
+ * preparation) - a preparation's own inputs are never chained.
+ *
+ * @param {{ ingredientTypeId: string }[]} inputs
+ * @param {Set<string>} owned
+ * @param {Set<string>} [householdBasicIds]
+ * @param {{ rawTypeId: string, preparedTypeId: string, guidance: string }[]} [formConversions]
+ * @returns {boolean}
+ */
+export function isPreparationSatisfiable(
+  inputs,
+  owned,
+  householdBasicIds,
+  formConversions,
+) {
+  return (inputs ?? []).every(({ ingredientTypeId }) => {
+    const result = computeAvail(
+      { ings: [{ ingId: ingredientTypeId, role: "required" }] },
+      owned,
+      undefined,
+      householdBasicIds,
+      formConversions,
+    )
+    return result.missingRequiredIds.length === 0
+  })
+}
+
+// Joins preparation/component names into readable prose: "X", "X and Y", or
+// "X, Y, and Z". No truncation - v1 preparations are expected to be rare
+// enough per recipe that a "+N more" affordance isn't warranted yet.
+function joinWithAnd(names) {
+  if (names.length <= 1) return names[0] ?? ""
+  if (names.length === 2) return `${names[0]} and ${names[1]}`
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`
+}
 
 /**
  * @param {ReturnType<typeof computeAvail>} strict
  * @param {Set<string>} owned
  * @param {(id: string) => string} resolveName
  * @param {Map<string, { to_type_id: string, flavor_note: string }[]>} substitutesByFrom
+ * @param {Map<string, { id: string, name: string, inputs: { ingredientTypeId: string }[] }>} preparationsByProducedType
+ * @param {Set<string>} [householdBasicIds]
+ * @param {{ rawTypeId: string, preparedTypeId: string, guidance: string }[]} [formConversions]
  * @returns {null | {
  *   tier: "perfect" | "good",
  *   label: string,
- *   resolvedRequired: { ingId: string, via: "substitute", matchedId: string, matchedName: string, note: string|null }[],
+ *   resolvedRequired: (
+ *     { ingId: string, via: "substitute", matchedId: string, matchedName: string, note: string|null } |
+ *     { ingId: string, via: "preparation", preparationId: string, producedTypeId: string, producedName: string, instructions: string[], inputs: { ingredientTypeId: string, name: string, amount: number, unitLabel: string }[] }
+ *   )[],
  * }}
  */
-function computeAdaptedResult(strict, owned, resolveName, substitutesByFrom) {
+function computeAdaptedResult(
+  strict,
+  owned,
+  resolveName,
+  substitutesByFrom,
+  preparationsByProducedType,
+  householdBasicIds,
+  formConversions,
+) {
   // Nothing left to adapt - strict already resolved every required
   // component (avail is "perfect" or "good").
   if (strict.missingRequiredIds.length === 0) return null
 
   const resolvedRequired = []
   for (const ingId of strict.missingRequiredIds) {
+    // Tier 4 first (matches the plan's precedence order) - an owned general
+    // substitute. Directional by construction (substitutesByFrom is keyed
+    // by from_type_id only) and never chained - this loop only ever looks
+    // at strict's own missingRequiredIds, never at a candidate's own
+    // requirements.
     const candidates = substitutesByFrom.get(ingId) ?? []
-    // Only an OWNED stand-in counts - a suggestion you don't own never
-    // flips makeability (matches Stage B's "Try:" hint, which shows the
-    // same candidates regardless of ownership). Directional by
-    // construction (substitutesByFrom is keyed by from_type_id only) and
-    // never chained - this loop only ever looks at strict's own
-    // missingRequiredIds, never at another candidate's own requirements.
     const ownedCandidate = candidates.find((s) => owned.has(s.to_type_id))
-    // No tier-5 (preparation) fallback yet - see the module header. A
-    // component that tier 4 can't resolve fails the whole adaptation: no
-    // partial credit, mirrors strict's own all-or-nothing "good enough" bar.
-    if (!ownedCandidate) return null
+    if (ownedCandidate) {
+      resolvedRequired.push({
+        ingId,
+        via: "substitute",
+        matchedId: ownedCandidate.to_type_id,
+        matchedName: resolveName(ownedCandidate.to_type_id),
+        note: ownedCandidate.flavor_note ?? null,
+      })
+      continue
+    }
 
-    resolvedRequired.push({
-      ingId,
-      via: "substitute",
-      matchedId: ownedCandidate.to_type_id,
-      matchedName: resolveName(ownedCandidate.to_type_id),
-      note: ownedCandidate.flavor_note ?? null,
-    })
+    // Tier 5 - a configured preparation whose own inputs are all
+    // independently satisfiable (never chained into tiers 4-5 again).
+    const prep = preparationsByProducedType.get(ingId)
+    if (
+      prep &&
+      isPreparationSatisfiable(
+        prep.inputs,
+        owned,
+        householdBasicIds,
+        formConversions,
+      )
+    ) {
+      resolvedRequired.push({
+        ingId,
+        via: "preparation",
+        preparationId: prep.id,
+        producedTypeId: ingId,
+        producedName: resolveName(ingId),
+        // Carried through fully resolved (like a substitute's matchedName/
+        // note) so the detail page can explain and link to the preparation
+        // without a second lookup - "show what needs to be prepared and
+        // enough instruction to actually do it," per the acceptance
+        // scenario, without exposing raw ids to the UI layer.
+        instructions: prep.instructions ?? [],
+        inputs: (prep.inputs ?? []).map((input) => ({
+          ingredientTypeId: input.ingredientTypeId,
+          name: resolveName(input.ingredientTypeId),
+          amount: input.amount,
+          unitLabel: input.unitLabel,
+        })),
+      })
+      continue
+    }
+
+    // Neither tier resolved this component - no partial credit, the whole
+    // adaptation fails (mirrors strict's own all-or-nothing "good enough").
+    return null
   }
 
   return {
@@ -71,13 +168,21 @@ function computeAdaptedResult(strict, owned, resolveName, substitutesByFrom) {
   }
 }
 
-// D.1 only ever produces `via: "substitute"` entries (see the module
-// header), so this always returns the same text for now. Written as its
-// own function, not inlined, so Stage D.2 can extend it (join in "Prepare
-// <name> first" for `via: "preparation"` entries, "·" between the two)
-// without touching computeAdaptedResult's own logic.
-function composeAdaptedLabel(_resolvedRequired) {
-  return "Make with substitutions"
+// One badge, composed text - not four. Substitute-only -> "Make with
+// substitutions". Preparation-only -> "Prepare <name(s)> first". Both ->
+// joined with " · ", exactly the acceptance scenario's "Make with
+// substitutions · Prepare syrup first".
+function composeAdaptedLabel(resolvedRequired) {
+  const hasSubstitute = resolvedRequired.some((r) => r.via === "substitute")
+  const preparationNames = resolvedRequired
+    .filter((r) => r.via === "preparation")
+    .map((r) => r.producedName)
+
+  const parts = []
+  if (hasSubstitute) parts.push("Make with substitutions")
+  if (preparationNames.length > 0)
+    parts.push(`Prepare ${joinWithAnd(preparationNames)} first`)
+  return parts.join(" · ")
 }
 
 /**
@@ -92,6 +197,11 @@ function composeAdaptedLabel(_resolvedRequired) {
  *   raw `ingredient_substitutions` rows (catalog.ingredientSubstitutions) -
  *   grouped internally, same "raw array in, per-recipe call" shape
  *   computeAvail() already uses for `formConversions`.
+ * @param {Map<string, { id: string, name: string, instructions: string[], inputs: { ingredientTypeId: string, amount: number, unitLabel: string }[] }>} [preparationsByProducedType] -
+ *   pre-joined (App.jsx builds this once via useMemo from the two
+ *   preparation tables - unlike `generalSubstitutes`, joining two tables
+ *   per-recipe-per-render would be wasteful, so this one arrives already
+ *   grouped rather than as a raw array).
  * @returns {{
  *   strict: ReturnType<typeof computeAvail>,
  *   adapted: ReturnType<typeof computeAdaptedResult>,
@@ -105,6 +215,7 @@ export function computeMakeability(
   householdBasicIds,
   formConversions,
   generalSubstitutes,
+  preparationsByProducedType,
 ) {
   const resolveName = resolveIngredientName ?? ((id) => id)
   const strict = computeAvail(
@@ -116,8 +227,8 @@ export function computeMakeability(
   )
 
   // strict.avail is already perfect/good - nothing to adapt, and no reason
-  // to spend time matching substitutes for a recipe that's already
-  // discoverably makeable.
+  // to spend time matching substitutes/preparations for a recipe that's
+  // already discoverably makeable.
   const adapted =
     strict.avail === "perfect" || strict.avail === "good"
       ? null
@@ -126,6 +237,9 @@ export function computeMakeability(
           owned,
           resolveName,
           groupSubstitutionsByFrom(generalSubstitutes),
+          preparationsByProducedType ?? new Map(),
+          householdBasicIds,
+          formConversions,
         )
 
   const display = adapted

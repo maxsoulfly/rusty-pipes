@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from "react"
 import { ShapePicker } from "@/components/admin/ShapePicker"
 import { TypeComboBox } from "@/components/admin/TypeComboBox"
-import { IconDots } from "@/components/icons"
+import { StepsEditor } from "@/components/editor/StepsEditor"
+import { IconDots, IconX } from "@/components/icons"
 import {
   BottomSheet,
   Btn,
@@ -12,6 +13,7 @@ import {
   OwnedToggle,
   Select,
 } from "@/components/primitives"
+import { NON_VOLUME_UNITS } from "@/data/constants"
 import { resolveIngredientType } from "@/domain/ingredientResolution"
 import {
   BAR_PRIORITIES,
@@ -61,6 +63,20 @@ function normSubstitutes(list) {
     .sort((a, b) => a[0].localeCompare(b[0]))
 }
 
+// null (no preparation) normalizes to null; otherwise a deterministic
+// snapshot for the dirty-check (input order doesn't matter to the user, so
+// it's sorted here the same way conversions/substitutes are above).
+function normPreparation(prep) {
+  if (!prep) return null
+  return {
+    name: prep.name.trim(),
+    instructions: prep.instructions.map((s) => s.trim()).filter(Boolean),
+    inputs: [...prep.inputs]
+      .map((i) => [i.ingredientTypeId, i.amount, i.unitLabel])
+      .sort((a, b) => a[0].localeCompare(b[0])),
+  }
+}
+
 export function IngredientTypeEditor({
   type,
   categories,
@@ -69,6 +85,8 @@ export function IngredientTypeEditor({
   liquidColors,
   formConversions,
   ingredientSubstitutions,
+  ingredientPreparations,
+  ingredientPreparationInputs,
   onSaved,
   onCancel,
   style,
@@ -279,6 +297,94 @@ export function IngredientTypeEditor({
     setMenuForSubIdx(idx)
   }
 
+  // ── Homemade preparation draft (produced side = this type) - Stage D.3 ─
+  // Unlike "Can provide"/"Can be replaced by" above, this type is the
+  // PRODUCED side, not the raw/from side - and at most one preparation
+  // exists per produced type, so this is a single optional block, not a
+  // list. null = no preparation configured.
+  const initialPreparation = useMemo(() => {
+    const prep = (ingredientPreparations ?? []).find(
+      (p) => p.produces_type_id === type.id,
+    )
+    if (!prep) return null
+    return {
+      name: prep.name,
+      instructions: prep.instructions ?? [],
+      inputs: (ingredientPreparationInputs ?? [])
+        .filter((i) => i.preparation_id === prep.id)
+        .map((i) => ({
+          ingredientTypeId: i.ingredient_type_id,
+          amount: i.amount,
+          unitLabel: i.unit_label,
+        })),
+    }
+  }, [ingredientPreparations, ingredientPreparationInputs, type.id])
+  const [draftPreparation, setDraftPreparation] = useState(initialPreparation)
+
+  // Types this preparation's inputs may pick from: not this type itself
+  // (self-reference), and not any type already produced by SOME
+  // preparation (including this type's own, if it has one) - both are
+  // exactly what the depth-1 DB trigger would reject, checked here too so
+  // the picker doesn't offer a choice the save will just bounce back.
+  const producedTypeIds = useMemo(
+    () =>
+      new Set((ingredientPreparations ?? []).map((p) => p.produces_type_id)),
+    [ingredientPreparations],
+  )
+  const addablePreparationInputTypes = (excludeIdx) => {
+    const alreadyUsed = new Set(
+      (draftPreparation?.inputs ?? [])
+        .filter((_, i) => i !== excludeIdx)
+        .map((i) => i.ingredientTypeId),
+    )
+    return types.filter(
+      (t) =>
+        t.id !== type.id &&
+        !producedTypeIds.has(t.id) &&
+        !alreadyUsed.has(t.id),
+    )
+  }
+
+  const openAddPreparation = () =>
+    setDraftPreparation({ name: type.name, instructions: [], inputs: [] })
+  const addPreparationInput = () =>
+    setDraftPreparation({
+      ...draftPreparation,
+      inputs: [
+        ...draftPreparation.inputs,
+        { ingredientTypeId: null, amount: 0, unitLabel: "ml" },
+      ],
+    })
+  const updatePreparationInput = (idx, patch) =>
+    setDraftPreparation({
+      ...draftPreparation,
+      inputs: draftPreparation.inputs.map((i, ix) =>
+        ix === idx ? { ...i, ...patch } : i,
+      ),
+    })
+  const removePreparationInput = (idx) =>
+    setDraftPreparation({
+      ...draftPreparation,
+      inputs: draftPreparation.inputs.filter((_, ix) => ix !== idx),
+    })
+  const addPreparationStep = () =>
+    setDraftPreparation({
+      ...draftPreparation,
+      instructions: [...draftPreparation.instructions, ""],
+    })
+  const removePreparationStep = (idx) =>
+    setDraftPreparation({
+      ...draftPreparation,
+      instructions: draftPreparation.instructions.filter((_, ix) => ix !== idx),
+    })
+  const updatePreparationStep = (idx, value) =>
+    setDraftPreparation({
+      ...draftPreparation,
+      instructions: draftPreparation.instructions.map((s, ix) =>
+        ix === idx ? value : s,
+      ),
+    })
+
   // ── Dirty hint ────────────────────────────────────────────────────────
   const initialSnapshot = useRef(null)
   if (initialSnapshot.current === null) {
@@ -293,6 +399,7 @@ export function IngredientTypeEditor({
       aliases: [...initialAliases].sort(),
       conversions: normConversions(initialConversions),
       substitutes: normSubstitutes(initialSubstitutes),
+      preparation: normPreparation(initialPreparation),
     })
   }
   const isDirty =
@@ -308,6 +415,7 @@ export function IngredientTypeEditor({
       aliases: [...draftAliases].sort(),
       conversions: normConversions(draftConversions),
       substitutes: normSubstitutes(draftSubstitutes),
+      preparation: normPreparation(draftPreparation),
     })
 
   // ── Save (the only DB write this editor makes) ────────────────────────
@@ -351,6 +459,7 @@ export function IngredientTypeEditor({
         aliases: draftAliases,
         conversions: draftConversions,
         substitutes: draftSubstitutes,
+        preparation: draftPreparation,
       })
       await onSaved()
     } catch (err) {
@@ -360,6 +469,15 @@ export function IngredientTypeEditor({
       setSaving(false)
     }
   }
+
+  // A preparation must have a name and at least one fully-picked input -
+  // enforced client-side (disables Save with an inline hint) rather than
+  // left to surface as a raw Postgres cast error from an incomplete row.
+  const preparationInvalid =
+    draftPreparation != null &&
+    (!draftPreparation.name.trim() ||
+      draftPreparation.inputs.length === 0 ||
+      draftPreparation.inputs.some((i) => !i.ingredientTypeId))
 
   const parentOptions = [
     { value: "", label: "No parent type" },
@@ -712,17 +830,135 @@ export function IngredientTypeEditor({
         )}
       </div>
 
+      {/* Homemade preparation (produced side = this type) - Stage D.3.
+          Single optional block, not a list - local draft, committed on Save
+          changes like everything else in this editor. */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <label className={LABEL}>Homemade preparation</label>
+          {!draftPreparation && (
+            <button
+              type="button"
+              onClick={openAddPreparation}
+              className="min-h-11 px-2.5 text-xs text-cyan font-display font-semibold bg-transparent border-none cursor-pointer shrink-0"
+            >
+              + Add
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-tx3 leading-snug">
+          How a member could make {type.name} at home. A recipe missing{" "}
+          {type.name} can adapt around it once every input below is available -
+          it is never marked as owned just because it's preparable.
+        </p>
+
+        {draftPreparation && (
+          <div className="rounded-sm border border-bdr bg-surface2 p-2.5 flex flex-col gap-2.5">
+            <Input
+              label="Name"
+              value={draftPreparation.name}
+              onChange={(v) =>
+                setDraftPreparation({ ...draftPreparation, name: v })
+              }
+            />
+
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className={LABEL}>Inputs</span>
+                <button
+                  type="button"
+                  onClick={addPreparationInput}
+                  className="min-h-11 px-2.5 text-xs text-cyan font-display font-semibold bg-transparent border-none cursor-pointer shrink-0"
+                >
+                  + Add input
+                </button>
+              </div>
+              {draftPreparation.inputs.length === 0 && (
+                <p className="text-xs text-tx3">
+                  At least one input is required.
+                </p>
+              )}
+              {draftPreparation.inputs.map((input, idx) => (
+                <div key={idx} className="flex gap-1.5 items-center">
+                  <div className="flex-1 min-w-0">
+                    <TypeComboBox
+                      valueId={input.ingredientTypeId}
+                      onPick={(id) =>
+                        updatePreparationInput(idx, { ingredientTypeId: id })
+                      }
+                      types={addablePreparationInputTypes(idx)}
+                      aliasesByTypeId={aliasesByTypeId}
+                      placeholder="Search ingredient..."
+                    />
+                  </div>
+                  <input
+                    aria-label={`Amount for input ${idx + 1}`}
+                    value={input.amount}
+                    onChange={(e) =>
+                      updatePreparationInput(idx, {
+                        amount: Number(e.target.value) || 0,
+                      })
+                    }
+                    inputMode="decimal"
+                    className="w-14 shrink-0 bg-surface border border-bdr rounded-sm p-2 text-tx text-[13px] text-center font-mono"
+                  />
+                  <div className="w-17 shrink-0">
+                    <Select
+                      small
+                      value={input.unitLabel}
+                      onChange={(v) =>
+                        updatePreparationInput(idx, { unitLabel: v })
+                      }
+                      options={["ml", "oz", ...NON_VOLUME_UNITS]}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removePreparationInput(idx)}
+                    aria-label={`Remove input ${idx + 1}`}
+                    className="w-11 h-11 shrink-0 rounded-sm border border-bdr text-tx2 flex items-center justify-center cursor-pointer hover:text-tx active:bg-bg2"
+                  >
+                    <IconX size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <StepsEditor
+              steps={draftPreparation.instructions}
+              onAdd={addPreparationStep}
+              onRemove={removePreparationStep}
+              onUpdate={updatePreparationStep}
+            />
+
+            <button
+              type="button"
+              onClick={() => setDraftPreparation(null)}
+              className={`${QUIET_BTN} text-coral self-start`}
+            >
+              Remove preparation
+            </button>
+          </div>
+        )}
+      </div>
+
       {error && (
         <p className="text-[13px] text-coral" role="alert">
           {error}
         </p>
       )}
       {isDirty && !error && <p className="text-xs text-tx3">Unsaved changes</p>}
+      {preparationInvalid && !error && (
+        <p className="text-xs text-coral">
+          The homemade preparation needs a name and at least one fully selected
+          input before this can be saved.
+        </p>
+      )}
 
       <div className="flex items-center gap-2 pt-1">
         <Btn
           variant="primary"
-          disabled={saving || !name.trim() || !categoryId}
+          disabled={saving || !name.trim() || !categoryId || preparationInvalid}
           onClick={handleSave}
         >
           {saving ? "Saving..." : "Save changes"}

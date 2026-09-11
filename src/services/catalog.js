@@ -121,8 +121,12 @@ export async function updateIngredientType(
 // full desired list of { preparedTypeId, guidance } whose raw side is this
 // type. `substitutes` is the full desired list of { toTypeId, flavorNote }
 // whose from side is this type (Stage B - catalogue "Suggested substitutes",
-// suggestion-only, never touches availability). All three replace the type's
-// current set entirely, in the one transaction.
+// suggestion-only, never touches availability). `preparation` (Stage D.3) is
+// either `null`/`undefined` (no homemade preparation for this type) or
+// `{ name, instructions: string[], inputs: [{ ingredientTypeId, amount, unitLabel }] }`
+// - the PRODUCED side (unlike conversions/substitutes above, which key off
+// this type as the raw/from side). All four replace the type's current set
+// entirely, in the one transaction.
 export async function saveIngredientType({
   typeId,
   name,
@@ -136,6 +140,7 @@ export async function saveIngredientType({
   aliases,
   conversions,
   substitutes,
+  preparation,
 }) {
   const { error } = await supabase.rpc("save_ingredient_type", {
     p_type_id: typeId,
@@ -158,6 +163,17 @@ export async function saveIngredientType({
       to_type_id: s.toTypeId,
       flavor_note: s.flavorNote,
     })),
+    p_preparation: preparation
+      ? {
+          name: preparation.name,
+          instructions: preparation.instructions ?? [],
+          inputs: (preparation.inputs ?? []).map((i) => ({
+            ingredient_type_id: i.ingredientTypeId,
+            amount: i.amount,
+            unit_label: i.unitLabel,
+          })),
+        }
+      : null,
   })
   if (error) throw error
 }

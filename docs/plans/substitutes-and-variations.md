@@ -7,8 +7,11 @@ Stage A DONE + pushed 2026-09-10, plus a Stage A follow-up (editor UI rework
 revised to v2 2026-09-11; **Stage D.1 (Adapted Availability, substitutes
 only) DONE + pushed 2026-09-11** - see "Stage D.1 — DONE" below. **Stage D.2
 (Library/Home discovery, grouping, ordering by `display.tier`) DONE + pushed
-2026-09-11** - see "Stage D.2 — DONE" below; stages resequenced, D.3-D.5
-NOT started (see the resequencing note under "Staged implementation plan").
+2026-09-11** - see "Stage D.2 — DONE" below. **Stage D.3 (Minimal Homemade
+Preparations - tier 5, `ingredient_preparations`/`ingredient_preparation_inputs`,
+the editor's "Homemade preparation" block) DONE + pushed 2026-09-11** - see
+"Stage D.3 — DONE" below (stages resequenced this session - see the
+resequencing note under "Staged implementation plan"); D.4-D.5 NOT started.
 Stage C (Linked Variations) NOT started.**
 
 > **D1 is SUPERSEDED, 2026-09-11 — planning only, not yet implemented.** The
@@ -1061,7 +1064,7 @@ Explicit checklist against the request to confirm this before implementation:
 |---|---|
 | `computeAvail()` / `strict` | **None.** Still exact → Can-provide → recipe-scoped substitution - kept for internal bookkeeping and the detail page's honest per-ingredient rows. |
 | **Every badge/card/group/count below** | Reads `display.tier`/`display.label`, **not** `strict.tier`, as the primary status. `display.tier === "adapted"` renders as its own distinct badge state (own color/icon - not green "perfect," not the red/grey "unavailable" one) carrying `display.label` ("Make with substitutions · Prepare syrup first") as the **primary** text. Nothing ever shows "Unavailable" as the primary badge next to a contradictory makeable message. |
-| `IngredientsSection` (detail page) | A component resolved at tier 4/5 renders with a **new, distinct accent** (not the green "owned" dot, not the muted "Try:" hint) — e.g. violet, reusing the existing note-line slot: "Adapted: Spiced Rum — sweeter, warm spice" / "Adapted: needs preparation — [link to Simple Syrup's ingredients/steps]". Explains each replacement's flavor note and links to the preparation, per the acceptance scenario. The rest of the ingredient list still shows the honest `strict` state (a required row genuinely reads "missing" until owned) - "original preserved and clearly marked as adapted" per the acceptance scenario means the detail page shows *both*: the real ingredient list plus the adaptation explanation, never a rewritten recipe. |
+| `IngredientsSection` (detail page) — **DONE, Stage D.1/D.3** | A component resolved at tier 4/5 renders with a **new, distinct accent** (violet, reusing the existing note-line slot): "Adapted: Spiced Rum — sweeter, warm spice" (tier 4, Stage D.1) / "Adapted: needs preparation — How to make Simple Syrup" (tier 5, Stage D.3), an inline expandable panel (not a separate page/route) showing every input's amount + the preparation's own numbered steps. Explains each replacement's flavor note and links to the preparation, per the acceptance scenario. The rest of the ingredient list still shows the honest `strict` state (a required row genuinely reads "missing" until owned) - "original preserved and clearly marked as adapted" per the acceptance scenario means the detail page shows *both*: the real ingredient list plus the adaptation explanation, never a rewritten recipe. |
 | Recipe card / `HeroCard` | The **primary** badge is `display.label`/`display.tier` (e.g. "Make with substitutions · Prepare syrup first" in the adapted accent color) - not the strict badge with an addition bolted on. The strict "needs White Rum, Lime Juice, Simple Syrup" detail is still reachable (tapping in / the detail page's honest ingredient rows), but it is not what leads on the card. |
 | **Library** (grouped + sorted view) — **DONE, Stage D.2, 2026-09-11** | One new group, **"Make With Substitutions"**, positioned after "Good Enough" and before "Almost There" - i.e. **adapted recipes rank after drinks needing no adaptation, but are part of the main "possible" set**, ahead of "Almost"/"Unavailable." A recipe with `display.tier === "adapted"` is shown there and **not** in Almost/Unavailable (no duplication). The availability filter picker gained a matching "Make With Substitutions" option, comparing against `display.tier`. Sorting-by-availability uses `display.tier`'s rank (perfect > good > adapted > almost > unavailable, `domain/availabilityGroups.js`), not `strict.tier`'s. |
 | **Counts (Library, Home, Build Your Bar) — one shared shape** — **PENDING, not part of D.2** | The **primary "possible" total is `perfect + good + adapted`**, always shown with an explicit breakdown, e.g. **"8 cocktails possible · 5 ready, 3 with substitutions or preparation."** "Almost"/"Unavailable" counts are unaffected (they already exclude adapted, since a recipe is in exactly one `display.tier` bucket). This is the same one shared count object every screen renders - no screen invents its own phrasing. Per-group item counts (the small number beside each group heading, e.g. "⇄ 3" beside "Make With Substitutions") are **not** this - that's the same per-tier count every existing group already showed, not a new aggregate breakdown, and shipped as part of D.2 since a group needs one to render at all. |
@@ -1160,7 +1163,8 @@ below for exactly what shipped.**
 > unchanged from the original v2 proposal, minus the pieces D.2 already
 > covered (noted inline below).
 
-**Stage D.3 — Minimal homemade preparations** (originally numbered D.2).
+**Stage D.3 — DONE 2026-09-11 (committed + pushed; mobile/browser check
+pending) — Minimal homemade preparations** (originally numbered D.2).
 Migrations D.2 + D.3, the "Homemade preparation" editor section,
 `isPreparationSatisfiable()`. Depth-1 guard tests (self-reference; new
 preparation whose input is already produced; editing an existing one into
@@ -1169,25 +1173,32 @@ Water (both household basics) makes it "preparable"; a recipe missing only
 Simple Syrup shows "Prepare Simple Syrup first" as its primary badge with
 zero general substitutes involved; a recipe missing only White Sugar (not
 the full preparation) shows nothing (Sugar alone does not imply Simple
-Syrup).
+Syrup). **See "Stage D.3 — DONE" below for exactly what shipped** - note
+that D.3 lands tier 5 and the combined label composition ("·" join) as a
+side effect of building `computeAdaptedResult()` correctly, so the
+Daiquiri-scenario acceptance check itself moves to D.4 alongside the
+curated live-data rows, unchanged from the plan below.
 
-**Stage D.4 — Combine tiers 4+5, counts/breakdown, and the full Daiquiri
-scenario** (originally numbered D.3; its Library/Home grouping-and-ordering
-piece already shipped as D.2 - this stage is now just the remainder).
-`computeMakeability()` consults tiers 4 and 5 together per component; label
-composition ("·" join, e.g. "Make with substitutions · Prepare syrup
-first"); the shared count/breakdown ("N possible · X ready, Y with
-substitutions or preparation") lands in Library, Home, and Build Your Bar
-together (one shared count object, not three separate implementations);
-curate the two missing catalogue rows for the acceptance scenario (Lime
-Juice → Lemon Juice substitute, Simple Syrup preparation) as a **live-data
-verification step, not a seed** (Concept 1/2's own rule — no speculative
-data). *Acceptance:* the exact scenario reproduces "Make with substitutions
-· Prepare syrup first" as Daiquiri's primary status everywhere it's shown;
-Library/Home/Build Your Bar all show the identical count breakdown; the
-detail page explains each replacement's flavor note and links to Simple
-Syrup's ingredients/steps while still showing the original ingredient list
-honestly.
+**Stage D.4 — Counts/breakdown and the full Daiquiri scenario** (originally
+numbered D.3; its Library/Home grouping-and-ordering piece already shipped
+as D.2, and its "combine tiers 4+5 + label composition" piece already
+shipped as D.3 - `computeAdaptedResult()` already tries tier 4 then tier 5
+per component and `composeAdaptedLabel()` already joins "Make with
+substitutions" and "Prepare X first" with " · " when both apply, since
+building tier 5 correctly required building the combination logic too -
+this stage is now just the remainder). The shared count/breakdown ("N
+possible · X ready, Y with substitutions or preparation") lands in Library,
+Home, and Build Your Bar together (one shared count object, not three
+separate implementations); curate the two missing catalogue rows for the
+acceptance scenario (Lime Juice → Lemon Juice substitute, Simple Syrup
+preparation) as a **live-data verification step, not a seed** (Concept 1/2's
+own rule — no speculative data). *Acceptance:* the exact scenario reproduces
+"Make with substitutions · Prepare syrup first" as Daiquiri's primary status
+everywhere it's shown (this part is already mechanically true as of D.3 -
+only the two catalogue rows are still missing); Library/Home/Build Your Bar
+all show the identical count breakdown; the detail page explains each
+replacement's flavor note and links to Simple Syrup's ingredients/steps
+while still showing the original ingredient list honestly.
 
 **Stage D.5 — Recipe-specific per-substitute exclusion + Buy Next ranking
 change** (originally numbered D.4). Migration D.1 (`excluded_substitute_type_ids`),
@@ -1432,22 +1443,153 @@ live-catalogue changes, no `recommendations.js`/`BuildYourBar.jsx` changes -
 
 ---
 
+## Stage D.3 — DONE 2026-09-11 (committed + pushed; mobile/browser check pending)
+
+**Scope: tier 5 ("satisfiable preparation") only** — the two new tables, the
+depth-1 guard (both directions), `isPreparationSatisfiable()`, the
+"Homemade preparation" editor block, and wiring tier 5 into
+`computeAdaptedResult()`/`composeAdaptedLabel()`. Explicitly NOT this
+stage, per instruction: the aggregate counts/breakdown, the Buy Next
+unlock-vs-original ranking split, `excluded_substitute_type_ids`, and no
+catalogue/live-data changes (the two curated rows the Daiquiri scenario
+needs are still not added - that's D.4's job, as a verification step).
+
+**Schema — migrations `20260911120000`/`20260911130000`:**
+`ingredient_preparations (id, produces_type_id unique, name, instructions
+text[])` + `ingredient_preparation_inputs (id, preparation_id, ingredient_type_id,
+amount, unit_label, unique(preparation_id, ingredient_type_id))`, exactly the
+shape the plan specified. RLS `is_member()` read / `is_admin_or_moderator()`
+write, `to authenticated` from this first migration. **Depth-1 guard
+implemented bidirectionally** (two triggers, not the one the newer plan doc's
+SQL sketch showed): `enforce_preparation_input_depth` (on
+`ingredient_preparation_inputs`) rejects an input that is itself any
+preparation's produced type (this single check covers self-reference too,
+since the preparation's own row already exists by the time its inputs are
+inserted - FK order guarantees it); `enforce_preparation_produces_depth` (on
+`ingredient_preparations`) rejects creating/editing a preparation to produce
+a type that's already in use as some OTHER preparation's input. This closes
+a real gap in the newer doc's single-trigger sketch - the household-basics
+plan doc's fuller (superseded but explicitly "carries forward unchanged")
+depth-1 description asks for exactly this bidirectional, whole-graph check.
+Both directions are covered by dedicated RLS-suite tests. `save_ingredient_type()`
+is now 6-arg (`p_preparation jsonb default null`) - reconciles the edited
+type's whole preparation + input set the same delete-then-insert way as the
+other three relationships, in the same one transaction; also rejects a
+preparation with zero inputs (vacuously "always satisfiable" would be
+meaningless, not left to silently produce a false "preparable" result).
+
+**`src/domain/makeability.js`:** new exported `isPreparationSatisfiable(inputs,
+owned, householdBasicIds, formConversions)` - reuses `computeAvail()` itself
+(asks it about a synthetic one-component "recipe" with no alternatives)
+rather than re-implementing tiers 1-2, so it can never drift from the real
+engine, and never consults tier 3 (recipe-scoped - not applicable to a raw
+input) or tiers 4-5 (no chaining). `computeAdaptedResult()` now tries tier 4
+then tier 5 per missing component (never both for the same component - a
+component's `via` is exclusively `"substitute"` or `"preparation"`), and a
+`via: "preparation"` entry carries its `instructions`/resolved `inputs`
+fully through (matching how a substitute entry already carries
+`matchedName`/`note`) so the UI needs no second lookup.
+`composeAdaptedLabel()` now actually composes: substitute-only → "Make with
+substitutions"; preparation-only → "Prepare X first" (multiple preparation
+names joined "and"); both → joined with " · " - the acceptance scenario's
+exact text, mechanically available now even though nothing in the live
+catalogue can trigger it yet (D.4's job).
+
+**`App.jsx`:** `preparationsByProducedType` is joined once, via `useMemo`,
+from `catalog.ingredientPreparations` + `catalog.ingredientPreparationInputs`
+(unlike `generalSubstitutes`, joining two tables per-recipe-per-render would
+be wasteful) and passed as `computeMakeability()`'s 7th argument.
+
+**Editor (`IngredientTypeEditor.jsx`):** new "Homemade preparation" section
+- a single optional block (not a list, since `produces_type_id` is unique),
+keyed the opposite way from "Can provide"/"Can be replaced by" (this type is
+the *produced* side). Name field, a repeatable input-rows list
+(`TypeComboBox` + amount + unit, matching the recipe editor's own
+ingredient-row shape) excluding self-reference and any type already
+produced by another preparation, and `StepsEditor` (reused as-is from
+`src/components/editor/` - a generic ordered-string-list editor, not
+recipe-specific) for instructions. **Participates in the existing atomic
+draft exactly as required:** the whole block is local state folded into the
+same dirty-check snapshot and the same one `saveIngredientType()` call as
+every other section - no independent Save button, and Cancel discards it
+with zero writes along with everything else. A client-side check
+(non-blank name, ≥1 fully-picked input) disables **Save changes** with an
+inline hint rather than letting an incomplete draft reach the RPC as a raw
+cast error.
+
+**Detail page (`IngredientsSection.jsx`):** a `via: "preparation"` row shows
+"Adapted: needs preparation — How to make &lt;name&gt;", never marked owned
+(the produced type's own dot/row logic is unreachable through the same
+`isOwned` gate every other branch already uses). Tapping it expands an
+inline panel (local component state, not a route) listing every input with
+its amount (via the existing `formatAmount()`, respecting the user's ml/oz
+preference) and the preparation's own numbered steps - "enough instruction
+to actually do it" without leaving the page, and the original ingredient
+row/amount stays exactly as it was.
+
+**D.2 discovery/grouping automatically covers this, no screen-specific
+code:** `display.tier === "adapted"` is set identically regardless of
+whether tier 4 or tier 5 (or both) resolved it, so Library's "Make With
+Substitutions" group, Home's matching section, and both screens' filters
+(all built in D.2 against `display.tier`) apply to a preparation-only or
+mixed adaptation with no additional changes - confirmed by the "mixed
+substitution + preparation" domain test asserting `display.tier ===
+"adapted"` end-to-end.
+
+**Verified:** `corepack pnpm@10.34.3 test` **284/284** (+13 in
+`makeability.test.js`: a satisfiable preparation resolves; one missing
+input blocks it (the general form of "Sugar alone ≠ Simple Syrup");
+household basics satisfy an input; the produced ingredient is never marked
+owned and `owned` itself is never mutated; a substitution + a preparation
+combine into the exact composed label; a preparation input's own
+preparability is never chased (depth capped at one level); null-safe with
+no preparations map; plus 6 focused `isPreparationSatisfiable` tests
+covering ownership/missing/household-basics/Can-provide/empty-input/null-input).
+`pnpm build` clean (173 modules, +1 for `ingredientPreparations.js`).
+Isolated-LF `oxfmt --check` clean on all 9 changed/new JS/JSX files (5
+reflows hand-applied to the real CRLF files). **Migrations pushed** via
+`supabase db push --linked` (clean, 61/61 local==remote). **RLS suite**
+extended with a full `ingredient_preparations`/`ingredient_preparation_inputs`
+block - member read / anon denied (both tables); direct member write
+denied; admin can insert a preparation with multiple inputs; the
+self-reference depth-1 guard; the cross-preparation depth-1 guard; the
+**reverse-direction** depth-1 guard (producing a type already used
+elsewhere as an input is rejected); `save_ingredient_type`'s `p_preparation`
+arg replaces the edited type's whole preparation+input set and leaves every
+other type's preparation untouched; **atomic rollback** on a self-referencing
+preparation input in the payload (type name and the prior preparation both
+verified unchanged afterward); a zero-input preparation rejected; a 6-arg
+member call raises `insufficient_privilege`. Full suite passes (`{"rows":[]}`).
+`supabase db advisors --type security` - no new finding.
+
+**Not verified here (no browser tooling in this sandbox):** the editor's
+new "Homemade preparation" block on desktop/a narrow phone (adding an
+input row, the amount/unit inputs, Save/Cancel with a preparation in the
+draft), and the detail page's expandable "how to make it" panel. The live
+catalogue still lacks any real preparation (D.4 curates the first one, Simple
+Syrup), so nothing in the running app can exercise tier 5 yet outside these
+automated tests and the RLS suite's throwaway fixture rows.
+
+---
+
 ## Exact next action
 
-**Stage D.1 and D.2 are DONE** (see the two sections above) —
-`computeMakeability()`, the primary-status wiring on card/HeroCard/detail
-(D.1), and the display-tier-based discovery/grouping/ordering in
-Library/Home/Lists (D.2) are all built, tested, and pushed. **The user
-reviews both** (code + the one live-app check noted above — White Rum
-resolving via the already-live `White Rum → Spiced Rum` substitute should
-now also show up grouped under "Make With Substitutions"), then decides
-which stage to proceed to next: **D.3** (minimal homemade preparations - the
-two new tables + editor section + `isPreparationSatisfiable()`), or a
-different slice, per the same resequencing precedent set this turn (the
-user is not bound to the original D.3→D.4→D.5 order any more than D.2's own
-scope was). Stage B's own outstanding manual checks stay
-unverified/outstanding, not passed — re-check them once the full Stage D UI
-(through D.4) ships rather than in isolation.
+**Stage D.1, D.2, and D.3 are DONE** (see the three sections above) —
+`computeMakeability()` + primary-status wiring on card/HeroCard/detail
+(D.1), display-tier-based discovery/grouping/ordering in Library/Home/Lists
+(D.2), and tier 5 / minimal homemade preparations end-to-end including the
+editor (D.3) are all built, tested, and pushed. **The user reviews all
+three** (code + the one live-app check noted above — White Rum resolving
+via the already-live `White Rum → Spiced Rum` substitute should show up
+grouped under "Make With Substitutions"), then decides which stage to
+proceed to next: **D.4** (curate the two missing catalogue rows for the
+full Daiquiri scenario + the shared counts/breakdown across Library/Home/
+Build Your Bar) is the plan's own next step, or a different slice, per the
+same resequencing precedent set this session (the user is not bound to the
+original order any more than D.2's/D.3's own scope was). Stage B's own
+outstanding manual checks stay unverified/outstanding, not passed —
+re-check them once the full Stage D UI (through D.4) ships rather than in
+isolation.
 
 **Stage C (Linked Variations) remains NOT started** and independent of Stage
 D — on a separate go-ahead: migration `..._recipe_relationships.sql`

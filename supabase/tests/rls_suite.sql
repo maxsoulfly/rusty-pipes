@@ -1195,6 +1195,197 @@ begin
 end;
 $$;
 
+-- ── ingredient_preparations / ingredient_preparation_inputs ─────────────
+-- Stage D.3 (20260911120000, 20260911130000). member read / admin+moderator
+-- write, written only through save_ingredient_type()'s 6th arg. Depth-1
+-- guarded in BOTH directions: an input can never be any preparation's
+-- produced type, and a produced type can never already be in use as some
+-- other preparation's input - no recursive preparation chains.
+
+do $$
+declare
+  f record;
+  v_cat uuid;
+  v_produced uuid;
+  v_input1 uuid;
+  v_input2 uuid;
+  v_other_produced uuid;
+  v_other_input uuid;
+  v_prep_id uuid;
+  v_other_prep_id uuid;
+  n int;
+  v_name text;
+  v_note text;
+begin
+  perform set_config('role', (select name from rls_original_role), true);
+  select * into f from rls_fixture_ids;
+  select category_id into v_cat from public.ingredient_types where id = f.type_a_id;
+  insert into public.ingredient_types (category_id, name, bar_priority, recommend_by_default)
+    values (v_cat, 'RLS_TEST prep produced', 'common', false) returning id into v_produced;
+  insert into public.ingredient_types (category_id, name, bar_priority, recommend_by_default)
+    values (v_cat, 'RLS_TEST prep input 1', 'common', false) returning id into v_input1;
+  insert into public.ingredient_types (category_id, name, bar_priority, recommend_by_default)
+    values (v_cat, 'RLS_TEST prep input 2', 'common', false) returning id into v_input2;
+  insert into public.ingredient_types (category_id, name, bar_priority, recommend_by_default)
+    values (v_cat, 'RLS_TEST prep other produced', 'common', false) returning id into v_other_produced;
+  insert into public.ingredient_types (category_id, name, bar_priority, recommend_by_default)
+    values (v_cat, 'RLS_TEST prep other input', 'common', false) returning id into v_other_input;
+
+  -- read: member yes, anon no (both tables)
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  select count(*) into n from public.ingredient_preparations;
+  perform pg_temp.assert(n >= 0, 'ingredient_preparations: a member can read the table');
+  select count(*) into n from public.ingredient_preparation_inputs;
+  perform pg_temp.assert(n >= 0, 'ingredient_preparation_inputs: a member can read the table');
+  perform pg_temp.set_identity('anon', null);
+  select count(*) into n from public.ingredient_preparations;
+  perform pg_temp.assert(n = 0, 'ingredient_preparations: anon cannot read');
+  select count(*) into n from public.ingredient_preparation_inputs;
+  perform pg_temp.assert(n = 0, 'ingredient_preparation_inputs: anon cannot read');
+
+  -- direct member write denied
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  begin
+    insert into public.ingredient_preparations (produces_type_id, name)
+    values (v_produced, 'member should not write this');
+    perform pg_temp.assert(false, 'ingredient_preparations: a member inserting should be denied');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'ingredient_preparations: a member cannot insert directly');
+  end;
+
+  -- admin direct write allowed: a real preparation + its two inputs
+  perform pg_temp.set_identity('authenticated', f.admin_id);
+  insert into public.ingredient_preparations (produces_type_id, name, instructions)
+    values (v_produced, 'RLS_TEST prep produced', array['Combine', 'Stir'])
+    returning id into v_prep_id;
+  insert into public.ingredient_preparation_inputs (preparation_id, ingredient_type_id, amount, unit_label)
+    values (v_prep_id, v_input1, 100, 'ml');
+  insert into public.ingredient_preparation_inputs (preparation_id, ingredient_type_id, amount, unit_label)
+    values (v_prep_id, v_input2, 100, 'ml');
+  select count(*) into n from public.ingredient_preparation_inputs where preparation_id = v_prep_id;
+  perform pg_temp.assert(n = 2, 'ingredient_preparations: admin can insert a preparation with multiple inputs');
+
+  -- a second, unrelated preparation (used below for the cross-preparation
+  -- depth-1 checks)
+  insert into public.ingredient_preparations (produces_type_id, name)
+    values (v_other_produced, 'RLS_TEST prep other produced')
+    returning id into v_other_prep_id;
+  insert into public.ingredient_preparation_inputs (preparation_id, ingredient_type_id)
+    values (v_other_prep_id, v_other_input);
+
+  -- depth-1, direction 1: self-reference (an input equal to its own
+  -- preparation's produced type) is rejected
+  begin
+    insert into public.ingredient_preparation_inputs (preparation_id, ingredient_type_id)
+    values (v_prep_id, v_produced);
+    perform pg_temp.assert(false, 'ingredient_preparation_inputs: a self-referencing input should be rejected');
+  exception when check_violation then
+    perform pg_temp.assert(true, 'ingredient_preparation_inputs: self-reference guarded (enforce_preparation_input_depth)');
+  end;
+
+  -- depth-1, direction 1: an input that is ANOTHER preparation's produced
+  -- type is rejected (no preparation-of-preparation chains)
+  begin
+    insert into public.ingredient_preparation_inputs (preparation_id, ingredient_type_id)
+    values (v_prep_id, v_other_produced);
+    perform pg_temp.assert(false, 'ingredient_preparation_inputs: an input that is another preparation''s produced type should be rejected');
+  exception when check_violation then
+    perform pg_temp.assert(true, 'ingredient_preparation_inputs: cross-preparation depth-1 guarded');
+  end;
+
+  -- depth-1, direction 2 (the reverse): creating a preparation FOR a type
+  -- that is already in use as some other preparation's input is rejected -
+  -- v_input1 is already an input of v_prep_id above
+  begin
+    insert into public.ingredient_preparations (produces_type_id, name)
+    values (v_input1, 'should not be allowed to become derived');
+    perform pg_temp.assert(false, 'ingredient_preparations: producing a type already used as an input should be rejected');
+  exception when check_violation then
+    perform pg_temp.assert(true, 'ingredient_preparations: reverse depth-1 guarded (enforce_preparation_produces_depth)');
+  end;
+
+  -- save_ingredient_type() reconciles this type's preparation (6th arg) -
+  -- replaces the produced type's whole preparation + input set
+  perform public.save_ingredient_type(
+    v_produced,
+    jsonb_build_object('name','RLS_TEST prep produced','category_id',v_cat,
+      'parent_type_id',null,'bar_priority','common','assumed_available',false,
+      'color',null,'description',null,'shape','spirit_bottle'),
+    '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
+    jsonb_build_object(
+      'name', 'RLS_TEST prep via save',
+      'instructions', jsonb_build_array('Mix well'),
+      'inputs', jsonb_build_array(
+        jsonb_build_object('ingredient_type_id', v_input1, 'amount', 50, 'unit_label', 'ml')
+      )
+    )
+  );
+  select name into v_note from public.ingredient_preparations where produces_type_id = v_produced;
+  perform pg_temp.assert(v_note = 'RLS_TEST prep via save', 'save_ingredient_type: the p_preparation arg replaces this type''s preparation');
+  select count(*) into n from public.ingredient_preparation_inputs ipi
+    join public.ingredient_preparations ip on ip.id = ipi.preparation_id
+    where ip.produces_type_id = v_produced;
+  perform pg_temp.assert(n = 1, 'save_ingredient_type: the p_preparation arg replaces the whole input set (2 inputs -> 1)');
+  -- the unrelated preparation is untouched
+  select count(*) into n from public.ingredient_preparation_inputs where preparation_id = v_other_prep_id;
+  perform pg_temp.assert(n = 1, 'save_ingredient_type: it only touches the edited type''s own preparation');
+
+  -- ATOMICITY: a save whose preparation input is a depth-1 violation fails
+  -- whole - the type name and the prior preparation are both left as they
+  -- were (same "everything or nothing" contract as p_conversions/
+  -- p_substitutions)
+  begin
+    perform public.save_ingredient_type(
+      v_produced,
+      jsonb_build_object('name','RLS_TEST prep SHOULD NOT STICK','category_id',v_cat,
+        'parent_type_id',null,'bar_priority','common','assumed_available',false,
+        'color',null,'description',null,'shape','spirit_bottle'),
+      '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
+      jsonb_build_object(
+        'name', 'RLS_TEST prep should not stick',
+        'instructions', '[]'::jsonb,
+        'inputs', jsonb_build_array(
+          jsonb_build_object('ingredient_type_id', v_produced, 'amount', 0, 'unit_label', 'ml')
+        )
+      )
+    );
+    perform pg_temp.assert(false, 'save_ingredient_type: a self-referencing preparation input in the payload should reject the whole save');
+  exception when others then
+    perform pg_temp.assert(true, 'save_ingredient_type: a bad preparation input rolls the whole save back');
+  end;
+  select name into v_note from public.ingredient_types where id = v_produced;
+  perform pg_temp.assert(v_note = 'RLS_TEST prep produced', 'save_ingredient_type: a failed preparation save leaves the type name unchanged');
+  select name into v_note from public.ingredient_preparations where produces_type_id = v_produced;
+  perform pg_temp.assert(v_note = 'RLS_TEST prep via save', 'save_ingredient_type: a failed preparation save leaves the prior preparation intact');
+
+  -- a preparation with zero inputs is rejected by save_ingredient_type()
+  -- itself (vacuously "always satisfiable" would be meaningless)
+  begin
+    perform public.save_ingredient_type(
+      v_produced, '{}'::jsonb, null, null, null,
+      jsonb_build_object('name', 'no inputs', 'instructions', '[]'::jsonb, 'inputs', '[]'::jsonb)
+    );
+    perform pg_temp.assert(false, 'save_ingredient_type: a preparation with zero inputs should be rejected');
+  exception when others then
+    perform pg_temp.assert(true, 'save_ingredient_type: zero-input preparation rejected');
+  end;
+
+  -- member cannot save (RLS on ingredient_types update fires first)
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  begin
+    perform public.save_ingredient_type(v_produced, '{}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, null);
+    perform pg_temp.assert(false, 'save_ingredient_type (6-arg): a member call should be denied');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'save_ingredient_type (6-arg): a member cannot save');
+  end;
+
+  -- cleanup
+  perform set_config('role', (select name from rls_original_role), true);
+  delete from public.ingredient_preparations where produces_type_id in (v_produced, v_other_produced, v_input1);
+  delete from public.ingredient_types where id in (v_produced, v_input1, v_input2, v_other_produced, v_other_input);
+end;
+$$;
+
 -- ── products ─────────────────────────────────────────────────────────────
 -- Shared catalog: any member can read and insert (their own created_by),
 -- but only admin can update/delete - unlike the lookup tables, ordinary
