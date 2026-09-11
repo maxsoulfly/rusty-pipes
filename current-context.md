@@ -135,8 +135,7 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 .test.js` isn't bundled). Isolated-LF `oxfmt --check` clean (no reflow
 needed). No migrations, no schema change - not needed to fix this.
 
-**Commit:** see the git log for the exact hash (this file updated in the
-same commit/push). `docs/project.md` untouched.
+**Commit:** `7a22526`. `docs/project.md` untouched.
 
 ---
 
