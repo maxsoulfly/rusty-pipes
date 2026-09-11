@@ -182,9 +182,24 @@ export default function DetailScreen() {
       <div className="py-6 px-5 flex flex-col gap-6">
         <HeroCard c={c} />
 
-        <div>
-          <p className="text-sm text-tx2 leading-[1.6]">{c.description}</p>
-        </div>
+        {/* Split on blank/single line breaks so a multi-paragraph description
+            (e.g. a base description plus a separate "Legal & Ingredient
+            Note" callout) renders as real paragraphs instead of one run-on
+            block - a plain single <p> collapses every newline in the stored
+            text down to a space. */}
+        {c.description && (
+          <div className="flex flex-col gap-2.5">
+            {c.description
+              .split(/\n+/)
+              .map((para) => para.trim())
+              .filter(Boolean)
+              .map((para, i) => (
+                <p key={i} className="text-sm text-tx2 leading-[1.6]">
+                  {para}
+                </p>
+              ))}
+          </div>
+        )}
 
         {!partsMode && (
           <ServingsSelector servings={servings} onChange={setServings} />
