@@ -288,6 +288,153 @@ describe("rankPurchaseRecommendations", () => {
     expect(result).toEqual([])
   })
 
+  // ── Stage D.4: unlocks vs. restores-original ──────────────────────────
+
+  it("does not count an already-adapted cocktail's last missing ingredient as a fresh unlock", () => {
+    const computed = [
+      recipe({
+        id: "r1",
+        name: "Daiquiri",
+        source: "classic",
+        missingRequiredIds: ["white-rum"],
+        display: { tier: "adapted" },
+      }),
+    ]
+    const types = new Map([
+      ["white-rum", { name: "White Rum", bar_priority: "common" }],
+    ])
+    const result = rankPurchaseRecommendations({
+      computed,
+      ingredientTypesById: types,
+      favoriteIds: new Set(),
+      wantToMakeIds: new Set(),
+    })
+    expect(result).toHaveLength(1)
+    expect(result[0].unlockCount).toBe(0)
+    expect(result[0].restoreCount).toBe(1)
+    expect(result[0].reason).toBe(
+      "Also lets you make the original version of 1 already-possible recipe",
+    )
+  })
+
+  it("ranks a genuine unlock above a candidate that only restores an original", () => {
+    const computed = [
+      recipe({
+        id: "r1",
+        name: "Genuinely Almost",
+        missingRequiredIds: ["gin"],
+      }),
+      recipe({
+        id: "r2",
+        name: "Already Adapted",
+        missingRequiredIds: ["white-rum"],
+        display: { tier: "adapted" },
+      }),
+    ]
+    const types = new Map([
+      ["gin", { name: "Gin", bar_priority: "common" }],
+      ["white-rum", { name: "White Rum", bar_priority: "common" }],
+    ])
+    const result = rankPurchaseRecommendations({
+      computed,
+      ingredientTypesById: types,
+      favoriteIds: new Set(),
+      wantToMakeIds: new Set(),
+    })
+    expect(result.map((c) => c.ingredientTypeId)).toEqual(["gin", "white-rum"])
+  })
+
+  it("still ranks a genuine unlock above a restore-only candidate even when the restore count is larger", () => {
+    const computed = [
+      recipe({
+        id: "r1",
+        name: "One Genuine Unlock",
+        missingRequiredIds: ["gin"],
+      }),
+      recipe({
+        id: "r2",
+        name: "Adapted A",
+        missingRequiredIds: ["white-rum"],
+        display: { tier: "adapted" },
+      }),
+      recipe({
+        id: "r3",
+        name: "Adapted B",
+        missingRequiredIds: ["white-rum"],
+        display: { tier: "adapted" },
+      }),
+      recipe({
+        id: "r4",
+        name: "Adapted C",
+        missingRequiredIds: ["white-rum"],
+        display: { tier: "adapted" },
+      }),
+    ]
+    const types = new Map([
+      ["gin", { name: "Gin", bar_priority: "common" }],
+      ["white-rum", { name: "White Rum", bar_priority: "common" }],
+    ])
+    const result = rankPurchaseRecommendations({
+      computed,
+      ingredientTypesById: types,
+      favoriteIds: new Set(),
+      wantToMakeIds: new Set(),
+    })
+    expect(result[0].ingredientTypeId).toBe("gin")
+    expect(result[1].ingredientTypeId).toBe("white-rum")
+    expect(result[1].restoreCount).toBe(3)
+  })
+
+  it("breaks a tie between two restore-only candidates by restore count", () => {
+    const computed = [
+      recipe({
+        id: "r1",
+        name: "Adapted A",
+        missingRequiredIds: ["a"],
+        display: { tier: "adapted" },
+      }),
+      recipe({
+        id: "r2",
+        name: "Adapted B1",
+        missingRequiredIds: ["b"],
+        display: { tier: "adapted" },
+      }),
+      recipe({
+        id: "r3",
+        name: "Adapted B2",
+        missingRequiredIds: ["b"],
+        display: { tier: "adapted" },
+      }),
+    ]
+    const types = new Map([
+      ["a", { name: "A", bar_priority: "common" }],
+      ["b", { name: "B", bar_priority: "common" }],
+    ])
+    const result = rankPurchaseRecommendations({
+      computed,
+      ingredientTypesById: types,
+      favoriteIds: new Set(),
+      wantToMakeIds: new Set(),
+    })
+    expect(result.map((c) => c.ingredientTypeId)).toEqual(["b", "a"])
+  })
+
+  it("existing 'Unlocks N' behavior is unchanged when nothing is adapted", () => {
+    const computed = [
+      recipe({ id: "r1", name: "R1", missingRequiredIds: ["a"] }),
+      recipe({ id: "r2", name: "R2", missingRequiredIds: ["a"] }),
+    ]
+    const types = new Map([["a", { name: "A", bar_priority: "common" }]])
+    const result = rankPurchaseRecommendations({
+      computed,
+      ingredientTypesById: types,
+      favoriteIds: new Set(),
+      wantToMakeIds: new Set(),
+    })
+    expect(result[0].reason).toBe("Unlocks 2 recipes")
+    expect(result[0].restoreCount).toBe(0)
+  })
+
   it("never recommends a prepared ingredient the user can already make from an owned raw one (Concept 2)", () => {
     const cocktail = {
       id: "r1",

@@ -13,6 +13,10 @@ import { GlassSvg } from "@/components/GlassSvg"
 import { SmallCard } from "@/components/CocktailCard"
 import { Card, SectionTitle } from "@/components/primitives"
 import { rankAdapted, rankAlmostThere } from "@/domain/almostThere"
+import {
+  formatMakeabilityBreakdown,
+  summarizeMakeability,
+} from "@/domain/makeabilityCounts"
 import { rankPurchaseRecommendations } from "@/domain/recommendations"
 
 // Capped so a member with dozens of "almost" recipes doesn't get a Home
@@ -102,6 +106,10 @@ export default function HomeScreen() {
   // happens to be "almost" too.
   const adaptedRanked = useMemo(() => rankAdapted(computed), [computed])
 
+  // Stage D.4 - the same shared "how many can I make" answer Library and
+  // Build Your Bar show, so this number never disagrees with theirs.
+  const makeabilityCounts = summarizeMakeability(computed)
+
   const buyNext = useMemo(
     () =>
       rankPurchaseRecommendations({
@@ -157,6 +165,12 @@ export default function HomeScreen() {
       </div>
 
       <div className="pt-5 px-5 pb-0">
+        {computed.length > 0 && (
+          <p className="text-xs text-tx3 mb-4">
+            {formatMakeabilityBreakdown(makeabilityCounts)}
+          </p>
+        )}
+
         {showBuildYourBar && (
           <BuildYourBar
             catalog={catalog}
@@ -319,12 +333,29 @@ export default function HomeScreen() {
                         <div className="text-xs text-tx2">
                           {candidate.reason}
                         </div>
-                        <div className="text-[11px] text-almost font-mono mt-1">
-                          +{candidate.unlockCount}{" "}
-                          {candidate.unlockCount === 1
-                            ? "cocktail"
-                            : "cocktails"}
-                        </div>
+                        {/* Stage D.4: a candidate that only restores an
+                            already-adapted recipe's original (unlockCount
+                            0) gets its own, distinctly-colored line - never
+                            the amber "+N cocktails" wording used for a
+                            genuine unlock, which would overstate what
+                            buying this ingredient actually does. */}
+                        {candidate.unlockCount > 0 ? (
+                          <div className="text-[11px] text-almost font-mono mt-1">
+                            +{candidate.unlockCount}{" "}
+                            {candidate.unlockCount === 1
+                              ? "cocktail"
+                              : "cocktails"}
+                          </div>
+                        ) : (
+                          candidate.restoreCount > 0 && (
+                            <div className="text-[11px] text-violet font-mono mt-1">
+                              +{candidate.restoreCount} original{" "}
+                              {candidate.restoreCount === 1
+                                ? "recipe"
+                                : "recipes"}
+                            </div>
+                          )
+                        )}
                       </div>
                       <button
                         onClick={() =>

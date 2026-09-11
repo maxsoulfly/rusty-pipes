@@ -17,6 +17,7 @@ export function IngredientRowsEditor({
   onRemoveAlternative,
   onUpdateAlternativeNote,
   onAdoptSuggestion,
+  onToggleExcludedSubstitute,
   hasUnmatchedIng,
   isDraftable,
   returnTo,
@@ -135,6 +136,14 @@ export function IngredientRowsEditor({
                     const n = typeNameById.get(s.to_type_id)
                     return n && !altNamesLower.has(n.toLowerCase())
                   })
+                  // Stage D.4 - every configured general substitute for
+                  // this ingredient, unfiltered by adoption (unlike
+                  // `suggestions` above), since excluding one is a
+                  // separate, independent action from adopting one.
+                  const generalSubs = subsByFrom.get(matchedType.id) ?? []
+                  const excludedIds = new Set(
+                    ing.excludedSubstituteTypeIds ?? [],
+                  )
                   return (
                     <div className="flex flex-col gap-1 pl-0.5">
                       <span className="text-[11px] text-tx3">
@@ -201,6 +210,50 @@ export function IngredientRowsEditor({
                                 className="bg-transparent border border-cyan/40 rounded py-0.5 px-2 text-[11px] text-cyan cursor-pointer"
                               >
                                 + {toName}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                      {/* Stage D.4 - per-component exclusion. Every
+                          configured general substitute for this ingredient
+                          (adopted or not) shows here; tapping one excludes
+                          it from tier 4 for THIS component only - every
+                          other configured substitute, and any preparation
+                          route, stay eligible. Tapping an excluded chip
+                          restores it (the chip is its own undo). */}
+                      {generalSubs.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 items-center">
+                          <span className="text-[11px] text-tx3">
+                            General substitutes:
+                          </span>
+                          {generalSubs.map((s) => {
+                            const toName =
+                              typeNameById.get(s.to_type_id) ?? "(unknown)"
+                            const isExcluded = excludedIds.has(s.to_type_id)
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() =>
+                                  onToggleExcludedSubstitute?.(i, s.to_type_id)
+                                }
+                                title={
+                                  isExcluded
+                                    ? `Allow ${toName} again for this ingredient`
+                                    : `Exclude ${toName} for this ingredient only`
+                                }
+                                className={clsx(
+                                  "flex items-center gap-1 rounded py-0.5 pr-1.5 pl-2 text-[11px] border cursor-pointer",
+                                  isExcluded
+                                    ? "border-bdr text-tx3 line-through bg-transparent"
+                                    : "border-bdr bg-surface2 text-tx2",
+                                )}
+                              >
+                                {toName}
+                                <span aria-hidden="true">
+                                  {isExcluded ? "↺" : "✕"}
+                                </span>
                               </button>
                             )
                           })}

@@ -138,10 +138,18 @@ export function IngredientsSection({
               const adaptedMatch = isOwned
                 ? undefined
                 : adaptedByIngId.get(ri.ingId)
+              // Stage D.4: a substitute this component has explicitly
+              // excluded (recipe_components.excluded_substitute_type_ids)
+              // is dropped from the "Try:" hint too, not just tier 4's
+              // makeability check - the recipe owner said it doesn't
+              // belong here.
               const suggestions =
                 isOwned || adaptedMatch
                   ? []
-                  : (getSubstituteSuggestions?.(ri.ingId) ?? [])
+                  : (getSubstituteSuggestions?.(
+                      ri.ingId,
+                      ri.excludedSubstituteTypeIds,
+                    ) ?? [])
               const ratio = ratioByIng?.get(ri)
               const amountText =
                 ratio != null

@@ -51,6 +51,20 @@ const QUIET_BTN =
 const MENU_ITEM =
   "w-full text-left py-2.5 px-3 min-h-11 rounded-sm text-[13px] text-tx bg-surface border border-bdr cursor-pointer"
 
+// Display-only reorder for a preparation input's unit picker (Stage D.4) -
+// weight is the common case for a homemade preparation (sugar, salt, ...),
+// so "g" moves up next to "ml" instead of sitting last. Reuses
+// NON_VOLUME_UNITS as-is (same allowed vocabulary, no duplicate list) -
+// that array's own order stays untouched everywhere else, since position 0
+// ("part") is a load-bearing fallback default in src/schemas/recipePaste.js,
+// not just a display preference.
+const PREPARATION_UNIT_OPTIONS = [
+  "ml",
+  "g",
+  "oz",
+  ...NON_VOLUME_UNITS.filter((u) => u !== "g"),
+]
+
 function normConversions(list) {
   return [...list]
     .map((c) => [c.preparedTypeId, c.guidance])
@@ -936,7 +950,7 @@ export function IngredientTypeEditor({
                       onChange={(v) =>
                         updatePreparationInput(idx, { unitLabel: v })
                       }
-                      options={["ml", "oz", ...NON_VOLUME_UNITS]}
+                      options={PREPARATION_UNIT_OPTIONS}
                     />
                   </div>
                   <button

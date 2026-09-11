@@ -3,6 +3,10 @@ import { useNavigate } from "react-router-dom"
 import { TypeCard } from "@/components/myBar/TypeCard"
 import { Btn } from "@/components/primitives"
 import { resolveOnboardingSelection } from "@/domain/buildYourBar"
+import {
+  formatMakeabilityBreakdown,
+  summarizeMakeability,
+} from "@/domain/makeabilityCounts"
 
 // Build Your Bar never shows product-level detail (that's the Add
 // ingredients / My ingredients job, reached via "Find more ingredients") -
@@ -38,15 +42,14 @@ export function BuildYourBar({ catalog, inventory, computed, isAdmin }) {
   // Mixers row deleted or flagged) would just be noise.
   const nonEmptyGroups = groups.filter(([, types]) => types.length > 0)
 
-  // perfect+good: every required ingredient satisfied - the same tier
-  // boundary Home's own "Good Enough" section already uses. Already
-  // reflects substitution matches (computeAvail treats a satisfied
-  // alternative the same as the primary ingredient) - called out
-  // explicitly in the visible copy below rather than left as an unstated
-  // assumption.
-  const makeableCount = computed.filter(
-    (c) => c.avail === "perfect" || c.avail === "good",
-  ).length
+  // Stage D.4 - the shared "how many can I make" answer (perfect + good +
+  // adapted), the same calculation Library/Home use, so this number never
+  // disagrees with what those screens show. Replaces the old
+  // perfect/good-only count + "Includes substitutions" copy (that older
+  // wording referred only to Stage B's adopted recipe-specific
+  // alternatives, already folded into `avail` - it never covered a general
+  // catalogue substitute or a homemade preparation).
+  const makeabilityCounts = summarizeMakeability(computed)
 
   // This section only ever renders when the bar started empty this visit
   // (see HomeScreen.jsx's per-visit snapshot), so any ownership present now
@@ -145,9 +148,7 @@ export function BuildYourBar({ catalog, inventory, computed, isAdmin }) {
       )}
 
       <p className="text-xs text-tx3 mb-3">
-        <span className="text-tx font-semibold">{makeableCount}</span>{" "}
-        {makeableCount === 1 ? "cocktail" : "cocktails"} you could make right
-        now. Includes substitutions.
+        {formatMakeabilityBreakdown(makeabilityCounts)}
       </p>
 
       <div className="flex flex-col gap-2">

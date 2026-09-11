@@ -377,6 +377,134 @@ describe("computeMakeability", () => {
     )
     expect(adapted).toBeNull()
   })
+
+  // ── Stage D.4: per-component substitute exclusion ────────────────────
+
+  it("skips an excluded substitute for this component - the recipe stays unresolved even though it's owned", () => {
+    const cocktail = {
+      ings: [
+        component({
+          ingId: "white-rum",
+          excludedSubstituteTypeIds: ["spiced-rum"],
+        }),
+      ],
+    }
+    const { adapted, display } = computeMakeability(
+      cocktail,
+      new Set(["spiced-rum"]),
+      name,
+      undefined,
+      undefined,
+      [WHITE_RUM_TO_SPICED],
+    )
+    expect(adapted).toBeNull()
+    expect(display.isAdapted).toBe(false)
+  })
+
+  it("leaves every OTHER configured substitute on the same component eligible when only one is excluded", () => {
+    const cocktail = {
+      ings: [
+        component({
+          ingId: "white-rum",
+          excludedSubstituteTypeIds: ["spiced-rum"],
+        }),
+      ],
+    }
+    const rows = [
+      WHITE_RUM_TO_SPICED,
+      {
+        from_type_id: "white-rum",
+        to_type_id: "gold-rum",
+        flavor_note: "rounder, sweeter",
+      },
+    ]
+    // Owns both Spiced Rum (excluded) and Gold Rum (still eligible) - the
+    // still-eligible one must resolve the component.
+    const { adapted, display } = computeMakeability(
+      cocktail,
+      new Set(["spiced-rum", "gold-rum"]),
+      name,
+      undefined,
+      undefined,
+      rows,
+    )
+    expect(adapted).toEqual({
+      tier: "perfect",
+      label: "Make with substitutions",
+      resolvedRequired: [
+        {
+          ingId: "white-rum",
+          via: "substitute",
+          matchedId: "gold-rum",
+          matchedName: "Gold Rum",
+          note: "rounder, sweeter",
+        },
+      ],
+    })
+    expect(display.isAdapted).toBe(true)
+  })
+
+  it("never affects tier 5 - excluding a substitute does not disable a preparation route for the same component", () => {
+    const cocktail = {
+      ings: [
+        component({
+          ingId: "simple-syrup",
+          excludedSubstituteTypeIds: ["some-other-syrup"],
+        }),
+      ],
+    }
+    const { adapted } = computeMakeability(
+      cocktail,
+      new Set(["white-sugar", "water"]),
+      name,
+      undefined,
+      undefined,
+      [],
+      SIMPLE_SYRUP_BY_PRODUCED,
+    )
+    expect(adapted).not.toBeNull()
+    expect(adapted.resolvedRequired[0].via).toBe("preparation")
+  })
+
+  it("is scoped to the recipe's own component data, not a mutation of the shared substitute rows", () => {
+    // The exact same raw `generalSubstitutes` rows, used by two entirely
+    // separate recipes - one excludes Spiced Rum on its White Rum
+    // component, the other doesn't. If exclusion ever mutated the shared
+    // rows array (a real risk for an incorrectly-implemented filter), the
+    // second recipe would wrongly lose the substitute too.
+    const rows = [WHITE_RUM_TO_SPICED]
+    const owned = new Set(["spiced-rum"])
+
+    const excludingRecipe = {
+      ings: [
+        component({
+          ingId: "white-rum",
+          excludedSubstituteTypeIds: ["spiced-rum"],
+        }),
+      ],
+    }
+    const plainRecipe = { ings: [component({ ingId: "white-rum" })] }
+
+    const excludingResult = computeMakeability(
+      excludingRecipe,
+      owned,
+      name,
+      undefined,
+      undefined,
+      rows,
+    )
+    const plainResult = computeMakeability(
+      plainRecipe,
+      owned,
+      name,
+      undefined,
+      undefined,
+      rows,
+    )
+    expect(excludingResult.adapted).toBeNull()
+    expect(plainResult.adapted).not.toBeNull()
+    expect(rows).toEqual([WHITE_RUM_TO_SPICED]) // never mutated
+  })
 })
 
 describe("isPreparationSatisfiable", () => {

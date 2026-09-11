@@ -24,6 +24,10 @@ import {
 import { AVAIL_FILTERS, SORT_FILTERS, SOURCE_FILTERS } from "@/data/constants"
 import { groupByDisplayTier } from "@/domain/availabilityGroups"
 import { findRecipesUsingIngredient } from "@/domain/ingredientRecipeMatches"
+import {
+  formatMakeabilityBreakdown,
+  summarizeMakeability,
+} from "@/domain/makeabilityCounts"
 
 // Availability grouping is now the default Library view (plain /library
 // included) - grouped section breaks communicate "available first" more
@@ -179,6 +183,13 @@ export default function LibraryScreen() {
     [filtered, sortMode],
   )
 
+  // Stage D.4 - the same shared "how many can I make" answer Home/Build
+  // Your Bar show. Deliberately based on the FULL `computed` set, not
+  // `filtered` - a source/taste filter narrowing the visible grid must not
+  // also change the answer to "how many can I make," which would disagree
+  // with what Home/Build Your Bar report for the same account.
+  const makeabilityCounts = summarizeMakeability(computed)
+
   // Name A-Z: the same already-filtered set, just alphabetically ordered
   // instead of grouped. Only actually used when sortMode is "name" (the
   // grouped branch takes over otherwise), computed unconditionally since
@@ -316,6 +327,12 @@ export default function LibraryScreen() {
           ))}
         </div>
       </BottomSheet>
+
+      {computed.length > 0 && (
+        <p className="px-4 pt-3 text-xs text-tx3">
+          {formatMakeabilityBreakdown(makeabilityCounts)}
+        </p>
+      )}
 
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-15 px-6 gap-3 text-tx3">

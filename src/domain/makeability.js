@@ -76,6 +76,10 @@ function joinWithAnd(names) {
  * @param {Map<string, { id: string, name: string, inputs: { ingredientTypeId: string }[] }>} preparationsByProducedType
  * @param {Set<string>} [householdBasicIds]
  * @param {{ rawTypeId: string, preparedTypeId: string, guidance: string }[]} [formConversions]
+ * @param {Map<string, Set<string>>} [excludedByIngId] - Stage D.4 per-component
+ *   exclusion (`recipe_components.excluded_substitute_type_ids`): a
+ *   component's own excluded `to_type_id`s, skipped at tier 4 only - never
+ *   affects tier 5 (preparations) or tier 3 (adopted alternatives).
  * @returns {null | {
  *   tier: "perfect" | "good",
  *   label: string,
@@ -93,6 +97,7 @@ function computeAdaptedResult(
   preparationsByProducedType,
   householdBasicIds,
   formConversions,
+  excludedByIngId,
 ) {
   // Nothing left to adapt - strict already resolved every required
   // component (avail is "perfect" or "good").
@@ -104,9 +109,14 @@ function computeAdaptedResult(
     // substitute. Directional by construction (substitutesByFrom is keyed
     // by from_type_id only) and never chained - this loop only ever looks
     // at strict's own missingRequiredIds, never at a candidate's own
-    // requirements.
+    // requirements. A candidate this component has explicitly excluded
+    // (Stage D.4) is skipped here only - every other configured substitute
+    // for the same ingredient, and tier 5, are unaffected.
+    const excluded = excludedByIngId?.get(ingId)
     const candidates = substitutesByFrom.get(ingId) ?? []
-    const ownedCandidate = candidates.find((s) => owned.has(s.to_type_id))
+    const ownedCandidate = candidates.find(
+      (s) => owned.has(s.to_type_id) && !excluded?.has(s.to_type_id),
+    )
     if (ownedCandidate) {
       resolvedRequired.push({
         ingId,
@@ -226,6 +236,19 @@ export function computeMakeability(
     formConversions,
   )
 
+  // Stage D.4 - each component may carry its own excluded_substitute_type_ids
+  // (mapRecipe() puts this on `component.excludedSubstituteTypeIds`). Built
+  // once here, keyed by the component's own ingId, and only for components
+  // that actually have an exclusion - a component with none is simply
+  // absent from the map, so `excludedByIngId.get(ingId)` is undefined and
+  // the `?.has(...)` check in computeAdaptedResult short-circuits to "not
+  // excluded," identical to today's behavior for every existing recipe.
+  const excludedByIngId = new Map(
+    (cocktail.ings ?? [])
+      .filter((c) => (c.excludedSubstituteTypeIds ?? []).length > 0)
+      .map((c) => [c.ingId, new Set(c.excludedSubstituteTypeIds)]),
+  )
+
   // strict.avail is already perfect/good - nothing to adapt, and no reason
   // to spend time matching substitutes/preparations for a recipe that's
   // already discoverably makeable.
@@ -240,6 +263,7 @@ export function computeMakeability(
           preparationsByProducedType ?? new Map(),
           householdBasicIds,
           formConversions,
+          excludedByIngId,
         )
 
   const display = adapted

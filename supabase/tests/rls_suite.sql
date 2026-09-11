@@ -1683,6 +1683,15 @@ begin
   update rls_component_ids set comp_id = v_id;
   perform pg_temp.assert(true, 'recipe_components: the recipe owner can insert a component');
 
+  -- Stage D.4: excluded_substitute_type_ids defaults to '{}' for a plain
+  -- insert that doesn't set it - every existing recipe keeps today's
+  -- behavior (every configured general substitute stays eligible).
+  declare v_excl uuid[];
+  begin
+    select excluded_substitute_type_ids into v_excl from public.recipe_components where id = v_id;
+    perform pg_temp.assert(v_excl = '{}'::uuid[], 'recipe_components: excluded_substitute_type_ids defaults to an empty array');
+  end;
+
   perform pg_temp.set_identity('authenticated', f.member_other_id);
   begin
     insert into public.recipe_components (recipe_id, ingredient_type_id, amount, unit_label, role)
@@ -1717,6 +1726,18 @@ begin
   update public.recipe_components set amount = 45 where id = v_id;
   get diagnostics affected = row_count;
   perform pg_temp.assert(affected = 1, 'recipe_components: the owner can update a component on their own recipe');
+
+  -- Stage D.4: the new column round-trips through the same owner-write
+  -- path every other recipe_components column already uses - no new
+  -- policy, so this is really confirming the column itself, not RLS.
+  declare v_excl uuid[];
+  begin
+    update public.recipe_components
+      set excluded_substitute_type_ids = array[f.type_b_id]
+      where id = v_id;
+    select excluded_substitute_type_ids into v_excl from public.recipe_components where id = v_id;
+    perform pg_temp.assert(v_excl = array[f.type_b_id], 'recipe_components: excluded_substitute_type_ids round-trips through an owner update');
+  end;
 end;
 $$;
 

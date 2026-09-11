@@ -38,9 +38,16 @@ export function groupSubstitutionsByFrom(substitutions) {
  *   (from resolveOwnedIngredientTypes) so "owned first" agrees with the rest of the screen
  * @param {(typeId: string) => string} resolveName - id -> display name
  * @param {number} [limit] - max suggestions per missing ingredient (default 3)
- * @returns {(missingTypeId: string) => { toId: string, toName: string, note: string, owned: boolean }[]}
+ * @returns {(missingTypeId: string, excludedTypeIds?: Iterable<string>) => { toId: string, toName: string, note: string, owned: boolean }[]}
  *   a lookup returning this ingredient's suggested stand-ins, the ones the
- *   user already owns first, then alphabetical, capped at `limit`.
+ *   user already owns first, then alphabetical, capped at `limit`. The
+ *   optional second argument (Stage D.4) is the CALLING component's own
+ *   `excluded_substitute_type_ids` - a recipe owner who excluded a
+ *   substitute from actually counting (tier 4) shouldn't still see it
+ *   suggested as a "Try:" hint on that same component either, so this
+ *   drops it from the returned list too. Every other component's/recipe's
+ *   suggestions for the same ingredient are unaffected (this is called
+ *   fresh per component, not cached across them).
  */
 export function buildSubstituteSuggester(
   substitutions,
@@ -50,13 +57,19 @@ export function buildSubstituteSuggester(
 ) {
   const byFrom = groupSubstitutionsByFrom(substitutions)
 
-  return (missingTypeId) => {
-    const rows = (byFrom.get(missingTypeId) ?? []).map((s) => ({
-      toId: s.to_type_id,
-      toName: resolveName(s.to_type_id),
-      note: s.flavor_note,
-      owned: owned.has(s.to_type_id),
-    }))
+  return (missingTypeId, excludedTypeIds) => {
+    const excluded =
+      excludedTypeIds instanceof Set
+        ? excludedTypeIds
+        : new Set(excludedTypeIds ?? [])
+    const rows = (byFrom.get(missingTypeId) ?? [])
+      .filter((s) => !excluded.has(s.to_type_id))
+      .map((s) => ({
+        toId: s.to_type_id,
+        toName: resolveName(s.to_type_id),
+        note: s.flavor_note,
+        owned: owned.has(s.to_type_id),
+      }))
     rows.sort((a, b) => {
       if (a.owned !== b.owned) return a.owned ? -1 : 1
       return a.toName.localeCompare(b.toName)

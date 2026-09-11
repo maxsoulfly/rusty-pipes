@@ -71,6 +71,12 @@ function mapRecipe(row) {
               .filter((a) => a.note)
               .map((a) => [a.ingredient_type_id, a.note]),
           ),
+          // Stage D.4: this component's own excluded general-substitute
+          // target ids (recipe_components.excluded_substitute_type_ids) -
+          // read by computeMakeability()'s tier 4 and by the detail page's
+          // "Try:" suggestions. Never affects tier 3 (alternativeIds above)
+          // or tier 5 (preparations).
+          excludedSubstituteTypeIds: c.excluded_substitute_type_ids ?? [],
           // numeric columns come back as strings over PostgREST
           amount: Number(c.amount),
           unitLabel: c.unit_label,
@@ -87,7 +93,7 @@ const RECIPE_SELECT = `
   family:cocktail_families(name),
   owner:profiles!recipes_owner_id_fkey(display_name),
   original_owner:profiles!recipes_original_owner_id_fkey(display_name),
-  recipe_components(id, ingredient_type_id, amount, unit_label, role, sort_order, ingredient_types(name, color), recipe_component_alternatives(ingredient_type_id, note)),
+  recipe_components(id, ingredient_type_id, amount, unit_label, role, sort_order, excluded_substitute_type_ids, ingredient_types(name, color), recipe_component_alternatives(ingredient_type_id, note)),
   recipe_taste_tags(taste_tags(name))
 `
 
@@ -131,6 +137,10 @@ async function insertComponentsWithAlternatives(recipeId, components) {
         unit_label: c.unitLabel,
         role: c.role,
         sort_order: index,
+        // Stage D.4 - defaults to '{}' (every configured general
+        // substitute stays eligible) when a caller doesn't set this, same
+        // as the column's own DB default.
+        excluded_substitute_type_ids: c.excludedSubstituteTypeIds ?? [],
       })),
     )
     .select()

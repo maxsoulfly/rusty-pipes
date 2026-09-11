@@ -94,4 +94,32 @@ describe("buildSubstituteSuggester", () => {
       owned: false,
     })
   })
+
+  // ── Stage D.4: per-component exclusion ───────────────────────────────
+
+  it("drops an excluded candidate from the suggestion list (Set form)", () => {
+    const suggest = buildSubstituteSuggester(SUBS, new Set(), name)
+    const rows = suggest("white-rum", new Set(["spiced-rum"]))
+    expect(rows.map((r) => r.toId)).not.toContain("spiced-rum")
+    expect(rows.map((r) => r.toId)).toEqual(
+      expect.arrayContaining(["gold-rum", "dark-rum", "aged-rum"]),
+    )
+  })
+
+  it("also accepts a plain array for the excluded ids", () => {
+    const suggest = buildSubstituteSuggester(SUBS, new Set(), name)
+    const rows = suggest("white-rum", ["spiced-rum"])
+    expect(rows.map((r) => r.toId)).not.toContain("spiced-rum")
+  })
+
+  it("is unaffected when no exclusion is passed at all", () => {
+    const suggest = buildSubstituteSuggester(SUBS, new Set(), name, 10)
+    expect(suggest("white-rum").map((r) => r.toId)).toContain("spiced-rum")
+  })
+
+  it("excluding a candidate for one call does not affect a later call for a different missing ingredient", () => {
+    const suggest = buildSubstituteSuggester(SUBS, new Set(), name)
+    suggest("white-rum", new Set(["spiced-rum"]))
+    expect(suggest("campari").map((r) => r.toId)).toEqual(["aperol"])
+  })
 })

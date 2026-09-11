@@ -45,6 +45,13 @@ export const SORT_FILTERS = [
 // like "dash" (scales with servings), "to taste" is a bare descriptive
 // label like "top-up" (never has a leading number, so src/domain/servings.js
 // leaves it untouched automatically - no special-casing needed).
+// Position 0 is load-bearing, not just display order - src/schemas/
+// recipePaste.js falls back to NON_VOLUME_UNITS[0] ("part") for an
+// unrecognized pasted unit, and its own test asserts exactly that. Don't
+// reorder this array for a display-only preference (a preparation input's
+// unit picker reorders its own `options` locally instead - see
+// IngredientTypeEditor.jsx, Stage D.4 - rather than risk changing that
+// fallback default).
 export const NON_VOLUME_UNITS = [
   "part",
   "dash",

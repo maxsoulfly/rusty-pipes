@@ -11,8 +11,14 @@ only) DONE + pushed 2026-09-11** - see "Stage D.1 — DONE" below. **Stage D.2
 Preparations - tier 5, `ingredient_preparations`/`ingredient_preparation_inputs`,
 the editor's "Homemade preparation" block) DONE + pushed 2026-09-11** - see
 "Stage D.3 — DONE" below (stages resequenced this session - see the
-resequencing note under "Staged implementation plan"); D.4-D.5 NOT started.
-Stage C (Linked Variations) NOT started.**
+resequencing note under "Staged implementation plan"). **Stage D.4 AND
+Stage D.5 (counts/breakdown + the real Daiquiri catalogue rows; per-
+component substitute exclusion + the Buy Next unlock-vs-restore ranking
+split) DONE + pushed together in one session, 2026-09-11** - the user's own
+instruction bundled both remaining stages into a single implementation pass
+rather than doing them one at a time; see "Stage D.4 & D.5 — DONE" below.
+**Stage D is now feature-complete.** Stage C (Linked Variations) remains
+NOT started, independent, on a separate go-ahead.
 
 > **D1 is SUPERSEDED, 2026-09-11 — planning only, not yet implemented.** The
 > user has decided general catalogue substitutes should be able to affect
@@ -1179,7 +1185,9 @@ side effect of building `computeAdaptedResult()` correctly, so the
 Daiquiri-scenario acceptance check itself moves to D.4 alongside the
 curated live-data rows, unchanged from the plan below.
 
-**Stage D.4 — Counts/breakdown and the full Daiquiri scenario** (originally
+**Stage D.4 — DONE 2026-09-11 (committed + pushed, live catalogue rows
+added; mobile/browser check pending) — Counts/breakdown and the full
+Daiquiri scenario** (originally
 numbered D.3; its Library/Home grouping-and-ordering piece already shipped
 as D.2, and its "combine tiers 4+5 + label composition" piece already
 shipped as D.3 - `computeAdaptedResult()` already tries tier 4 then tier 5
@@ -1200,7 +1208,8 @@ all show the identical count breakdown; the detail page explains each
 replacement's flavor note and links to Simple Syrup's ingredients/steps
 while still showing the original ingredient list honestly.
 
-**Stage D.5 — Recipe-specific per-substitute exclusion + Buy Next ranking
+**Stage D.5 — DONE 2026-09-11 (committed + pushed; mobile/browser check
+pending) — Recipe-specific per-substitute exclusion + Buy Next ranking
 change** (originally numbered D.4). Migration D.1 (`excluded_substitute_type_ids`),
 the `IngredientRowsEditor` chip-removal UI, and the Buy Next ranking split
 (`unlockedRecipes` vs. `restoresOriginalRecipes`). *Acceptance:* excluding
@@ -1572,24 +1581,205 @@ automated tests and the RLS suite's throwaway fixture rows.
 
 ---
 
+## Stage D.4 & D.5 — DONE 2026-09-11 (committed + pushed, live catalogue rows added; mobile/browser check pending)
+
+**Scope: both remaining stages, implemented and shipped together in one
+session** - the user's own instruction explicitly bundled "finish the
+shared makeability integration, counts, Buy Next semantics, narrowed
+substitution exceptions, and the planned real-catalogue verification
+rules" into a single pass rather than doing D.4 then D.5 separately. This
+section covers all four requirement groups plus a small, unrelated-scope
+unit-picker ordering cleanup done in the same commit.
+
+### 1. Counts - one shared calculation, three surfaces
+
+New `src/domain/makeabilityCounts.js` - `summarizeMakeability(computed) ->
+{ possible, ready, adapted }` (possible = perfect + good + adapted; reads
+`display.tier`, falling back to `avail`) and
+`formatMakeabilityBreakdown(counts) -> string` (the approved exact wording,
+"8 cocktails possible · 5 ready, 3 with substitutions or preparation" -
+drops the breakdown clause entirely when nothing is adapted). Both pure,
+both imported directly - **Library, Home, and Build Your Bar all render the
+same string from the same calculation**, so no screen can independently
+reinterpret "how many can I make."
+
+- **`BuildYourBar.jsx`** - replaced the old `perfect`/`good`-only
+  `makeableCount` + "you could make right now. Includes substitutions."
+  copy (which only ever covered Stage B's adopted alternatives, already
+  folded into `avail` - it never covered a general substitute or a
+  preparation) with the shared breakdown line.
+- **`HomeScreen.jsx`** - a new summary line near the top (above Build Your
+  Bar / Ready to Pour), using the full `computed` set.
+- **`LibraryScreen.jsx`** - a new summary line above the grouped/flat
+  results, **deliberately based on the full `computed` set, not the
+  currently-`filtered` one** - a source/taste filter narrowing the visible
+  grid must not also change the answer to "how many can I make," which
+  would disagree with what Home/Build Your Bar report for the same account.
+- `strict`/`avail` are completely unread by this module - internal
+  bookkeeping stays exactly as it was; only the rendered total changed.
+
+### 2. Buy Next - unlocks vs. restores-original
+
+`rankPurchaseRecommendations()` (`src/domain/recommendations.js`) still
+gathers candidates the same way (a recipe missing exactly one required
+ingredient, by **strict** avail - "one ingredient away" is a fact about the
+original recipe), but now splits each match by that SAME recipe's
+`display.tier`: `!== "adapted"` -> `unlockedRecipes` (today's behavior,
+byte-for-byte); `=== "adapted"` -> a new `restoresOriginalRecipes` bucket,
+never counted in `unlockCount`/the "Unlocks N" reason. A candidate with
+zero genuine unlocks gets its own reason text, `"Also lets you make the
+original version of N already-possible recipe(s)"`. Sort order: a genuine
+unlock (unlockCount > 0) always outranks a restore-only candidate - the
+existing `unlockCount` comparison already guarantees this by construction
+(restore-only means unlockCount is exactly 0); a new `restoreCount`
+tiebreak (after `upgradeCount`, before the name tiebreak) orders *within* a
+tie, most commonly two restore-only candidates against each other. Built
+entirely on the shared `computeMakeability()`/`display` result already
+computed once in `App.jsx` - no Buy-Next-specific availability rule.
+`HomeScreen.jsx`'s Buy Next card now shows a distinctly-violet "+N original
+recipes" line instead of the amber "+N cocktails" wording when a
+candidate's `unlockCount` is 0 - the amber wording is reserved for a
+genuine unlock, never a restore.
+
+### 3. Per-component substitution exclusion
+
+Migration `20260911140000_recipe_components_excluded_substitutes.sql` -
+`recipe_components.excluded_substitute_type_ids uuid[] not null default
+'{}'`. No RLS/GRANT change (the table was never column-restricted, unlike
+`recipes` itself - its existing insert/update/delete policies already gate
+every column via `recipe_is_editable(recipe_id)`).
+
+- **`computeAdaptedResult()`** (`src/domain/makeability.js`) now takes an
+  `excludedByIngId` map (built once in `computeMakeability()` from
+  `cocktail.ings[].excludedSubstituteTypeIds`, via `mapRecipe()`) and skips
+  any tier-4 candidate whose `to_type_id` is in that ONE component's own
+  exclusion set - every other configured substitute for the same
+  ingredient, and tier 5 (preparations), are completely unaffected. No
+  whole-component or whole-recipe "disable all substitutions" switch exists
+  anywhere.
+- **`buildSubstituteSuggester()`** (`src/domain/substituteSuggestions.js`)
+  gains an optional second call-time argument (`excludedTypeIds`) so the
+  detail page's muted "Try:" hint respects the same exclusion - a recipe
+  owner who excluded a substitute from counting shouldn't still see it
+  suggested on that same component either. `IngredientsSection.jsx` passes
+  `ri.excludedSubstituteTypeIds` through.
+- **Editor (`IngredientRowsEditor.jsx`)** - every configured general
+  substitute for a matched ingredient (adopted or not) now shows as a
+  removable chip ("Spiced Rum ✕ · Gold Rum ✕") independent of the existing
+  "Suggested: +Name" adopt buttons; tapping ✕ excludes it for THIS
+  component, tapping an excluded chip (shown struck-through, "↺") restores
+  it. `EditorScreen.jsx` threads `excludedSubstituteTypeIds` through
+  prefill/clone/draft-restore/save exactly like `alternatives` already is,
+  and gained `toggleExcludedSubstitute()`. `services/recipes.js`'s
+  `RECIPE_SELECT`/`mapRecipe()`/`insertComponentsWithAlternatives()` all
+  carry the new column - no new RPC, written through the recipe's existing
+  save path (full delete + re-insert on edit, same as every other
+  `recipe_components` column).
+- RLS suite extended: the column defaults to `'{}'` on a plain insert, and
+  round-trips through the existing owner-update path - no new policy to
+  test, since none was added.
+
+### 4. Real catalogue verification
+
+Audited live data first (read-only), per the "verification step, not a
+seed" rule:
+
+- **Daiquiri** unchanged: White Rum 60 ml / Lime Juice 30 ml / Simple Syrup
+  15 ml, all required, no exclusions.
+- **White Rum → Spiced Rum** already existed (confirmed, not duplicated).
+- **Lime Juice → Lemon Juice did not exist - added**: `ingredient_substitutions`
+  row, flavor note *"Similar acidity, slightly less tart and more floral."*
+  (a plain `insert ... on conflict (from_type_id, to_type_id) do nothing`
+  against the live linked project - the same table Stage B already
+  populated the White Rum row into, no new mechanism).
+- **Simple Syrup preparation already existed** (the user configured it
+  manually per D.3's own verification, per this session's instruction) -
+  inspected via read-only queries only (produces Simple Syrup, from White
+  Sugar 100 g + Water 100 ml, with real instructions) and **not touched at
+  all** - no write of any kind to `ingredient_preparations`/
+  `ingredient_preparation_inputs` this session.
+- No broad rum equivalence, no unrelated substitutions added.
+
+With this, the acceptance scenario (Spiced Rum owned, Lemon Juice owned,
+White Sugar + Water as household basics, White Rum/Lime Juice/Simple Syrup
+NOT owned) mechanically resolves through White Rum → Spiced Rum (tier 4),
+Lime Juice → Lemon Juice (tier 4), and Simple Syrup via its preparation
+(tier 5) - confirmed by the domain test suite's "combines a substitution
+and a preparation into one composed label - the Daiquiri acceptance
+scenario" case using the same shapes as the real data, and by the live-data
+audit above confirming every row this scenario needs now genuinely exists.
+**Not confirmed live in the running app** - see "Not verified here" below.
+
+### Small unit-selector cleanup (bundled in the same commit)
+
+The preparation input's unit picker (`IngredientTypeEditor.jsx`) reordered
+its own `options` to `["ml", "g", "oz", ...NON_VOLUME_UNITS.filter(u =>
+u !== "g")]` - "g" moves from last to second (right after "ml"), since
+weight is the common case for a homemade preparation. **`NON_VOLUME_UNITS`
+itself (`src/data/constants.js`) is deliberately left in its original
+order** - its position 0 ("part") is a load-bearing fallback default in
+`src/schemas/recipePaste.js` (asserted by that file's own test), not just a
+display preference, so reordering the shared array would have silently
+changed what an unrecognized pasted unit falls back to. The recipe
+editor's own ingredient-row unit picker (`IngredientRowsEditor.jsx`) is
+unchanged - this was scoped to the preparation input picker only.
+
+### Preserved, unregressed (per explicit instruction)
+
+Directional Can-provide, household basics, recipe-specific alternatives
+(tier 3), Stage B's "Try:" hints (now exclusion-aware, still suggestion-only
+and never touching `computeAvail()`), D.1's primary `display` contract,
+D.2's discovery/grouping/filtering, and D.3's preparation behavior +
+atomic Save/Cancel are all unchanged - no preparation chains, no
+substitution chains, no automatic reverse relationships, no fake ownership
+anywhere in this stage's changes.
+
+**Verified:** `corepack pnpm@10.34.3 test` **311/311** (+21 across four
+files: `recommendations.test.js` +6 - unlocks-vs-restore split, ranking
+order including the restore-count tiebreak, unchanged "Unlocks N" behavior
+when nothing is adapted; `makeability.test.js` +4 - exclusion skips only
+the named candidate, every other configured substitute stays eligible,
+never affects tier 5, and is scoped to the recipe's own component data
+(not a mutation of the shared substitute rows array); `substituteSuggestions
+.test.js` +4 - Set and plain-array exclusion forms, unaffected when
+omitted, no cross-call leakage; `makeabilityCounts.test.js` +8, new file -
+the exact approved wording, the acceptance example's numbers, the
+avail-only fallback, singular/zero wording). `pnpm build` clean (174
+modules, +1 for `makeabilityCounts.js`). Isolated-LF `oxfmt --check` clean
+on all 17 changed/new JS/JSX files (5 reflows hand-applied to the real CRLF
+files). **Migration pushed** (`supabase db push --linked`, clean, 62/62
+local==remote). **RLS suite** extended (the new column's default + an
+owner-update round-trip); full suite passes (`{"rows":[]}`).
+`supabase db advisors --type security` - no new finding. A live REST call
+confirmed the widened `recipe_components` embed select (now including
+`excluded_substitute_type_ids`) still resolves (`200`).
+
+**Not verified here (no browser tooling in this sandbox):** the actual
+on-screen appearance of the three new count lines, the Buy Next card's new
+violet "restore" line, the editor's exclusion chips, and - most
+importantly - the full Daiquiri acceptance scenario end-to-end in the
+running app (own Spiced Rum + Lemon Juice, confirm the Daiquiri leads with
+"Make with substitutions · Prepare Simple Syrup first" and that its detail
+page explains both adaptations without marking Simple Syrup owned). The
+catalogue-level prerequisites are now all genuinely in place; only the
+in-browser confirmation is outstanding.
+
+---
+
 ## Exact next action
 
-**Stage D.1, D.2, and D.3 are DONE** (see the three sections above) —
-`computeMakeability()` + primary-status wiring on card/HeroCard/detail
-(D.1), display-tier-based discovery/grouping/ordering in Library/Home/Lists
-(D.2), and tier 5 / minimal homemade preparations end-to-end including the
-editor (D.3) are all built, tested, and pushed. **The user reviews all
-three** (code + the one live-app check noted above — White Rum resolving
-via the already-live `White Rum → Spiced Rum` substitute should show up
-grouped under "Make With Substitutions"), then decides which stage to
-proceed to next: **D.4** (curate the two missing catalogue rows for the
-full Daiquiri scenario + the shared counts/breakdown across Library/Home/
-Build Your Bar) is the plan's own next step, or a different slice, per the
-same resequencing precedent set this session (the user is not bound to the
-original order any more than D.2's/D.3's own scope was). Stage B's own
-outstanding manual checks stay unverified/outstanding, not passed —
-re-check them once the full Stage D UI (through D.4) ships rather than in
-isolation.
+**Stage D is feature-complete** - D.1 through D.5 are all DONE, tested, and
+pushed (see the five "Stage D.N — DONE" sections above). The full acceptance
+scenario's catalogue prerequisites are confirmed in place (White Rum →
+Spiced Rum, the newly-added Lime Juice → Lemon Juice, and the user's own
+manually-configured Simple Syrup preparation). **The user reviews the whole
+of Stage D** - primarily the Daiquiri scenario end-to-end (own Spiced Rum +
+Lemon Juice, confirm the primary status and the detail page's explanation
+of both adaptations), plus the new count lines on Library/Home/Build Your
+Bar and the editor's exclusion chips - since none of this has been
+confirmed in a running browser yet. Stage B's own outstanding manual checks
+stay unverified/outstanding, not passed — re-check them against the now-
+complete Stage D UI rather than in isolation.
 
 **Stage C (Linked Variations) remains NOT started** and independent of Stage
 D — on a separate go-ahead: migration `..._recipe_relationships.sql`

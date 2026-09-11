@@ -348,6 +348,9 @@ export default function EditorScreen() {
               : null
           })
           .filter(Boolean),
+        // Stage D.4 - per-component general-substitute exclusion, carried
+        // through unchanged for editing.
+        excludedSubstituteTypeIds: ri.excludedSubstituteTypeIds ?? [],
       })),
     )
     setSteps(source.steps.length > 0 ? source.steps : [""])
@@ -521,6 +524,23 @@ export default function EditorScreen() {
         }
       }),
     )
+  // Stage D.4 - "Spiced Rum doesn't belong in my Daiquiri": excludes ONE
+  // configured general substitute from tier 4 on this one component, never
+  // a whole-component/whole-recipe switch. Toggles in place (excluding
+  // again un-excludes it) so the same chip acts as its own undo.
+  const toggleExcludedSubstitute = (i, toTypeId) =>
+    setIngs(
+      ings.map((row, idx) => {
+        if (idx !== i) return row
+        const existing = row.excludedSubstituteTypeIds ?? []
+        return {
+          ...row,
+          excludedSubstituteTypeIds: existing.includes(toTypeId)
+            ? existing.filter((id) => id !== toTypeId)
+            : [...existing, toTypeId],
+        }
+      }),
+    )
 
   const addStep = () => setSteps([...steps, ""])
   const removeStep = (i) => setSteps(steps.filter((_, idx) => idx !== i))
@@ -586,6 +606,7 @@ export default function EditorScreen() {
           unitLabel: isVolume ? "ml" : `${i.amount} ${i.unit}`.trim(),
           role: i.role,
           alternatives,
+          excludedSubstituteTypeIds: i.excludedSubstituteTypeIds ?? [],
         }
       })
       const payload = {
@@ -773,6 +794,7 @@ export default function EditorScreen() {
               onRemoveAlternative={removeAlternative}
               onUpdateAlternativeNote={updateAlternativeNote}
               onAdoptSuggestion={adoptSuggestion}
+              onToggleExcludedSubstitute={toggleExcludedSubstitute}
               hasUnmatchedIng={hasUnmatchedIng}
               isDraftable={isDraftable}
               returnTo={location.pathname + location.search}
