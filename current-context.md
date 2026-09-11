@@ -186,7 +186,7 @@ satisfied) should now additionally appear grouped under "Make With
 Substitutions" in Library and in its own Home section - not under "Almost
 There" or behind the "Almost" filter.
 
-**Commit:** see the git log for the exact hash (this file and
+**Commit:** `9736ed9` (this file and
 `docs/plans/substitutes-and-variations.md` updated in the same commit/push).
 
 ---
