@@ -222,7 +222,7 @@ full Daiquiri scenario end-to-end in the running app. The catalogue-level
 prerequisites are now all confirmed in place; only the in-browser check is
 outstanding.
 
-**Commit:** see the git log for the exact hash (this file and
+**Commit:** `a2b4a93` (this file and
 `docs/plans/substitutes-and-variations.md` updated in the same commit/push).
 
 ---
