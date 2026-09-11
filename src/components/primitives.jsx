@@ -29,6 +29,20 @@ export const AVAIL_CFG = {
     icon: "○",
     glow: "",
   },
+  // Stage D.1 - a recipe resolvable through a configured, owned general
+  // substitute (and, from Stage D.2 on, a satisfiable preparation). Reuses
+  // the existing violet accent (already the "Classic" source-badge color,
+  // distinct from every other avail tone) rather than inventing a new one.
+  // `label` here is only the fallback - AvailBadge below prefers the
+  // per-recipe composed text from `display.label` when one is given, since
+  // "Make with substitutions" vs. a future "Prepare X first" isn't a fixed
+  // string per tier the way the other four are.
+  adapted: {
+    label: "Make with substitutions",
+    color: "var(--violet)",
+    icon: "⇄",
+    glow: "glow-violet",
+  },
 }
 
 export const AVAIL_TONE = {
@@ -36,9 +50,16 @@ export const AVAIL_TONE = {
   good: "text-good border-good",
   almost: "text-almost border-almost",
   unavail: "text-unavail border-unavail",
+  adapted: "text-violet border-violet",
 }
 
-export function AvailBadge({ avail, small }) {
+// `label` overrides AVAIL_CFG[avail]'s static text - pass a recipe's own
+// `display.label` (Stage D.1) so an "adapted" badge shows its actual
+// composed status ("Make with substitutions · Prepare syrup first") rather
+// than the generic fallback above. Every existing caller that only passes
+// `avail` is unaffected - `label` is optional and AVAIL_CFG already has a
+// static string for the four original tiers.
+export function AvailBadge({ avail, small, label }) {
   const c = AVAIL_CFG[avail]
   return (
     <span
@@ -50,7 +71,7 @@ export function AvailBadge({ avail, small }) {
       )}
     >
       <span className={small ? "text-[10px]" : "text-[11px]"}>{c.icon}</span>
-      {c.label}
+      {label ?? c.label}
     </span>
   )
 }

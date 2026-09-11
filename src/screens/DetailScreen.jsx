@@ -218,6 +218,7 @@ export default function DetailScreen() {
           partsMode={partsMode}
           setPartsMode={setPartsMode}
           getSubstituteSuggestions={getSubstituteSuggestions}
+          adapted={c.adapted}
         />
 
         <StepsSection steps={c.steps} />

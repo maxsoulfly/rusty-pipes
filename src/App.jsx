@@ -7,10 +7,8 @@ import {
   useOutletContext,
 } from "react-router-dom"
 import { BottomNav, SideNav } from "@/components/Nav"
-import {
-  computeAvail,
-  resolveOwnedIngredientTypes,
-} from "@/domain/availability"
+import { resolveOwnedIngredientTypes } from "@/domain/availability"
+import { computeMakeability } from "@/domain/makeability"
 import { useCatalog } from "@/hooks/useCatalog"
 import { useInventory } from "@/hooks/useInventory"
 import { useLists } from "@/hooks/useLists"
@@ -223,24 +221,34 @@ function AppShell({ profile, session }) {
     ],
   )
 
+  // Stage D.1 (docs/plans/substitutes-and-variations.md -> "Stage D"):
+  // computeMakeability() wraps computeAvail() - `strict`'s fields are
+  // spread at the top level exactly as computeAvail()'s always were (avail,
+  // missingRequiredIds, substitutions, ...), so every existing consumer
+  // (Buy Next, Library/Home grouping, the "almost" missing-ingredient line)
+  // is byte-for-byte unchanged. `adapted`/`display` are new, additive
+  // fields - `display` is the one field a primary-status surface (card,
+  // hero badge, detail badge) should read instead of `avail` going forward.
   const computed = useMemo(
     () =>
-      recipes.map((r) => ({
-        ...r,
-        ...computeAvail(
+      recipes.map((r) => {
+        const { strict, adapted, display } = computeMakeability(
           r,
           resolvedOwned,
           (id) => ingredientTypesById.get(id)?.name ?? id,
           householdBasicTypeIds,
           formConversions,
-        ),
-      })),
+          catalog.ingredientSubstitutions,
+        )
+        return { ...r, ...strict, adapted, display }
+      }),
     [
       recipes,
       resolvedOwned,
       ingredientTypesById,
       householdBasicTypeIds,
       formConversions,
+      catalog.ingredientSubstitutions,
     ],
   )
 

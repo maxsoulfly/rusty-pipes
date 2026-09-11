@@ -8,9 +8,13 @@ import { supabase } from "@/lib/supabaseClient"
 // Ingredient Type editor's atomic save), so there is no create/update/
 // delete helper here - just the read.
 //
-// SUGGESTION ONLY: never handed to computeAvail(). It drives the muted
-// "Try: ..." hint on a recipe's missing ingredient rows and the one-tap
-// adopt list in the recipe editor; nothing here changes availability.
+// Never handed to computeAvail() - the strict avail tiers (perfect/good/
+// almost/unavail) are untouched by this table, same as always. It drives
+// the muted "Try: ..." hint on a recipe's missing ingredient rows, the
+// one-tap adopt list in the recipe editor, AND (Stage D.1,
+// domain/makeability.js) an OWNED row here can now resolve a recipe's
+// separate `adapted`/`display` result - see docs/plans/
+// substitutes-and-variations.md's "Stage D" for the full model.
 export async function fetchIngredientSubstitutions() {
   const { data, error } = await supabase
     .from("ingredient_substitutions")

@@ -3,8 +3,10 @@
 **Planning document — 2026-09-10/11. Decisions D1–D6 approved 2026-09-10.
 Stage A DONE + pushed 2026-09-10, plus a Stage A follow-up (editor UI rework
 + atomic local-draft save via `save_ingredient_type()`) DONE + pushed
-2026-09-10. Stage B (Suggested Substitutes) DONE + pushed 2026-09-10. Stage C
-(Linked Variations) NOT started.**
+2026-09-10. Stage B (Suggested Substitutes) DONE + pushed 2026-09-10. Stage D
+revised to v2 2026-09-11; **Stage D.1 (Adapted Availability, substitutes
+only) DONE + pushed 2026-09-11** - see "Stage D.1 — DONE" below. Stage D.2-D.4
+NOT started. Stage C (Linked Variations) NOT started.**
 
 > **D1 is SUPERSEDED, 2026-09-11 — planning only, not yet implemented.** The
 > user has decided general catalogue substitutes should be able to affect
@@ -1128,7 +1130,8 @@ No changes to `ingredient_form_conversions`, `ingredient_substitutions`,
 
 ### Staged implementation plan
 
-**Stage D.1 — Adapted availability from curated substitutes only (no
+**Stage D.1 — DONE 2026-09-11 (committed + pushed; mobile/browser check
+pending) — Adapted availability from curated substitutes only (no
 preparations yet), surfaced as the PRIMARY status from the start.**
 `computeMakeability()` handling tier 4 only (`adapted` stays null until D.2
 adds tier 5). `display.tier`/`display.label` wired in as the primary status
@@ -1141,7 +1144,8 @@ badge (no "Unavailable" anywhere on that card); the same recipe with the
 substitute un-owned shows nothing new (still just the existing "Try:" hint,
 still `display.tier === "almost"`); `strict`/`computeAvail()` and Buy Next's
 existing behavior are provably unchanged (existing tests still pass
-unmodified) - only *new* consumers read `display`.
+unmodified) - only *new* consumers read `display`. **See "Stage D.1 — DONE"
+below for exactly what shipped.**
 
 **Stage D.2 — Minimal homemade preparations.** Migrations D.2 + D.3, the
 "Homemade preparation" editor section, `isPreparationSatisfiable()`. Depth-1
@@ -1220,15 +1224,120 @@ tests) even though what's *rendered* from `display` changes starting D.1.
 
 ---
 
+## Stage D.1 — DONE 2026-09-11 (committed + pushed; mobile/browser check pending)
+
+No migrations, no schema changes, no live-catalogue changes — D.1 is
+entirely `src/**`. Scope held to exactly the D.1 acceptance checks above;
+Library/Home/Build Your Bar grouping, counts, and Buy Next ranking are all
+untouched (D.3/D.4).
+
+- **New `src/domain/makeability.js`** — `computeMakeability(cocktail, owned,
+  resolveIngredientName, householdBasicIds, formConversions,
+  generalSubstitutes)` wraps `computeAvail()` (unchanged, called internally)
+  and returns `{ strict, adapted, display }`. `strict` is byte-for-byte
+  today's `computeAvail()` output. `adapted` is non-null only when every
+  component `strict` left missing resolves via an **owned** row in
+  `generalSubstitutes` (tier 4 only - no preparation tier exists yet, so a
+  component tier 4 can't resolve fails the whole adaptation, no partial
+  credit); when non-null, `resolvedRequired` lists each replacement
+  (`matchedId`/`matchedName`/`note`) and `label` is always `"Make with
+  substitutions"` (the only composition possible until Stage D.2 adds
+  `"Prepare X first"`). `display` is `{ tier, label, isAdapted }` - `tier`
+  equals `strict.avail` when that's already `"perfect"`/`"good"`, else
+  `"adapted"` when `adapted` resolved, else falls through to `strict.avail`
+  unchanged (`"almost"`/`"unavail"`). No chaining (a candidate's own
+  requirements are never walked), no reverse (only the exact configured
+  `from_type_id → to_type_id` direction is consulted), no fabricated rum
+  (or any other) equivalence - purely what `ingredient_substitutions`
+  actually holds.
+- **`groupSubstitutionsByFrom()` extracted** from
+  `domain/substituteSuggestions.js` (was inlined in
+  `buildSubstituteSuggester`) so both the existing "Try:" suggester and the
+  new tier-4 check key `ingredient_substitutions` rows the same way. Zero
+  behavior change to the suggester itself (its own test file passes
+  unmodified).
+- **`App.jsx`** - the one `computeAvail()` call site now calls
+  `computeMakeability()` instead, feeding it `catalog.ingredientSubstitutions`
+  (already fetched for Stage B, no new query). `computed` items spread
+  `...strict` exactly where they used to spread `...computeAvail(...)` (so
+  `avail`, `missingRequiredIds`, `substitutions`, `householdBasics`,
+  `formConversions` etc. are unchanged fields, read by Buy Next/Library/
+  Home/Build Your Bar exactly as before) **plus** two new fields, `adapted`
+  and `display`.
+- **Primary-status surfaces updated to read `display` instead of `avail`:**
+  `AvailBadge` (`src/components/primitives.jsx`) gains an optional `label`
+  prop that overrides `AVAIL_CFG[avail]`'s static text, plus a new
+  `AVAIL_CFG.adapted`/`AVAIL_TONE.adapted` entry (violet - the existing
+  "Classic" source-badge accent, not a new color). `CocktailCard`/
+  `SmallCard` (`src/components/CocktailCard.jsx`) and `HeroCard`
+  (`src/components/detail/HeroCard.jsx`) now compute `display = c.display ??
+  { tier: c.avail, ... }` and use it for the glass's opacity, the badge, and
+  the badge text - a recipe with `display.tier === "adapted"` shows "Make
+  with substitutions" as its **leading** status, never "Unavailable" beside
+  it. `HeroCard`'s existing "Missing: X" strict-detail box is kept (per the
+  requirement that the UI still explain what the original recipe calls
+  for) but its own label changes to "Original recipe still needs: X" when
+  adapted, so it reads as background on the unadapted original rather than
+  a second, competing status line under the primary badge.
+- **`IngredientsSection`** (`src/components/detail/IngredientsSection.jsx`)
+  gains an `adapted` prop; a component listed in `adapted.resolvedRequired`
+  renders a new, distinct **violet** dot (never the green "owned" dot - no
+  ownership is faked) and a "Adapted: Spiced Rum — Adds sweetness and
+  spice." sub-label in the same slot the muted "Try:" hint used to occupy,
+  upgraded from a suggestion to an actionable, resolved replacement.
+  `DetailScreen.jsx` passes `c.adapted` through. (The preparation-link half
+  of this row - "Adapted: needs preparation — [link to ingredients/steps]"
+  - has no branch yet since no preparation can exist before Stage D.2; the
+  code comment at that spot says so explicitly rather than stubbing dead UI.)
+- **Known, deliberate limitation carried into D.1 on purpose (not a bug):**
+  Library's grouped view, Home's Perfect/Good/Almost sections, and Build
+  Your Bar's makeable count still bucket/count purely by `strict.avail`
+  (D.3/D.4 scope, untouched). A recipe that is `display.tier === "adapted"`
+  today therefore still appears wherever its strict tier already put it
+  (e.g. under Library's "Almost There" heading), but the **card itself**,
+  wherever it's rendered, now correctly leads with "Make with
+  substitutions" rather than "Almost"/"Unavailable" - satisfying the "never
+  a contradictory primary badge" requirement at the card level, while the
+  section it sits under is deliberately not yet regrouped (Stage D.3).
+- **Verified:** `corepack pnpm@10.34.3 test` **260/260** (+9 -
+  `makeability.test.js`: display mirrors strict when already perfect/good
+  (no adaptation attempted); the White Rum/Spiced Rum acceptance case
+  end-to-end; no adaptation when the substitute is configured but un-owned;
+  all-or-nothing across required components - one unresolvable component
+  blocks the whole adaptation (the "Sugar alone" guarantee's general form);
+  no chaining through a substitute's own substitute; no fabricated reverse
+  direction; household basics/form conversions still resolve through
+  `strict` unaffected; null-safe with no substitutes at all).
+  `corepack pnpm@10.34.3 build` clean (171 modules, +1 for
+  `makeability.js`). Isolated-LF `oxfmt --check` clean on all 9
+  changed/new JS/JSX files (2 reflows hand-applied to the real CRLF files:
+  `HeroCard.jsx`'s ternary, a test file's line wrap). No migrations, so no
+  RLS suite / `db advisors` run this stage.
+- **Not verified here (no browser tooling in this sandbox):** the actual
+  on-screen appearance of the violet "adapted" badge/dot on a phone, and
+  the end-to-end acceptance scenario in the running app - the live
+  catalogue still lacks the `Lime Juice → Lemon Juice` substitute and the
+  Simple Syrup preparation (Stage D.3 curates those), so nothing in the
+  live catalogue is actually `display.tier === "adapted"` yet. The
+  narrower, real-today case - White Rum resolving via the already-live
+  `White Rum → Spiced Rum` substitute when every *other* required
+  component is separately satisfied - is the one manual check that can
+  actually be exercised right now (see the verification note handed to the
+  user).
+
+---
+
 ## Exact next action
 
-**Review the revised Stage D (v2) proposal above** (planning only — nothing
-in it is implemented yet). All defaults are now confirmed by the user
-(2026-09-11) — there is no remaining open question. Stage B's own
-outstanding manual checks stay unverified/outstanding, not passed —
-re-check them against Stage D's UI once that ships. On approval,
-implementation starts at **Stage D.1**, then D.2, D.3, D.4, in that order
-(each independently shippable and revertible).
+**Stage D.1 is DONE** (see the section above) — `computeMakeability()` and
+the primary-status wiring on card/HeroCard/detail are built, tested, and
+pushed. **The user reviews Stage D.1** (code + the one live-app check noted
+above — White Rum resolving via the already-live `White Rum → Spiced Rum`
+substitute), then decides whether to proceed to **Stage D.2** (minimal
+homemade preparations - the two new tables + editor section +
+`isPreparationSatisfiable()`). Stage B's own outstanding manual checks stay
+unverified/outstanding, not passed — re-check them once the full Stage D UI
+(through D.3) ships rather than in isolation.
 
 **Stage C (Linked Variations) remains NOT started** and independent of Stage
 D — on a separate go-ahead: migration `..._recipe_relationships.sql`

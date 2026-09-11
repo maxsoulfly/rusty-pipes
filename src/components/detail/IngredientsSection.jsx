@@ -26,7 +26,17 @@ export function IngredientsSection({
   // substitutes" (Stage B). Display only: these never affect availability,
   // so a row that has suggestions still reads as missing.
   getSubstituteSuggestions,
+  // Stage D.1 - the recipe's `adapted` result from computeMakeability(), or
+  // null. A component listed in `adapted.resolvedRequired` is genuinely
+  // still missing (never marked owned - no ownership is faked here); it
+  // gets its own distinct violet row instead of the muted "Try:" hint,
+  // since it's an actionable, resolved replacement rather than a mere
+  // suggestion.
+  adapted,
 }) {
+  const adaptedByIngId = new Map(
+    (adapted?.resolvedRequired ?? []).map((r) => [r.ingId, r]),
+  )
   // Computed from the recipe's base stored amounts (never servings-scaled -
   // see domain/parts.js) so the ratio never changes when servings does.
   // A recipe mixing stored ml with a manually-typed "part" component has no
@@ -108,9 +118,17 @@ export function IngredientsSection({
                 Boolean(substitution) ||
                 Boolean(householdBasic) ||
                 Boolean(formConversion)
-              const suggestions = isOwned
-                ? []
-                : (getSubstituteSuggestions?.(ri.ingId) ?? [])
+              // Only consulted when strict has already left this component
+              // missing (adaptedByIngId is built only from
+              // adapted.resolvedRequired, which itself only ever lists
+              // still-missing components) - never overrides an isOwned row.
+              const adaptedMatch = isOwned
+                ? undefined
+                : adaptedByIngId.get(ri.ingId)
+              const suggestions =
+                isOwned || adaptedMatch
+                  ? []
+                  : (getSubstituteSuggestions?.(ri.ingId) ?? [])
               const ratio = ratioByIng?.get(ri)
               const amountText =
                 ratio != null
@@ -129,9 +147,11 @@ export function IngredientsSection({
                       "w-2 h-2 rounded-full shrink-0",
                       isOwned
                         ? "bg-green shadow-[0_0_6px_rgba(52,211,153,0.6)]"
-                        : ri.role === "required"
-                          ? "bg-coral"
-                          : "bg-tx3",
+                        : adaptedMatch
+                          ? "bg-violet shadow-[0_0_6px_rgba(167,139,250,0.6)]"
+                          : ri.role === "required"
+                            ? "bg-coral"
+                            : "bg-tx3",
                     )}
                   />
                   <span className="flex-1">
@@ -150,6 +170,15 @@ export function IngredientsSection({
                     ) : householdBasic ? (
                       <span className="block text-[11px] text-tx3">
                         Household basic
+                      </span>
+                    ) : adaptedMatch ? (
+                      // Stage D.1 - only `via: "substitute"` exists yet
+                      // (Stage D.2 adds `via: "preparation"`, which will
+                      // need its own branch here linking to the
+                      // preparation's own ingredients/steps).
+                      <span className="block text-[11px] text-violet">
+                        Adapted: {adaptedMatch.matchedName}
+                        {adaptedMatch.note ? ` — ${adaptedMatch.note}` : ""}
                       </span>
                     ) : (
                       suggestions.length > 0 && (
