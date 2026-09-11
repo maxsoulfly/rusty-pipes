@@ -172,8 +172,8 @@ satisfied, should show "Make with substitutions" as its primary badge once
 Spiced Rum is owned instead of White Rum — see the manual-check note handed
 to the user this turn.
 
-**Commit:** see git log for the exact hash (docs/plans/substitutes-and-variations.md
-and this file updated in the same push).
+**Commit:** `729f5cc` (`docs/plans/substitutes-and-variations.md` and this
+file updated in the same commit/push).
 
 ---
 
