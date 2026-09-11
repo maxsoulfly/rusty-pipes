@@ -66,14 +66,27 @@ function normSubstitutes(list) {
 // null (no preparation) normalizes to null; otherwise a deterministic
 // snapshot for the dirty-check (input order doesn't matter to the user, so
 // it's sorted here the same way conversions/substitutes are above).
-function normPreparation(prep) {
+//
+// Unlike a conversion/substitute row (which only ever enters the draft
+// already fully picked - "Add" stays disabled until then), a preparation
+// input row is added blank (`ingredientTypeId: null`) and filled in place,
+// so this comparator MUST tolerate a null id - `.sort()` only ever invokes
+// it once the array has 2+ elements, which is exactly why adding a second
+// input row (and only a second one) crashed here: `null.localeCompare(...)`
+// throws, but a single-input array is trivially "sorted" without ever
+// calling the comparator at all.
+// Exported (only this one, not normConversions/normSubstitutes above) so
+// the null-safety regression this function exists for - see
+// IngredientTypeEditor.test.js - can be tested directly without mounting
+// the component (no jsdom in this project's test setup).
+export function normPreparation(prep) {
   if (!prep) return null
   return {
     name: prep.name.trim(),
     instructions: prep.instructions.map((s) => s.trim()).filter(Boolean),
     inputs: [...prep.inputs]
       .map((i) => [i.ingredientTypeId, i.amount, i.unitLabel])
-      .sort((a, b) => a[0].localeCompare(b[0])),
+      .sort((a, b) => (a[0] ?? "").localeCompare(b[0] ?? "")),
   }
 }
 
@@ -310,9 +323,16 @@ export function IngredientTypeEditor({
     return {
       name: prep.name,
       instructions: prep.instructions ?? [],
+      // `key` is a stable React identity for this row, independent of its
+      // position in the array (a real DB id here) - never sent to the
+      // server (saveIngredientType() only reads ingredientTypeId/amount/
+      // unitLabel off each input). Using the array index instead would
+      // make React reuse a row's component instance/local state for
+      // whatever row now sits at that same position after an add/remove.
       inputs: (ingredientPreparationInputs ?? [])
         .filter((i) => i.preparation_id === prep.id)
         .map((i) => ({
+          key: i.id,
           ingredientTypeId: i.ingredient_type_id,
           amount: i.amount,
           unitLabel: i.unit_label,
@@ -352,7 +372,14 @@ export function IngredientTypeEditor({
       ...draftPreparation,
       inputs: [
         ...draftPreparation.inputs,
-        { ingredientTypeId: null, amount: 0, unitLabel: "ml" },
+        // A fresh client-side key (never a real row yet) - same stability
+        // reasoning as the loaded-preparation case above.
+        {
+          key: crypto.randomUUID(),
+          ingredientTypeId: null,
+          amount: 0,
+          unitLabel: "ml",
+        },
       ],
     })
   const updatePreparationInput = (idx, patch) =>
@@ -879,7 +906,7 @@ export function IngredientTypeEditor({
                 </p>
               )}
               {draftPreparation.inputs.map((input, idx) => (
-                <div key={idx} className="flex gap-1.5 items-center">
+                <div key={input.key} className="flex gap-1.5 items-center">
                   <div className="flex-1 min-w-0">
                     <TypeComboBox
                       valueId={input.ingredientTypeId}

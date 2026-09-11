@@ -88,6 +88,58 @@ Otherwise unrelated, still open from Phase 6, none blocking:
 
 **Accessible-labels verification is done** (Windows Narrator, confirmed all 5 targeted icon-only buttons read correctly - no code changes needed).
 
+## Last completed chunk (Stage D.3 bugfix — preparation editor crash on a second input row, 2026-09-11 — `src/**` only, no migrations)
+
+**Found during the user's manual verification of Stage D.3** (Admin →
+Ingredient Types → an ingredient → Homemade preparation → "+ Add" a second
+input row → crash). **Root cause:** `IngredientTypeEditor.jsx`'s
+`normPreparation()` (the dirty-check snapshot helper) sorted preparation
+inputs with `a[0].localeCompare(b[0])`, where `a[0]`/`b[0]` is
+`ingredientTypeId` - `null` for any row added but not yet picked (a
+preparation input row starts blank and is filled in place, unlike a
+conversion/substitute row which only ever enters the draft already fully
+picked). `Array.prototype.sort()` only invokes its comparator once the
+array has 2+ elements, so the bug was dormant with zero or one rows and
+surfaced the instant a second one existed - matching the reported trigger
+exactly.
+
+**Fix:** the comparator now coalesces a null id to `""` before comparing
+(`(a[0] ?? "").localeCompare(b[0] ?? "")`) - cosmetic-only for the
+dirty-check's internal ordering, no behavior change for a fully-picked
+preparation (existing saved multi-input preparations still sort/load
+identically). **Also hardened per an explicit requirement:** each input
+row now carries a stable `key` (the real DB row id when loaded from an
+existing preparation, `crypto.randomUUID()` for a freshly-added one) used
+as the React list key instead of the array index, so add/remove no longer
+risks React reusing a row's component instance/local state for whatever
+row now sits at that position. `key` is never sent to the server
+(`saveIngredientType()` already picks only `ingredientTypeId`/`amount`/
+`unitLabel` off each input) and is excluded from the dirty-check
+comparison, so it can't cause a false "Unsaved changes."
+
+**Files:** `src/components/IngredientTypeEditor.jsx` (the fix + the two
+hardenings); new `src/components/IngredientTypeEditor.test.js` (6 tests -
+`normPreparation` does not throw with a second/every/only-one unpicked
+input row; sorts a fully-picked multi-input preparation deterministically;
+returns null for no preparation; trims name/drops blank instructions).
+This is a pure-JS bug in a plain helper, fully unit-testable without a
+browser - the file imports cleanly in vitest's node env since importing a
+`.jsx` module only evaluates its top-level function/const declarations,
+never renders anything. **The actual click-driven UI flow (pressing "+ Add"
+twice in the browser) is NOT exercised by this test and was not re-verified
+in a browser here** - only the underlying logic bug is covered; the user's
+own manual click-through is what should confirm the fix.
+
+**Verified:** `corepack pnpm@10.34.3 test` **290/290** (+6). `pnpm build`
+clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
+.test.js` isn't bundled). Isolated-LF `oxfmt --check` clean (no reflow
+needed). No migrations, no schema change - not needed to fix this.
+
+**Commit:** see the git log for the exact hash (this file updated in the
+same commit/push). `docs/project.md` untouched.
+
+---
+
 ## Last completed chunk (Substitutes & Variations — Stage D.3 implemented, 2026-09-11 — schema + engine + editor, 2 migrations pushed, no live-catalogue changes)
 
 **Scope, per explicit instruction:** tier 5 ("satisfiable preparation")
