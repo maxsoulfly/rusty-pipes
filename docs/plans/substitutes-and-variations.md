@@ -1,25 +1,46 @@
 # Suggested Substitutes & Linked Cocktail Variations
 
-**Planning document — 2026-09-10. Decisions D1–D6 approved 2026-09-10.
+**Planning document — 2026-09-10/11. Decisions D1–D6 approved 2026-09-10.
 Stage A DONE + pushed 2026-09-10, plus a Stage A follow-up (editor UI rework
 + atomic local-draft save via `save_ingredient_type()`) DONE + pushed
-2026-09-10. Stage B (Suggested Substitutes) DONE + pushed 2026-09-10 —
-mobile/browser verification pending. Stage C (Linked Variations) NOT
-started.**
+2026-09-10. Stage B (Suggested Substitutes) DONE + pushed 2026-09-10. Stage C
+(Linked Variations) NOT started.**
 
-Covers three related pieces of "what else can satisfy or stand in for a
+> **D1 is SUPERSEDED, 2026-09-11 — planning only, not yet implemented.** The
+> user has decided general catalogue substitutes should be able to affect
+> **discoverable makeability**, not stay suggestion-only forever. This does
+> **not** mean Stage B shipped a bug — the "Try: Spiced Rum (in your bar)"
+> hint on a still-"missing" White Rum row is exactly what D1 specified, and
+> the screenshot confirming it is a confirmation, not a defect report. What
+> changes is the product decision going forward: see **"Stage D — Adapted
+> Availability & Minimal Homemade Preparations"** below for the full revised
+> proposal, which layers a new, clearly-separate "adapted" result on top of
+> Stage B's mechanism rather than changing what Stage B already built.
+> Stage B's own remaining manual-verification checklist (editor layout on a
+> real phone, the recipe-editor adopt flow, etc.) is **not marked passed** —
+> it stays outstanding, and is largely superseded in relevance by Stage D's
+> UI changes to the same surfaces, so re-verify against Stage D once that
+> ships rather than against Stage B in isolation.
+
+Covers four related pieces of "what else can satisfy or stand in for a
 recipe":
 
 1. **Ingredient forms ("Can provide")** — shipped as Concept 2 in
    `docs/plans/household-basics-ingredient-forms-preparations.md`; this doc
    revised *where it is managed* (**Stage A, done**) and fixed one bug. The
    table, engine, and one-direction rule are unchanged.
-2. **Suggested substitutes** — new. Not started (Stage B).
-3. **Linked cocktail variations** — new. Not started (Stage C).
+2. **Suggested substitutes** — shipped, suggestion-only (Stage B, done). Now
+   being extended by **Stage D** below.
+3. **Adapted availability + minimal homemade preparations** — new, planning
+   only (**Stage D**). Supersedes D1's "never affects availability" clause;
+   folds in a deliberately small re-scoped version of Concept 3.
+4. **Linked cocktail variations** — new. Not started (Stage C).
 
-**Homemade Preparations (Concept 3) stays in the other plan doc, separate and
-unstarted.** This doc only notes where it touches the same UI slot so it can
-slot in later without rework.
+**The full Homemade Preparations proposal in the household-basics plan doc is
+now superseded by Stage D's smaller design** — see that doc's Concept 3
+section for the pointer. Stage D's preparations are a bounded, standalone
+mechanism (their own small tables, not a reuse of `recipes`), so the original
+Concept 3's "re-audit every recipe consumer" burden no longer applies.
 
 ---
 
@@ -493,11 +514,16 @@ are independent enough to ship one at a time.
 
 ## Decisions — approved 2026-09-10
 
-- **D1 — General catalogue substitutes are suggestions only.** A
+- **D1 — General catalogue substitutes are suggestions only.**
+  **SUPERSEDED 2026-09-11 — see "Stage D" below.** As originally approved: a
   catalogue-level "X can stand in for Y" never changes a recipe's
-  Perfect/Almost/Unavailable state. Recipe-specific alternatives
-  (`recipe_component_alternatives`) do affect availability. **On a missing
-  row, show owned/available suggestions first**, then the rest.
+  Perfect/Almost/Unavailable state; recipe-specific alternatives
+  (`recipe_component_alternatives`) do affect availability; on a missing
+  row, show owned/available suggestions first. **Still true and unchanged**
+  for the canonical `avail` shown everywhere today (Buy Next, Library/Home
+  tier counts, Build Your Bar's primary makeable count) — Stage D adds a
+  second, clearly-separate "adapted" result rather than changing what `avail`
+  means.
 - **D2 — APPROVED.** Recipe-scoped substitutions reuse
   `recipe_component_alternatives` with a new optional `note` column — no
   second parallel availability path.
@@ -738,15 +764,315 @@ other member-read table).
 hint on a real recipe's missing rows; the recipe editor's one-tap adopt +
 flavor-note field and that an adopted row then flips availability while a
 mere catalogue suggestion does not; clone/edit note round-trip in the
-running app.
+running app. **These checks are not superseded by anything below and remain
+outstanding** — Stage D changes the same screens further, so re-verify once
+Stage D ships rather than checking Stage B twice.
+
+---
+
+## Stage D — Adapted Availability & Minimal Homemade Preparations (planning only, 2026-09-11 — not yet implemented)
+
+Rusty Pipes' central question is *"what can I make with what I have?"* A
+curated, owned substitute that the app already knows about but still reports
+as "Unavailable" fails that question. This stage makes curated substitutes —
+and a small, bounded homemade-preparations mechanism — count toward a
+recipe's **discoverable makeability**, without touching what `avail` means
+today, without persisting a new recipe per combination, and without letting
+one badge slot turn into a wall of chips.
+
+### Audit that grounds this (live catalogue + code, 2026-09-11)
+
+- **Daiquiri** exists live (classic, shared): `White Rum` required 60 ml,
+  `Lime Juice` required 30 ml, `Simple Syrup` required 15 ml.
+- **A `White Rum → Spiced Rum` general substitute already exists live**
+  (flavor note "Adds sweetness and spice.") — Stage B's mechanism, working
+  exactly as specified: it shows as a "Try:" hint and does **not** change
+  Daiquiri's `avail` (still `unavail`, 3 missing required). This is correct
+  Stage-B behavior, not a bug — see the superseded-D1 note above.
+- No `Lime Juice → Lemon Juice` substitute and no Simple Syrup preparation
+  exist yet — both need curating once Stage D ships, to actually reproduce
+  the acceptance scenario below.
+- `Water` and `White Sugar` are both `assumed_available` (household basics),
+  confirmed live.
+- Code audit confirmed (unchanged since Stage B, re-checked for this
+  proposal): `computeAvail()` precedence is exactly exact → Can-provide →
+  recipe-scoped substitution, with `ingredient_substitutions` never consulted
+  — the exact tier list D1 described. `recommendations.js` (Buy Next) only
+  reads `computed[].avail` / `missingRequiredIds`, so Daiquiri (3 missing
+  required today) doesn't even qualify as a Buy Next candidate yet (needs
+  exactly 1 missing) — confirms the ranking algorithm needs no change, only
+  an explanatory annotation once adaptation exists (see below).
+- Concept 3's original proposal (`recipes.kind`, `produces_ingredient_type_id`,
+  relaxing `glass_id`, and re-auditing every `recipes` consumer — sharing,
+  import/export, Lists, Search/Library, RLS) is a much bigger lift than this
+  scenario needs. **Superseded by the smaller design below**, which never
+  touches the `recipes` table at all.
+
+### Acceptance scenario (the concrete target)
+
+> Own: Spiced Rum, Lemon Juice. Household basics: White Sugar, Water.
+> Daiquiri requires White Rum, Lime Juice, Simple Syrup.
+> Curated once: `White Rum → Spiced Rum` (exists), `Lime Juice → Lemon Juice`
+> (to be added), and a Simple Syrup preparation from White Sugar + Water (to
+> be added). Result: Daiquiri's card/detail shows **"Make with substitutions
+> · Prepare syrup first"**, distinct from — and without altering — its
+> honest canonical state (still literally missing White Rum, Lime Juice, and
+> a made batch of Simple Syrup). Tapping in explains each replacement with
+> its flavor note and links to Simple Syrup's own ingredients/steps.
+
+### The model: one new derived result, not a new `avail` tier
+
+**`avail` (canonical) is completely unchanged** — still exact → Can-provide →
+recipe-scoped substitution, still what Buy Next, the existing Library/Home
+tier counts, and Build Your Bar's primary makeable count read. This is how
+requirement 5 ("keep badges, sorting/filtering/counts, recommendations,
+Build Your Bar counts and Buy Next consistent") is met: by construction,
+because nothing that already reads `avail` changes what it's reading.
+
+A new pure function computes a **second, optional result** per recipe,
+consulted only when `avail` is not already `perfect`/`good`:
+
+```
+computeAdaptedAvail(cocktail, strictResult, owned, resolveIngredientName, {
+  generalSubstitutes,      // catalog.ingredientSubstitutions
+  preparationsByProducedType,  // Map<producedTypeId, { id, name, inputs: [...] }>
+}) -> null | {
+  tier: "perfect" | "good",   // mirrors strict semantics for the REQUIRED set only
+  label: string,               // "Make with substitutions" / "Prepare syrup first" / both joined with " · "
+  resolvedRequired: [
+    { ingId, via: "substitute", matchedId, matchedName, note },
+    { ingId, via: "preparation", preparationId, producedTypeId, producedName },
+  ],
+}
+```
+
+**Full precedence, per required component, now five tiers in one ordered
+list** (the first three are `computeAvail()`, unchanged; the last two only
+run inside `computeAdaptedAvail()` and only for components `computeAvail()`
+left missing):
+
+1. Exact availability (owned / product-mapped / compatible child / household
+   basic)
+2. Can provide (form conversion)
+3. Recipe-specific alternative (adopted `recipe_component_alternatives`,
+   with its note)
+   — **strict/`avail` stops here; 1–3 is exactly what "genuinely missing"
+   means.**
+4. **General substitute** (`ingredient_substitutions`) — only an **owned**
+   stand-in counts (a suggestion you don't own never flips makeability);
+   directional, no chaining, no reverse.
+5. **Preparable** — a configured preparation whose *own* inputs are all
+   satisfied through tiers **1–3 only** (never 4–5 — no chaining, and this is
+   exactly why "Sugar alone" can never imply "Simple Syrup": both White Sugar
+   *and* Water must independently pass tiers 1–3, one input alone is not the
+   whole preparation).
+
+`computeAdaptedAvail()` returns non-null only when **every** required
+component still missing after tier 3 resolves via tier 4 or 5 (mirrors
+`avail`'s own "good enough" bar — all-or-nothing for requireds, exactly like
+today, no partial-credit state to add to the badge vocabulary). Optional/
+garnish gaps are left exactly as `computeAvail()` already reports them —
+**adaptation is scoped to required components only in v1** (explicitly out
+of scope: upgrading a "good" recipe to "perfect" via a garnish substitute —
+revisit only if real usage asks for it).
+
+**One badge, composed text — not four.** When `resolvedRequired` contains
+only substitutions → `"Make with substitutions"`. Only preparations →
+`"Prepare <name> first"` (join up to 2 preparation names with commas +
+"and"). Both → joined with `" · "`, exactly the acceptance scenario's text.
+This is the one new visual element this stage adds — everywhere it's shown,
+it's the same shape, so it never becomes "a confusing collection of badges."
+
+### Recipe-specific override (requirement 2)
+
+New nullable-default column `recipe_components.allow_general_substitutes
+boolean not null default true`. When `false`, `computeAdaptedAvail()` skips
+tier 4 (general substitutes) for that component only — tier 5 (preparation)
+still applies. A **simple** boolean, not a per-substitute exclusion list: a
+recipe owner/admin who thinks "Spiced Rum" is wrong for *this* specific
+cocktail flips it off; if they instead *want* a specific substitute to count
+here, they already have the stronger tool — adopt it as a real
+`recipe_component_alternatives` row (Stage B), which resolves at tier 3 and
+makes the override question moot for that component. Edited in
+`IngredientRowsEditor` next to each component (a small checkbox, default
+checked, off = "don't suggest general substitutes here"); saved through the
+existing recipe save path, no new RPC.
+
+### Minimal Homemade Preparations (requirement 4 — re-audit + smallest design)
+
+**Does not reuse `recipes` at all.** Two small new tables, keyed by the
+*produced* ingredient type, not a recipe:
+
+```sql
+create table public.ingredient_preparations (
+  id uuid primary key default gen_random_uuid(),
+  produces_type_id uuid not null unique
+    references public.ingredient_types(id) on delete cascade,
+  name text not null,                       -- usually the produced type's own name
+  instructions text[] not null default '{}' -- short steps, same shape as recipes.steps
+);
+
+create table public.ingredient_preparation_inputs (
+  id uuid primary key default gen_random_uuid(),
+  preparation_id uuid not null
+    references public.ingredient_preparations(id) on delete cascade,
+  ingredient_type_id uuid not null references public.ingredient_types(id),
+  amount numeric not null default 0,
+  unit_label text not null default 'ml',
+  unique (preparation_id, ingredient_type_id)
+);
+```
+
+- `produces_type_id unique` → at most one preparation per produced type (v1
+  boundary, matches "smallest bounded implementation").
+- **Depth-1 guard, enforced by a trigger on `ingredient_preparation_inputs`**
+  (a CHECK can't reference another table): an input's `ingredient_type_id`
+  must not equal its own preparation's `produces_type_id` (self-reference),
+  and must not already be a `produces_type_id` of *any* preparation
+  (including a different one) — i.e. a preparation's inputs are always raw,
+  literal, tier-1–3 ingredients, never another preparation's output. Same
+  two-flat-queries approach the original Concept 3 proposal already
+  specified — this part of that proposal carries over unchanged, just scoped
+  to the smaller tables.
+- **No `recipes` schema change, no `glass_id` relaxation, no re-audit of
+  sharing/import/export/Lists/Search** — none of those consumers ever see
+  this table, because it was never a recipe. This is what makes the design
+  "smallest bounded": the entire original Concept 3 re-audit list becomes
+  moot.
+- **RLS:** `is_member()` read, `is_admin_or_moderator()` write, `to
+  authenticated` from the first migration (the established pattern).
+- **Editor:** folded into `IngredientTypeEditor` — but keyed the other way
+  from "Can provide"/"Can be replaced by" (this type is the *produced* side,
+  not the *raw*/*from* side), so it's a **single optional block** ("Homemade
+  preparation"), not a list: "+ Add preparation" reveals inputs (a small
+  repeatable ingredient+amount picker, reusing `TypeComboBox`) + a short
+  instructions list, in the same local draft, part of the one atomic **Save
+  changes**. `save_ingredient_type()` gains a 6th param `p_preparation jsonb`
+  (`null` = no preparation; otherwise `{ name, instructions, inputs }`),
+  reconciled the same delete-then-insert-if-present way as the other three
+  relationships, still one transaction.
+- **Satisfiability check** (pure): `isPreparationSatisfiable(inputs,
+  isAvailableStrict)` — true only when *every* input passes tiers 1–3. This
+  is the exact function that guarantees "Sugar alone must not imply owned
+  Simple Syrup."
+
+### Where "adapted" is surfaced (requirement 5, one surface at a time)
+
+| Surface | Change |
+|---|---|
+| `computeAvail()` / `avail` | **None.** Still exact → Can-provide → recipe-scoped substitution. |
+| `IngredientsSection` (detail page) | A component resolved at tier 4/5 renders with a **new, distinct accent** (not the green "owned" dot, not the muted "Try:" hint) — e.g. violet, reusing the existing note-line slot: "Adapted: Spiced Rum — sweeter, warm spice" / "Adapted: needs preparation — [link to Simple Syrup's ingredients/steps]". Explains each replacement's flavor note and links to the preparation, per the acceptance scenario. |
+| Recipe card / `HeroCard` | One additional line when `adaptedAvail` is non-null: the composed label ("Make with substitutions · Prepare syrup first"), styled distinctly, **shown alongside** (never replacing) the honest canonical badge/"needs X" line. |
+| **Library** (grouped view) | One new group, **"Make With Substitutions"**, positioned after "Good Enough" and before "Almost There". A recipe with a non-null `adaptedAvail` is shown there instead of its canonical Almost/Unavailable group (no duplication); its own detail page still shows the real canonical state plus the adaptation explanation. Existing 4 tier counts are computed exactly as before (unchanged definition) — the new group's count is additive/redistributive, not a change to what "Almost"/"Unavailable" mean. Name-sort flat view: unaffected except cards may show the new line. |
+| **Home** | New "Make With Substitutions" section, same position as in Library. `almostRanked` excludes recipes with a non-null `adaptedAvail` (so nothing appears twice) — this also means previously Home-invisible `unavail` recipes can newly appear here, which *is* the intended discoverability win. |
+| **Build Your Bar makeable count** | Primary count **stays literal** (unchanged formula) — recommended default, see the one open question below. A secondary, clearly-labeled line: "+N more with substitutions". |
+| **Buy Next (`recommendations.js`)** | **Ranking algorithm unchanged** (still reads only `avail`/`missingRequiredIds` — confirmed by the audit above that Daiquiri doesn't even qualify as a candidate today). Rendering layer only: when a Buy Next card's recipe already has a non-null `adaptedAvail`, add a small note — "already makeable via substitution" — so buying White Rum is understood as "get the original, and it unlocks other White-Rum recipes too," not "this is the only way to make it." |
+| Ingredient/bottle detail (`findRecipesUsingIngredient`) | **Unchanged, deliberately out of scope** — stays ownership-blind like household basics and Can-provide already are; revisit only if real usage asks for it. |
+
+### Linked Variations boundary (requirement 6)
+
+Nothing here creates a `recipes` row or a `recipe_relationships` row.
+`computeAdaptedAvail()` is a pure, ephemeral, per-render computation — the
+"Daiquiri, adapted" never becomes a saved entity, and no combination of
+substitutes/preparations is ever enumerated or persisted. A member who wants
+to publish a genuinely distinct, named, authored recipe ("Daiquiri with
+Spiced Rum") still does that through Stage C's (not-yet-built) Linked
+Variations, entirely independently.
+
+### Schema / migration order
+
+| # | Migration | Contents |
+|---|---|---|
+| D.1 | `..._recipe_components_allow_general_substitutes.sql` | `alter table recipe_components add column allow_general_substitutes boolean not null default true` — no RLS change (existing `recipe_is_editable` gate covers it; confirm at implementation time whether `recipe_components` carries a column-restricted UPDATE grant that needs widening, or whether the existing insert-driven full-replace save path makes that moot). |
+| D.2 | `..._ingredient_preparations.sql` | Both new tables + RLS (`to authenticated` from this migration) + the depth-1 trigger. |
+| D.3 | `..._save_ingredient_type_preparation.sql` | Drop + recreate `save_ingredient_type()` with the 6th `p_preparation` param (same pattern as Stage B's `p_substitutions` addition). |
+
+No changes to `ingredient_form_conversions`, `ingredient_substitutions`,
+`ingredient_types`, or `recipes` schema.
+
+### Staged implementation plan
+
+**Stage D.1 — Adapted availability from curated substitutes only (no
+preparations yet).** `computeAdaptedAvail()` handling tier 4 only. Wire into
+`IngredientsSection`/card/detail. *Acceptance:* a recipe missing exactly one
+required ingredient that has a configured, **owned** general substitute
+shows "Make with substitutions"; the same recipe with the substitute
+un-owned shows nothing new (still just the existing "Try:" hint); `avail`
+and Buy Next are provably unchanged (existing tests still pass unmodified).
+
+**Stage D.2 — Minimal homemade preparations.** Migrations D.2 + D.3, the
+"Homemade preparation" editor section, `isPreparationSatisfiable()`. Depth-1
+guard tests (self-reference; new preparation whose input is already
+produced; editing an existing one into either violation). *Acceptance:*
+configuring Simple Syrup from White Sugar + Water (both household basics)
+makes it "preparable"; a recipe missing only Simple Syrup shows "Prepare
+Simple Syrup first" with zero general substitutes involved; a recipe missing
+only White Sugar (not the full preparation) shows nothing (Sugar alone does
+not imply Simple Syrup).
+
+**Stage D.3 — Combine, and the full Daiquiri scenario.** `computeAdaptedAvail()`
+consults tiers 4 and 5 together per component; label composition ("·" join);
+curate the two missing catalogue rows for the acceptance scenario (Lime
+Juice → Lemon Juice substitute, Simple Syrup preparation) as a **live-data
+verification step, not a seed** (Concept 1/2's own rule — no speculative
+data). *Acceptance:* the exact scenario reproduces "Make with substitutions
+· Prepare syrup first"; Library/Home/Build Your Bar all show it consistently
+per the table above; the detail page explains each replacement's flavor note
+and links to Simple Syrup's ingredients/steps.
+
+**Stage D.4 — Recipe-specific override + Buy Next annotation.** Migration
+D.1, the `IngredientRowsEditor` checkbox, and the Buy Next rendering note.
+*Acceptance:* toggling the checkbox off on one component removes only that
+component's general-substitute eligibility (preparations still apply); a
+Buy Next candidate whose recipe is already adaptable shows the explanatory
+note; ranking order is provably unchanged (existing `recommendations.test.js`
+still passes unmodified).
+
+Each stage: `corepack pnpm@10.34.3` test + build, isolated-LF `oxfmt --check`,
+RLS suite for D.2/D.4's schema changes, `db advisors --type security` after
+any migration, commit + push, then a mobile checklist. Meaningful domain
+tests per stage (not just "it builds"): tier-4/5 precedence order, owned-only
+gating on general substitutes, the depth-1 guard, "Sugar alone" non-implication,
+label composition for all three combinations (substitute-only / prep-only /
+both), and that `avail`/Buy Next/existing counts are byte-for-byte unchanged
+before vs. after (a regression suite, not just new-feature tests).
+
+### Recommended defaults (not blocking) & the one open question
+
+- **Section name "Make With Substitutions"** — matches the acceptance
+  scenario's own wording; easy to rename later, not blocking.
+- **Adaptation scoped to required components only, all-or-nothing (mirrors
+  "good")** — no partial-credit tier, keeps the badge vocabulary to exactly
+  one new element.
+- **Override is a boolean per component**, not a per-substitute exclusion
+  list — simplest tool that satisfies requirement 2; a real exclusion is
+  always still reachable via an explicit recipe-specific alternative.
+- **Ingredient/bottle detail pages and `findRecipesUsingIngredient` stay
+  out of scope** — same boundary household basics and Can-provide already
+  respect.
+- **Open question (genuinely a product-feel call, not a technical one):**
+  should Build Your Bar's/Home's *primary* makeable-count number stay
+  strictly literal (recommended — "N you can make right now" never
+  overclaims, adapted ones get their own "+N more with substitutions" line),
+  or would you rather the primary number include adapted recipes with a
+  footnote instead? Both are implementable; this is the one place the app's
+  tone (strictly literal vs. more generous/optimistic) is genuinely up to
+  you rather than something I should just pick.
 
 ---
 
 ## Exact next action
 
-**Stage B is done + pushed; mobile/browser verification is pending** (see
-the checklist handed over). **Stage C (Linked Variations) is NOT started** —
-on the go-ahead: migration `20260910200000_recipe_relationships.sql`
+**Review the Stage D proposal above** (planning only — nothing in it is
+implemented yet). Answer the one open question (Build Your Bar/Home's
+primary makeable-count treatment); everything else has a stated default.
+Stage B's own outstanding manual checks stay unverified/outstanding, not
+passed — re-check them against Stage D's UI once that ships. On approval,
+implementation starts at **Stage D.1**, then D.2, D.3, D.4, in that order
+(each independently shippable and revertible).
+
+**Stage C (Linked Variations) remains NOT started** and independent of Stage
+D — on a separate go-ahead: migration `..._recipe_relationships.sql`
 (`recipe_relationships`, RLS via `recipe_is_visible`/`recipe_is_editable`,
 RLS-suite block), recipe editor "Variation of" field, `DetailScreen`
-"Variations" block. Homemade Preparations stays untouched.
+"Variations" block.

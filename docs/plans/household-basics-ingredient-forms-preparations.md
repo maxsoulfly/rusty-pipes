@@ -1,8 +1,10 @@
 # Household Basics, Ingredient Forms, and Homemade Preparations
 
-**Status (2026-09-10): Household Basics COMPLETE. Ingredient Forms (Concept 2)
-CODE COMPLETE + pushed — one mobile confirmation pending. Homemade
-Preparations (Concept 3) NOT started.**
+**Status (2026-09-11): Household Basics COMPLETE. Ingredient Forms (Concept 2)
+management + Suggested Substitutes shipped via `docs/plans/
+substitutes-and-variations.md` (Stages A/B). Homemade Preparations
+(Concept 3) SUPERSEDED by a smaller design in that same doc ("Stage D") —
+planning only, not yet implemented either way.**
 
 Household Basics — Stages 1–3 all done, committed, pushed, mobile-verified;
 Stage 3 closed out 2026-09-10 (`21193fa`). See the Stage 3 close-out note
@@ -10,14 +12,13 @@ below for its two non-blocking limits.
 
 Ingredient Forms — engine + data shipped; the one-direction rule, table, and
 `computeAvail` tier are settled and confirmed working (Whiskey Sour /
-Caipirinha). **The management UI and two new adjacent mechanisms are now
-planned in `docs/plans/substitutes-and-variations.md`** (2026-09-10):
-"Can provide" moves off the standalone admin tab into the Ingredient Type
-editor; a guidance-autofill bug is fixed; **Suggested substitutes** and
-**Linked cocktail variations** are designed there. Read that doc for the
-forward plan. Concept 3 (Homemade Preparations, below) stays separate and
-unstarted; it only shares the recipe-row sub-label slot, noted in the new
-doc's dependencies section.
+Caipirinha). **All forward work on Ingredient Forms, Suggested Substitutes,
+adapted availability, minimal Homemade Preparations, and Linked Variations now
+lives in `docs/plans/substitutes-and-variations.md`** — read that doc, it is
+the current source of truth for all four. Concept 3 below is kept only as
+the historical record of the original (larger) Homemade Preparations
+proposal; see its own section for the pointer to what actually supersedes
+it.
 
 ## Goal
 
@@ -710,7 +711,23 @@ still reads as genuinely missing if no whole lemon is owned.
 
 ---
 
-## Concept 3 — Homemade Preparations (agreed direction; details subject to review before Stages 5–6 start)
+## Concept 3 — Homemade Preparations — SUPERSEDED 2026-09-11 by a smaller design in `docs/plans/substitutes-and-variations.md` ("Stage D — Adapted Availability & Minimal Homemade Preparations")
+
+**The `recipes.kind`/`produces_ingredient_type_id` proposal below, and its
+full "re-audit every recipe consumer" requirement, are superseded — planning
+only, nothing implemented yet either way.** The revised design does not
+reuse the `recipes` table at all: two small new tables
+(`ingredient_preparations`, `ingredient_preparation_inputs`) keyed by the
+*produced* ingredient type, edited as a single optional block on that
+type's own Ingredient Type editor, folded into the existing atomic
+`save_ingredient_type()` save. Because a preparation is never a `recipes`
+row, sharing/import-export/Lists/Search/RLS-on-`recipes` are never touched,
+and the re-audit list below is moot. The depth-1 dependency guard, the
+"manual ownership marking only" v1 boundary, and the "guidance must stay
+visually distinct from owned" rule all carry forward unchanged into the new
+design. Read the other doc's Stage D section for the actual plan to
+implement; the material below is kept only as the historical record of the
+original (larger) proposal and why it was replaced.
 
 ### Audit findings
 - `recipes.glass_id` is `not null` today — a real blocker to reusing the
@@ -824,15 +841,10 @@ not just `fetchRecipes()`:
 
 **Household Basics is COMPLETE (Stages 1–3, closed out 2026-09-10).**
 
-**Ingredient Forms (Concept 2)** — engine + data + admin tab (with the
-2026-09-10 UX rework) done and pushed. The user has confirmed the three
-engine/data checks (Whiskey Sour conversion + Simple Syrup still missing;
-Caipirinha one-direction; both seeded pairs listed). **Next action: the user
-verifies admin add/edit/save and the reworked tab layout on desktop + a
-narrow phone** (checklist handed over with the commit). Only after that is
-Concept 2 done.
-
-**Homemade Preparations (Concept 3) — do NOT start.** Stays direction-only
-until Concept 2 is user-confirmed. When it does begin, run its own pre-stage
-re-audit first (re-check every `recipes` consumer, not just `fetchRecipes()`
-— see the Concept 3 section).
+**Everything else in this document (Ingredient Forms management, Suggested
+Substitutes, Homemade Preparations, Linked Variations) is superseded by
+`docs/plans/substitutes-and-variations.md` — go there for the current
+status and the exact next action** (as of 2026-09-11: review the Stage D
+proposal — Adapted Availability & Minimal Homemade Preparations —
+planning only, not yet implemented). Do not start implementation from this
+document.
