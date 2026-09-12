@@ -200,7 +200,7 @@ unrelated My Bar redesign).
 **Verified:** planning only - no test/build/migration run this turn (no
 code changed).
 
-**Commit:** see the git log for the exact hash (this file and the new
+**Commit:** `b614f72` (this file and the new
 `docs/plans/ingredient-detail-page.md` in the same commit/push).
 `docs/project.md` untouched.
 
