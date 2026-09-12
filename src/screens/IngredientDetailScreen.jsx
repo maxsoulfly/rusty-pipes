@@ -3,7 +3,7 @@ import clsx from "clsx"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { CocktailCard } from "@/components/CocktailCard"
 import { IngredientLink } from "@/components/detail/IngredientLink"
-import { IconBottle, IconGlass, IconStar } from "@/components/icons"
+import { IconBottle, IconEdit, IconGlass, IconStar } from "@/components/icons"
 import { TopBar } from "@/components/Nav"
 import {
   AVAIL_CFG,
@@ -17,6 +17,7 @@ import {
   capGroupsByTotal,
   groupByDisplayTier,
 } from "@/domain/availabilityGroups"
+import { resolveIngredientEditTarget } from "@/domain/ingredientEditTarget"
 import {
   resolveIngredientOwnershipState,
   toggleIngredientOwnership,
@@ -83,8 +84,14 @@ export default function IngredientDetailScreen({ kind }) {
   // ingredient" indicator. Kept distinct from Stage I.2's own local `owned`
   // (a boolean - "is THIS page's ingredient itself owned") so the two don't
   // collide.
-  const { computed, catalog, inventory, owned: resolvedOwnedTypeIds, unit } =
-    useOutletContext()
+  const {
+    computed,
+    catalog,
+    inventory,
+    owned: resolvedOwnedTypeIds,
+    unit,
+    isStaff,
+  } = useOutletContext()
   const { types, products } = catalog
 
   // Speed Rack pin/unpin lives here, not on the shelf tile (keeps the
@@ -118,6 +125,12 @@ export default function IngredientDetailScreen({ kind }) {
   const category = resolvedType
     ? catalog.categories.find((c) => c.id === resolvedType.category_id)
     : null
+
+  // Ingredient Detail Stage I.4 - admin/moderator "Edit ingredient"
+  // shortcut. Decision logic (isStaff gate + always-the-type target, on
+  // both a type and a product page) lives in domain/ingredientEditTarget.js
+  // (pure, unit-tested there) so this component stays a thin caller.
+  const editTargetTypeId = resolveIngredientEditTarget({ isStaff, resolvedType })
 
   // Ingredient Detail Stage I.2 - My Bar action. Decision logic lives in
   // domain/ingredientOwnership.js (pure, unit-tested there) so this
@@ -255,22 +268,50 @@ export default function IngredientDetailScreen({ kind }) {
         title={displayName}
         onBack={() => navigate(-1)}
         right={
-          canPin && (
-            <button
-              onClick={togglePin}
-              aria-label={
-                isPinned ? "Remove from Speed Rack" : "Pin to Speed Rack"
-              }
-              aria-pressed={isPinned}
-              className={clsx(
-                "rounded-sm w-9 h-9 cursor-pointer flex items-center justify-center border",
-                isPinned
-                  ? "bg-cyan/15 border-cyan text-cyan"
-                  : "bg-surface border-bdr text-tx2",
+          (editTargetTypeId || canPin) && (
+            <div className="flex items-center gap-2">
+              {/* Ingredient Detail Stage I.4 - admin/moderator convenience
+                  only, gated the same way "Can provide"/"Can be replaced
+                  by" editing already is (D3: admins AND moderators manage
+                  the catalogue) - this is UI visibility only; the
+                  destination route/component (`save_ingredient_type()`,
+                  RLS) is the real, unchanged authorization boundary - a
+                  member who somehow reached this URL directly would still
+                  be denied there, same as today. Deliberately small/
+                  secondary (a plain icon button, same size as the pin
+                  button next to it), not a prominent control - the
+                  primary action on this page is still Add/Remove My Bar
+                  below. */}
+              {editTargetTypeId && (
+                <button
+                  onClick={() =>
+                    navigate(`/admin?tab=types&type=${editTargetTypeId}`)
+                  }
+                  aria-label="Edit ingredient"
+                  title="Edit ingredient"
+                  className="rounded-sm w-9 h-9 cursor-pointer flex items-center justify-center border bg-surface border-bdr text-tx2"
+                >
+                  <IconEdit size={16} />
+                </button>
               )}
-            >
-              <IconStar size={16} />
-            </button>
+              {canPin && (
+                <button
+                  onClick={togglePin}
+                  aria-label={
+                    isPinned ? "Remove from Speed Rack" : "Pin to Speed Rack"
+                  }
+                  aria-pressed={isPinned}
+                  className={clsx(
+                    "rounded-sm w-9 h-9 cursor-pointer flex items-center justify-center border",
+                    isPinned
+                      ? "bg-cyan/15 border-cyan text-cyan"
+                      : "bg-surface border-bdr text-tx2",
+                  )}
+                >
+                  <IconStar size={16} />
+                </button>
+              )}
+            </div>
           )
         }
       />

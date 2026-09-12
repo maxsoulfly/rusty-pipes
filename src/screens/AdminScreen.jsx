@@ -82,6 +82,15 @@ export default function AdminScreen() {
   const [tab, setTab] = useState(
     visibleTabs.some((t) => t.id === requestedTab) ? requestedTab : "overview",
   )
+  // Ingredient Detail Stage I.4 - a second deep-link param, one level
+  // deeper than `tab` above: `?tab=types&type=<id>` opens Ingredient Types
+  // with that specific type's editor already expanded, for the "Edit
+  // ingredient" shortcut on a member-facing ingredient/bottle page.
+  // Read once, same as `requestedTab` - not kept in sync with a manual
+  // edit/cancel afterward. Existence is validated by `TypesTab` itself
+  // (a stale/deleted type id just finds nothing, same as today's manual
+  // edit flow would for a since-deleted row) - no extra check needed here.
+  const requestedTypeId = searchParams.get("type")
   const [invites, setInvites] = useState([])
   const [invitesLoading, setInvitesLoading] = useState(true)
 
@@ -820,6 +829,7 @@ export default function AdminScreen() {
           <TypesTab
             catalog={catalog}
             onAddNew={() => startSingleAddFromRequest()}
+            initialEditingTypeId={requestedTypeId}
           />
         )}
       </div>

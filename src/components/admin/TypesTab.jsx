@@ -12,9 +12,20 @@ import { deleteIngredientType, mergeIngredientType } from "@/services/catalog"
 // recipe component, or substitution alternative referencing this type all
 // have their own restricting FK, so a real delete attempt on an in-use type
 // surfaces the DB's own error as-is, same precedent as the Catalog tab.
-export function TypesTab({ catalog, onAddNew }) {
+// `initialEditingTypeId` (Ingredient Detail Stage I.4) - opens straight
+// into that type's editor on mount, for the "Edit ingredient" shortcut on
+// a member-facing ingredient/bottle page (`/admin?tab=types&type=<id>`,
+// AdminScreen.jsx's own second deep-link param, one level deeper than
+// `?tab=`). Read once as the initial state value, same as AdminScreen's
+// own `requestedTab` - a manual Cancel/Save still just clears
+// `editingAdminTypeId` locally, same as any other row's edit. A stale/
+// deleted type id simply matches no row in `filteredTypes` below, so
+// nothing opens - no separate "not found" handling needed here.
+export function TypesTab({ catalog, onAddNew, initialEditingTypeId }) {
   const [typeQuery, setTypeQuery] = useState("")
-  const [editingAdminTypeId, setEditingAdminTypeId] = useState(null)
+  const [editingAdminTypeId, setEditingAdminTypeId] = useState(
+    initialEditingTypeId ?? null,
+  )
   const [confirmDeleteTypeId, setConfirmDeleteTypeId] = useState(null)
   const [deletingType, setDeletingType] = useState(false)
   const [typeDeleteError, setTypeDeleteError] = useState(null)

@@ -6,11 +6,18 @@ substitutes-and-variations.md`) shipped and was manually verified. This
 feature reuses Stage D's shared `computeMakeability()` result rather than
 introducing a second one.
 
-**Status: Stages I.1, I.2, and I.3 DONE + pushed, 2026-09-12/13** (tappable
-ingredient links, shared-tier grouping, basic identity display, the My Bar
-Add/Remove action, and the relationships/homemade-preparation sections -
-see the Staged implementation plan section below for exactly what shipped
-and what's still not started). Stage I.4 not started.
+**Status: v1 COMPLETE - Stages I.1 through I.4 all DONE + pushed,
+2026-09-12/13** (tappable ingredient links, shared-tier grouping, basic
+identity display, the My Bar Add/Remove action, the relationships/
+homemade-preparation sections, and the admin/moderator "Edit ingredient"
+shortcut - see the Staged implementation plan section below for exactly
+what shipped). **I.1-I.3 manually verified by the user; I.4 has only
+automated verification (tests + build) so far, not yet a manual/browser
+check** - see `current-context.md`'s chunk history for the exact owed
+check. Linked Variations (Stage C, `docs/plans/
+substitutes-and-variations.md`) and any broader Ingredient Detail visual/
+design redesign remain explicitly NOT started, each on a separate
+go-ahead.
 
 ---
 
@@ -192,12 +199,20 @@ One enriched page (not six separate ones), read top to bottom:
 
 6. **Admin affordance** - for `isAdmin || isModerator` only, a small "Edit
    ingredient" action in the `TopBar` (alongside the existing Speed Rack
-   pin button) that navigates to `/admin?tab=types` - **not** an inline
-   editor on this page (tried once already in an earlier My Bar redesign
-   stage and deliberately replaced with exactly this kind of plain
-   shortcut - see Audit above) and **not** a new deep-link-to-this-type
-   mechanism (a real but small enhancement; explicitly deferred, see
-   Staged plan).
+   pin button) - **not** an inline editor on this page (tried once already
+   in an earlier My Bar redesign stage and deliberately replaced with
+   exactly this kind of plain shortcut - see Audit above). **Superseded,
+   2026-09-13:** the text below originally said this would navigate to the
+   general `/admin?tab=types` and explicitly deferred a deep-link to the
+   specific type as a future enhancement - the user's own I.4 request
+   explicitly asked for direct navigation into the ingredient's own
+   editor instead, so I.4 shipped with `/admin?tab=types&type=<id>` (see
+   the Staged plan's I.4 entry for exactly what that required). Kept
+   below, unedited, as the historical record of the original v1 decision.
+
+   ~~that navigates to `/admin?tab=types` and **not** a new
+   deep-link-to-this-type mechanism (a real but small enhancement;
+   explicitly deferred, see Staged plan).~~
 
 ---
 
@@ -377,12 +392,34 @@ layer in richer content, then admin polish"**:
   yet browser-verified** - see `current-context.md`'s chunk entry for the
   manual checks still owed (Lemon, White Rum, Simple Syrup).
 
-**I.4 - Admin affordance.**
-- Admin/moderator-only "Edit ingredient" link in the `TopBar`, to
-  `/admin?tab=types` (matching the established, already-precedented
-  pattern - not an inline editor, not a new deep-link).
+**I.4 - Admin affordance. DONE, 2026-09-13.**
+- Admin/moderator-only "Edit ingredient" icon button in the `TopBar`
+  (same size as the existing Speed Rack pin button, visually secondary to
+  the page's primary Add/Remove My Bar action). Gated on `isStaff`
+  (`isAdmin || isModerator`, already computed in `App.jsx` - no new
+  permission model); this is UI visibility only, the real authorization
+  boundary (`save_ingredient_type()`'s RLS/role check) is unchanged.
+- **Scope note - this deep-links, unlike this doc's original text below:**
+  the user's own I.4 request explicitly asked for direct navigation into
+  the specific ingredient's editor, not just landing on the general tab -
+  this supersedes the "not a new deep-link-to-this-type mechanism...
+  explicitly deferred" line further down (kept below as historical
+  record of the original plan, not rewritten). Implemented via
+  `/admin?tab=types&type=<id>` - `AdminScreen.jsx` gained a second query
+  param read (`?type=`, alongside the existing `?tab=`) and `TypesTab.jsx`
+  gained one new prop (`initialEditingTypeId`, the initial value for the
+  row-level edit state it already had) - both small and additive, no new
+  editor, `IngredientTypeEditor.jsx` itself untouched. Always targets the
+  resolved ingredient TYPE's own id on both `/bar/type/:id` and
+  `/bar/product/:id` (a product always maps to exactly one type; there is
+  no separate product-level editor to link to instead). Decision logic
+  extracted into a new pure `src/domain/ingredientEditTarget.js` (6 unit
+  tests).
 - *Acceptance:* a non-admin never sees the action; an admin/moderator does,
-  and it lands on Admin → Ingredient Types.
+  and it lands directly on that ingredient's editor, already expanded, in
+  Admin → Ingredient Types. **Not yet browser-verified** - see
+  `current-context.md`'s chunk entry for the exact manual check still
+  owed.
 
 **Explicitly deferred, not v1** (per the request's own scope boundaries,
 recorded here so a later session doesn't have to re-derive why):

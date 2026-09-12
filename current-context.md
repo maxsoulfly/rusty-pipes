@@ -31,7 +31,7 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
 18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms (Concept 2) + Suggested Substitutes (Stage B) shipped via `docs/plans/substitutes-and-variations.md` (Stages A/B, DONE 2026-09-10). Homemade Preparations SUPERSEDED 2026-09-11 by a smaller design in that same doc ("Stage D — Adapted Availability & Minimal Homemade Preparations"), then that smaller design itself SHIPPED as Stage D.3 the same day. Stage D (D.1 adapted availability, D.2 discovery/grouping/ordering, D.3 tier-5 preparations, D.4 counts/breakdown + real Daiquiri catalogue rows, D.5 per-component exclusion + Buy Next ranking) is FULLY DONE + pushed 2026-09-11, **manually verified working correctly in the running app 2026-09-12, and the adapted category's user-facing name finalized as "Make With Adaptations"** (was "Make With Substitutions"). **Stage D is feature-complete and verified - nothing outstanding.** See item 0 and the chunk entries below. Linked cocktail variations (Stage C) remain NOT started, independent, on a separate go-ahead.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
 
-19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **I.1 + I.2 + I.3 DONE + pushed, 2026-09-12/13.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, and "cocktails using this" → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, the single shared `useInventory()` instance, and `isPreparationSatisfiable()`; no schema changes (every field/table this feature surfaces already existed, just unrendered to members). Staged **I.1 done** (tappable ingredient-name links + shared-tier grouping + basic identity) → **I.2 done** (My Bar Add/Remove action, household-basic-aware) → **I.3 done** (Can provide / Can be replaced by / Homemade preparation sections, each directional, reusing `IngredientLink` for related-ingredient navigation) → **I.4 NOT started** (admin edit link). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer.
+19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **I.1 through I.4 DONE + pushed, 2026-09-12/13 - v1 COMPLETE.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, "cocktails using this," and (for staff) an edit shortcut → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, the single shared `useInventory()` instance, `isPreparationSatisfiable()`, and the existing `IngredientTypeEditor`; no schema changes (every field/table this feature surfaces already existed, just unrendered to members). Staged **I.1 done** (tappable ingredient-name links + shared-tier grouping + basic identity) → **I.2 done** (My Bar Add/Remove action, household-basic-aware) → **I.3 done** (Can provide / Can be replaced by / Homemade preparation sections, each directional, reusing `IngredientLink`) → **I.4 done** (admin/moderator-only "Edit ingredient" shortcut, deep-linking straight into that ingredient type's existing editor - the plan's original "not a new deep-link" deferral was explicitly superseded by the user's own I.4 request; see item 0). **I.1-I.3 manually verified by the user; I.4 is not yet browser-verified** - see item 0 for the exact owed check. See the plan doc for the full audit/design.
 
 Each numbered step is a development chunk boundary for this file.
 
@@ -141,12 +141,74 @@ Each numbered step is a development chunk boundary for this file.
    tooling in this sandbox) - see the chunk entry below for the manual
    checks still owed (Lemon, White Rum, Simple Syrup).
 
-   **Exact next action:** the user manually verifies I.3 using existing
-   catalogue data (Lemon → "Can provide: Lemon Juice"; White Rum → "Can be
-   replaced by: Spiced Rum" with its flavor note; Simple Syrup → its two
-   inputs with amounts/units and its numbered steps, each input's dot
-   reflecting real ownership), then decides whether/when to proceed to I.4
-   (admin edit link) or move on to broader visual/design polish.
+   I.1-I.3 **manually verified by the user** (ingredient navigation,
+   Add/Remove My Bar, Homemade Preparation, and the directional
+   relationships all confirmed working).
+
+   **I.4 shipped (admin/moderator "Edit ingredient" shortcut), 2026-09-13
+   - Ingredient Detail v1 is now COMPLETE (I.1-I.4 all done):**
+   `IngredientDetailScreen.jsx`'s `TopBar` gains a small, secondary icon
+   button (same 36px size as the existing Speed Rack pin button next to
+   it, visually separate from the primary Add/Remove My Bar action lower
+   on the page) - visible only when `isStaff` (`isAdmin || isModerator`,
+   App.jsx's own existing flag - no new role/permission model). Tapping it
+   navigates to `/admin?tab=types&type=<id>`, opening the *existing*
+   `IngredientTypeEditor` already expanded for that specific type - no
+   second editor, no new admin editing UI. **This deep-links straight to
+   the specific type**, which is a deliberate change from this plan's
+   original I.4 text ("not a new deep-link-to-this-type mechanism...
+   explicitly deferred") - the user's own I.4 request this turn explicitly
+   asked for direct navigation to the existing editor, superseding that
+   earlier deferral (the plan doc's Staged plan section has been updated
+   to reflect this, not left contradicting it).
+
+   To make the deep link possible, `AdminScreen.jsx` gained a second query
+   param read (`?type=<id>`, alongside the existing `?tab=` one it already
+   supported for the My Bar ⋯ menu) and `TypesTab.jsx` gained one new prop
+   (`initialEditingTypeId`, used only as `useState`'s initial value for
+   the row-level `editingAdminTypeId` it already had) - both small,
+   additive, and exactly analogous to the `?tab=types` deep-link precedent
+   already established; the editor component itself (`IngredientTypeEditor
+   .jsx`) is completely untouched.
+
+   Always targets the resolved ingredient TYPE's own id, identically for
+   both `/bar/type/:id` and `/bar/product/:id` - a product always maps to
+   exactly one ingredient type (AGENTS.md's own rule), and there is no
+   separate product-level editor in Admin → Ingredient Types, so the type
+   it maps to is the one valid, existing edit target either way; there is
+   no "omit the action" branch needed for a product page in practice. The
+   real authorization boundary is completely unchanged - this is UI
+   visibility only, `save_ingredient_type()`'s own RLS/role check still
+   decides whether an edit is actually allowed.
+
+   **Extracted `src/domain/ingredientEditTarget.js`** (pure,
+   `resolveIngredientEditTarget({ isStaff, resolvedType })`) so the
+   isStaff gate and the always-the-type resolution are unit-tested without
+   rendering - 6 new tests: admin/moderator gets a valid target; a regular
+   member gets null regardless of `resolvedType`; a type-page route
+   resolves to its own id; a product-page route resolves to its *mapped*
+   type's id, never the product's own id (proving no fabricated/invalid
+   target); no resolved type (a stale link) → null; both conditions absent
+   at once → null.
+
+   **Verified:** `corepack pnpm@10.34.3 test` **341/341** (+6 new).
+   `corepack pnpm@10.34.3 build` clean (178 modules). `git status`
+   confirmed exactly 5 files changed (`IngredientDetailScreen.jsx`,
+   `AdminScreen.jsx`, `TypesTab.jsx` + 2 new domain files);
+   `docs/project.md` untouched. No migration, no schema/catalogue change,
+   no change to `IngredientTypeEditor.jsx` itself. **Not browser-verified**
+   (no browser tooling in this sandbox).
+
+   **Exact next action:** the user manually verifies I.4 (as a non-admin,
+   confirm no edit action appears on any `/bar/type/:id` or
+   `/bar/product/:id` page; as admin/moderator, tap it and confirm it
+   lands directly on that ingredient's editor, already expanded, in Admin
+   → Ingredient Types). **With I.4 verified, Ingredient Detail v1 (I.1-I.4)
+   is fully complete.** Linked Variations (Stage C,
+   `docs/plans/substitutes-and-variations.md`) remains NOT started,
+   independent, on a separate go-ahead - not started as part of this
+   session. The user has indicated a separate design/visual polish pass on
+   this screen is planned next, on its own go-ahead - not started here.
 
 **Stage D itself (`docs/plans/substitutes-and-variations.md`) is feature-complete AND manually verified, 2026-09-12 - nothing outstanding.** D.1 through D.5 all DONE + pushed 2026-09-11; the Daiquiri (and other adapted cocktails, e.g. Gin Fizz) confirmed resolving correctly in the running app, Home showing "10 cocktails possible · 5 ready, 5 with substitutions or preparation." The adapted discovery category's name is finalized as **"Make With Adaptations"** (was "Make With Substitutions," renamed 2026-09-12 - see the chunk entry below for exactly what did/didn't change; the cocktail-level composed status text like "Make with substitutions · Prepare syrup first" is a different, more specific mechanism and was deliberately left alone). Stage C (Linked Variations) remains NOT started, independent, on a separate go-ahead whenever the user wants it. See the chunk entries below for the full history.
 
@@ -238,6 +300,87 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 needed). No migrations, no schema change - not needed to fix this.
 
 **Commit:** `7a22526`. `docs/project.md` untouched.
+
+---
+
+## Last completed chunk (Ingredient Detail Stage I.4 implemented - admin/moderator "Edit ingredient" shortcut, Ingredient Detail v1 COMPLETE, 2026-09-13 — 5 files, no migrations, no catalogue changes)
+
+**Scope: exactly I.4** - a small admin/moderator convenience shortcut.
+Explicitly not this turn: Linked Variations, any schema change, any new
+admin editing UI (the existing `IngredientTypeEditor.jsx` is completely
+unchanged), any Ingredient Detail redesign, any further
+ownership/preparation/substitution feature.
+
+**`IngredientDetailScreen.jsx`:** `TopBar` gains a small icon button
+(same 36px sizing as the existing Speed Rack pin button beside it,
+visually distinct from the page's primary Add/Remove My Bar action lower
+down) - visible only when `isStaff` (`isAdmin || isModerator`, App.jsx's
+own existing flag, exposed via outlet context - no new permission model).
+Tapping it navigates to `/admin?tab=types&type=<id>`.
+
+**Deliberate scope change from the plan doc's original I.4 text:** this
+turn's request explicitly asked for direct navigation into the specific
+ingredient's editor ("navigate directly to the existing Ingredient Type
+editor for that ingredient"), not just landing on the general Ingredient
+Types tab - the plan's earlier line ("not a new deep-link-to-this-type
+mechanism... explicitly deferred") is superseded by this explicit
+instruction, not silently ignored - the plan doc itself has been updated
+to say so.
+
+**To make the deep link possible** (still no new editor, no new admin
+editing UI - only two small, additive wiring changes mirroring an
+already-established pattern): `AdminScreen.jsx` gained a second query-
+param read, `?type=<id>`, alongside the `?tab=` one it already supported
+(the exact same "read once as initial state, not kept in sync" pattern);
+`TypesTab.jsx` gained one new prop, `initialEditingTypeId`, used only as
+the initial value for the row-level `editingAdminTypeId` state it already
+had (a stale/deleted type id just matches no row - no separate "not
+found" handling needed). `IngredientTypeEditor.jsx` itself: zero changes.
+
+**Always the resolved ingredient TYPE's own id**, identically for both
+`/bar/type/:id` and `/bar/product/:id` - a product always maps to exactly
+one ingredient type (AGENTS.md's own rule: "a product must map to an
+existing ingredient type"), and there is no separate product-level
+editor in Admin → Ingredient Types, so the type it maps to is the one
+valid, existing edit target either way - no "omit the action for
+products" branch was needed in practice. The real authorization boundary
+is completely unchanged: this is UI visibility only, `save_ingredient_type()`'s
+own RLS/role check is still what actually decides whether an edit is
+allowed - a member who somehow reached the URL directly would still be
+denied there, exactly as before this chunk.
+
+**New `src/domain/ingredientEditTarget.js`** (pure,
+`resolveIngredientEditTarget({ isStaff, resolvedType })`) - the screen
+calls this instead of inlining the isStaff-gate-plus-target logic, so
+it's unit-tested without rendering. **6 new tests:** admin/moderator gets
+a valid edit target; a regular member gets null regardless of
+`resolvedType`; a type-page route resolves to its own id; a product-page
+route resolves to its *mapped* type's id, never the product's own id
+(proving no fabricated/invalid target is ever produced); no resolved
+type (a stale/deleted link) → null; both conditions absent at once →
+null.
+
+**Verified:** `corepack pnpm@10.34.3 test` **341/341** (+6 new).
+`corepack pnpm@10.34.3 build` clean (178 modules). Diff reviewed for
+scope creep before committing - exactly 5 files changed
+(`IngredientDetailScreen.jsx`, `AdminScreen.jsx`, `TypesTab.jsx`, new
+`ingredientEditTarget.js` + `.test.js`); `docs/project.md` untouched. No
+migration, no RLS surface touched - `db advisors` not applicable. **Not
+browser-verified** (no browser tooling in this sandbox) - one manual
+check still owed: as a non-admin, confirm no edit action appears; as
+admin/moderator, tap it and confirm it lands directly on that
+ingredient's editor, already expanded, in Admin → Ingredient Types.
+
+**With this chunk, Ingredient Detail v1 (I.1 through I.4) is feature-
+complete.** I.1-I.3 are user-confirmed manually verified (ingredient
+navigation, Add/Remove My Bar, Homemade Preparation, and the directional
+relationships all working); I.4 itself has only this turn's automated
+verification (tests + build), not yet a manual/browser check. Linked
+Variations (Stage C) and any broader Ingredient Detail visual/design
+polish remain explicitly NOT started, each on its own separate go-ahead.
+
+**Commit:** see the git log for the exact hash. `docs/project.md`
+untouched.
 
 ---
 
