@@ -354,6 +354,21 @@ ingredient_substitutions (
 
 ## Part 3 — Linked cocktail variations
 
+> **Superseded, 2026-09-13 — see `docs/plans/linked-variations.md`.** This
+> section was an early sketch (2026-09-10), written before Ingredient
+> Detail v1 shipped and before the user's own detailed follow-up planning
+> request for this exact feature. The dedicated doc is now authoritative
+> for Linked Variations - it keeps this section's core shape (a directional
+> `recipe_relationships` table, reusing `recipe_is_visible`/
+> `recipe_is_editable`, one base -> many variations, D4's "variation's own
+> editor controls the link" rule) but makes several deliberate changes:
+> drops the speculative `relationship_type` column (no hypothetical second
+> type is being designed for), makes the "never walk past one hop"
+> chain/cycle rule explicit (this section didn't address chains/cycles at
+> all), and adds a full member-facing UX / discovery / import / staging
+> plan the sketch below never had. Kept below unedited as historical
+> record - read `docs/plans/linked-variations.md` for the real plan.
+
 ### 3a. Model
 
 ```
@@ -509,7 +524,10 @@ changes `avail`; a promoted recipe row does; note rendering; precedence
 (exact > form > recipe substitution) still holds with a note present. RLS
 suite: `ingredient_substitutions` block. Advisors clean.
 
-**Stage C — Variations.**
+**Stage C — Variations. Superseded, 2026-09-13 — see
+`docs/plans/linked-variations.md`** for the actual staged plan (V.1-V.4),
+written after a full dedicated planning pass. Kept below as the original
+sketch's own staging, unedited, for history.
 M3 (`recipe_relationships`) + RLS-suite block. Recipe editor "Variation of"
 field; `fetchRecipe`/`fetchRecipes` gain the linked-recipe ids (a light
 join, not a full nested fetch — resolve names/availability from the already
@@ -1835,8 +1853,10 @@ outstanding for Stage D itself.** Stage B's own outstanding manual checks
 stay unverified/outstanding, not passed — re-check them against the now-
 complete Stage D UI if they're ever revisited, rather than in isolation.
 
-**Stage C (Linked Variations) remains NOT started** and independent of Stage
-D — on a separate go-ahead: migration `..._recipe_relationships.sql`
-(`recipe_relationships`, RLS via `recipe_is_visible`/`recipe_is_editable`,
-RLS-suite block), recipe editor "Variation of" field, `DetailScreen`
-"Variations" block.
+**Stage C (Linked Variations) remains NOT started; full dedicated planning
+done 2026-09-13** — see `docs/plans/linked-variations.md` (this is now the
+authoritative plan, superseding "Part 3"/the "Stage C" sketch above).
+Independent of Stage D, on a separate go-ahead: migration
+`..._recipe_relationships.sql` (`recipe_relationships`, RLS via
+`recipe_is_visible`/`recipe_is_editable`, RLS-suite block), recipe editor
+"Variation of" field, `DetailScreen` "Variations" block, staged V.1-V.4.

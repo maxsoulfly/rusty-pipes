@@ -33,187 +33,20 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
 19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **I.1 through I.4 DONE + pushed, 2026-09-12/13 - v1 COMPLETE.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, "cocktails using this," and (for staff) an edit shortcut → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, the single shared `useInventory()` instance, `isPreparationSatisfiable()`, and the existing `IngredientTypeEditor`; no schema changes (every field/table this feature surfaces already existed, just unrendered to members). Staged **I.1 done** (tappable ingredient-name links + shared-tier grouping + basic identity) → **I.2 done** (My Bar Add/Remove action, household-basic-aware) → **I.3 done** (Can provide / Can be replaced by / Homemade preparation sections, each directional, reusing `IngredientLink`) → **I.4 done** (admin/moderator-only "Edit ingredient" shortcut, deep-linking straight into that ingredient type's existing editor - the plan's original "not a new deep-link" deferral was explicitly superseded by the user's own I.4 request; see item 0). **I.1-I.3 manually verified by the user; I.4 is not yet browser-verified** - see item 0 for the exact owed check. See the plan doc for the full audit/design.
 
+20. Linked Variations (new feature, `docs/plans/linked-variations.md`) — **planning done 2026-09-13, not started.** Lets two otherwise-independent recipes declare "this is a variation of that" (e.g. Bloody Mary ↔ Bloody Mary (Practical Version)) as pure metadata/navigation - never ingredient/instruction inheritance, never affecting either recipe's own availability. One base → many variations (no general many-to-many), directional storage (variation points at its base) with bidirectional display (one hop only, chains/cycles never walked past that), a new standalone `recipe_relationships` table (not a `recipes` column - avoids widening its column-restricted update grant), reusing the existing `recipe_is_visible`/`recipe_is_editable` RLS helpers with no new SECURITY DEFINER function. Batch import explicitly does NOT gain a variation reference (no reliable identity mechanism at import time, per AGENTS.md's own no-fuzzy-matching rule) - admin-editor-only for v1. Staged **V.1** (schema + a pure one-hop domain resolver) → **V.2** (recipe editor "Variation of" field + picker) → **V.3** (Cocktail Detail "Variations"/"Variation of" UI) → **V.4** (makeability-aware sort/framing + the first two real catalogue links: Bloody Mary/Bloody Mary (Practical Version) and Zombie/Zombie (Home Bar Spiced & Dark Spec), both already live and unmodified). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer. Supersedes `docs/plans/substitutes-and-variations.md`'s earlier "Part 3"/"Stage C" sketch (kept there as historical record, now redirects here).
+
 Each numbered step is a development chunk boundary for this file.
 
-## Exact next action (2026-09-12)
+## Exact next action (2026-09-13)
 
-0. **`docs/plans/ingredient-detail-page.md` — Stage I.1 DONE + pushed 2026-09-12.** Next feature after Stage D: make ingredients navigable first-class objects (tap an ingredient name on a recipe page → its own detail page → Add/Remove My Bar right there → back to the recipe, already recalculated). **Read that file before starting the next stage** - it's the source of truth for this item. This enriches the ingredient/bottle detail screen that already existed (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as part of item 16's Stage 3/4) rather than building a new one.
+0. **`docs/plans/linked-variations.md` (new, 2026-09-13) — planning only, nothing implemented.** Next feature after Ingredient Detail v1: let two otherwise-independent recipes declare "this is a variation of that" (e.g. Bloody Mary / Bloody Mary (Practical Version)) as pure metadata + navigation - never ingredient/instruction inheritance, never affecting either recipe's own availability. **Read that file before starting implementation** - it's the source of truth for this item. Model: one base → many variations (no general many-to-many), a new standalone `recipe_relationships` table (not a `recipes` column - avoids widening its column-restricted update grant), directional storage (variation points at its base) reusing the existing `recipe_is_visible`/`recipe_is_editable` RLS helpers (no new SECURITY DEFINER function), display always one hop in either direction (chains/cycles structurally possible but never walked past that, so no cycle-detection is built). No change to `computeMakeability()`/Buy Next/any discovery list - confirmed by inspection that none of them have any cross-recipe concept to couple to. Batch import explicitly does NOT gain a variation reference (recipe names are the only import-time handle and AGENTS.md forbids fuzzy/name-based import matching) - admin-editor-only for v1. Proposed stages **V.1** (schema + a pure one-hop domain resolver) → **V.2** (recipe editor "Variation of" field + a new searchable recipe picker) → **V.3** (Cocktail Detail "Variations"/"Variation of" UI, reusing existing card/navigation patterns) → **V.4** (makeability-aware sort/framing + the first two real catalogue links - Bloody Mary ↔ Bloody Mary (Practical Version) and Zombie ↔ Zombie (Home Bar Spiced & Dark Spec), both already live, unmodified during planning). Supersedes `docs/plans/substitutes-and-variations.md`'s earlier "Part 3"/"Stage C" sketch (kept there as historical record, now redirects here - see that file's own updated pointer). **Exact next action:** the user reviews the plan and decides whether to proceed, and if so with which stage first (V.1 is recommended - schema first, nothing else can be built without it).
 
-   **I.1 shipped:** `IngredientsSection.jsx`'s ingredient name (not the whole row - the row already owns the preparation-expand button from Stage D.3) is now a `Link` to `/bar/type/${ri.ingId}` (always the type route - a recipe component's `ingId` is never a product id), padded to a real ≥44px tap target without changing the row's visual height. `IngredientDetailScreen.jsx`'s "cocktails using this" grouping switched from a local, `avail`-keyed `GROUP_ORDER`/`GROUP_LABEL` to the shared `groupByDisplayTier()` (Stage D.2) plus a new shared `capGroupsByTotal()` helper (added to `domain/availabilityGroups.js`, unit-tested) that applies the existing "cap at 10 total" rule on top without re-flattening the tiers - a cocktail resolvable only via adaptation now correctly shows under "Make With Adaptations" here too, not "Unavailable". The screen also now renders basic identity: category name (`catalog.categories` looked up by `resolvedType.category_id`) and `resolvedType.description` when non-blank - both fields already existed and were already fetched, just never rendered to a member before now; no schema change. `AVAIL_GROUP_LABEL` (the tier-heading dict) was extracted from `LibraryScreen.jsx` into `src/data/constants.js` so both screens share one copy instead of `IngredientDetailScreen` keeping its own second (and, until this turn, stale/avail-based) one.
-
-   **I.1 polish pass (same day, after functional manual verification passed):** the user found the ingredient-name link's permanent underline visually noisy/too-hyperlink-like for a dense ingredient list. Restyled `IngredientsSection.jsx`'s `Link` only - no underline, typography reverted to plain pre-I.1 text (`text-sm text-tx font-body`); interactivity now communicated via a subtle neutral hover/active tint (`hover:bg-tx3/10`/`active:bg-tx3/15`, not a link-blue color change) plus a visible keyboard focus ring (`focus-visible:ring-2 ring-inset ring-cyan`, matching `Card`'s own existing convention in `primitives.jsx`). The link's invisible hit area now also bleeds left by exactly the dot's width + its gap (`pl-5 -ml-5`, canceling in layout) so the status dot right next to the name is effectively part of the same tap target, without moving the dot into the link's own DOM or changing its independent styling/meaning. Vertical ≥44px padding (`py-3 -my-3`) unchanged from I.1. No navigation/route/makeability change.
-
-   **I.1 follow-up (same day):** `HeroCard.jsx`'s "Missing: X" panel (the recipe's own detail page, e.g. "Missing: Tomato Juice" on the Bloody Mary) now links each missing ingredient's name the same way, via a new shared `src/components/detail/IngredientLink.jsx` (extracted since `IngredientsSection.jsx` needed the identical treatment). Deliberately NOT touched: `CocktailCard.jsx`/`SmallCard.jsx`'s grid-card badges and `HomeScreen.jsx`'s "Almost There" row - all three sit inside an element whose entire container already navigates to that cocktail, so nesting a link would conflict with that existing behavior.
-
-   **I.2 shipped (My Bar Add/Remove action), 2026-09-12:**
-   `IngredientDetailScreen.jsx` now shows, right under identity (category/
-   description), a prominent `Btn` - "Add to My Bar" (primary) when not
-   owned, "Remove from My Bar" (secondary) when owned - for both
-   `kind="type"` and `kind="product"`. Clicking it calls the exact same
-   shared `inventory.toggleType()`/`toggleProduct()` every other My Bar
-   surface already calls (`useInventory.js`, one shared `AppShell`
-   instance) - no second write path, no new Supabase call. Because
-   `computed`/`owned` are derived from that same shared inventory state on
-   every render, navigating back to the cocktail that linked here shows it
-   recalculated with zero special-case refresh code - the architecture
-   Stage I.1's plan already banked on. A household-basic type
-   (`resolvedType.assumed_available`) shows a non-editable "Household basic
-   · Always considered available - not tracked as an owned item" line
-   instead of a button, for both `kind`s (the flag lives on the type, so a
-   product mapped to one is equally not a real per-user row to toggle). A
-   `kind="type"` page's `owned` read is a combined check (mirrors
-   `MyBarScreen.jsx`'s own `isOwned = ownedTypeIds.has(id) ||
-   productsByType.has(id)`) so a type owned only via a mapped product
-   doesn't wrongly show "Add" - the toggle itself still only ever writes
-   the generic row, matching `TypeCard.jsx`'s already-established rule (a
-   documented, pre-existing edge case, not a new one). Local
-   `ownershipPending`/`ownershipError` state disables the button and shows
-   "Adding…"/"Removing…" during the write (preventing a double-tap double
-   write) and surfaces a failure inline - `useInventory.js`'s own optimistic
-   update + `load()`-based rollback on failure is still the only place
-   ownership actually lives, so a failed write can never leave the button
-   showing a state that isn't real.
-
-   **Extracted `src/domain/ingredientOwnership.js`** (pure,
-   `resolveIngredientOwnershipState()` + `toggleIngredientOwnership()`) so
-   the household-basic/combined-ownership decision and the
-   type-vs-product mutation dispatch are unit-testable without rendering
-   (this project's vitest setup has no jsdom/component testing) - 10 new
-   tests. The screen component itself stays a thin caller.
-
-   **I.3 shipped (relationships + homemade preparation), 2026-09-13:**
-   `IngredientDetailScreen.jsx` gains three more sections, each rendered
-   only when data exists (no empty headings), between the My Bar action
-   and "cocktails using this ingredient": **Can provide** (rows where this
-   type is the RAW side of `ingredient_form_conversions`, e.g. "Lemon" →
-   "Can provide: Lemon Juice", each with its guidance text and a "one-way"
-   caption); **Can be replaced by** (rows where this type is the FROM side
-   of `ingredient_substitutions`, e.g. "White Rum" → "Can be replaced by:
-   Spiced Rum — Adds sweetness and spice.", also captioned one-way);
-   **Homemade preparation** (at most one row, keyed by
-   `ingredient_preparations.produces_type_id` - inputs with resolved
-   names/amounts/units via the existing `formatAmount()`, then ordered
-   `instructions` as a numbered "Steps" list). Every related-ingredient
-   name is a tappable `IngredientLink` (reused as-is, no changes to that
-   component) to its own `/bar/type/:id` page. A small green dot next to
-   each related name/input is a secondary, muted "you already have this"
-   signal only - reuses the app-wide resolved ownership Set
-   (`owned`/`resolvedOwned` from `App.jsx`, already accounting for
-   household basics) for relationships, and reuses
-   `isPreparationSatisfiable()` (Stage D.1, called per-input with a
-   1-element array) for preparation inputs specifically, exactly as the
-   plan called for - never a new availability system, and the produced
-   ingredient itself is never marked owned just because its inputs are on
-   hand.
-
-   Deliberately excludes `recipe_component_alternatives` (Stage B's
-   recipe-scoped, adopted alternatives) from "Can be replaced by" - those
-   are true for one recipe, not a catalogue fact, and that table is never
-   read by the new code at all, so there's no path for one to leak in. A
-   component's `excluded_substitute_type_ids` (a per-recipe carve-out) is
-   likewise irrelevant here - this page describes the general catalogue
-   relationship, unaffected by any one recipe's exclusion. The reverse
-   direction (e.g. Lemon Juice's own page noting "Lemon can prepare into
-   this") is never looked up, per the plan's own explicit v1 boundary.
-
-   **Extracted `src/domain/ingredientRelationships.js`** (pure,
-   `resolveCanProvide()`/`resolveCanBeReplacedBy()`/
-   `resolveHomemadePreparation()`) so directionality and data shaping are
-   unit-tested without rendering - 9 new tests, covering: correct
-   direction for both relationship kinds; the reverse is never fabricated
-   (asserted for both); flavor notes preserved; preparation inputs/
-   quantities/steps shaped correctly from existing data; a recipe-specific
-   alternative has no path into the general list (the function is never
-   given that table at all); preparation lookup only matches the produced
-   type, not an input's own type. `resolveIngredientOwnershipState()`/
-   `toggleIngredientOwnership()` (I.2) are untouched this turn - their own
-   10 tests from I.2 still pass unchanged, which is exactly "household-
-   basic/ownership semantics not changed."
-
-   **Not touched:** admin edit link (I.4). No new routes, no migrations,
-   no schema/catalogue changes, no changes to `IngredientLink.jsx`,
-   `IngredientTypeEditor.jsx`, or any admin surface.
-
-   **Verified:** `corepack pnpm@10.34.3 test` 335/335 (+9 new). `corepack
-   pnpm@10.34.3 build` clean (177 modules). `git status` confirmed exactly
-   3 files changed (`IngredientDetailScreen.jsx` + 2 new domain files);
-   `docs/project.md` untouched. **Not browser-verified** (no browser
-   tooling in this sandbox) - see the chunk entry below for the manual
-   checks still owed (Lemon, White Rum, Simple Syrup).
-
-   I.1-I.3 **manually verified by the user** (ingredient navigation,
-   Add/Remove My Bar, Homemade Preparation, and the directional
-   relationships all confirmed working).
-
-   **I.4 shipped (admin/moderator "Edit ingredient" shortcut), 2026-09-13
-   - Ingredient Detail v1 is now COMPLETE (I.1-I.4 all done):**
-   `IngredientDetailScreen.jsx`'s `TopBar` gains a small, secondary icon
-   button (same 36px size as the existing Speed Rack pin button next to
-   it, visually separate from the primary Add/Remove My Bar action lower
-   on the page) - visible only when `isStaff` (`isAdmin || isModerator`,
-   App.jsx's own existing flag - no new role/permission model). Tapping it
-   navigates to `/admin?tab=types&type=<id>`, opening the *existing*
-   `IngredientTypeEditor` already expanded for that specific type - no
-   second editor, no new admin editing UI. **This deep-links straight to
-   the specific type**, which is a deliberate change from this plan's
-   original I.4 text ("not a new deep-link-to-this-type mechanism...
-   explicitly deferred") - the user's own I.4 request this turn explicitly
-   asked for direct navigation to the existing editor, superseding that
-   earlier deferral (the plan doc's Staged plan section has been updated
-   to reflect this, not left contradicting it).
-
-   To make the deep link possible, `AdminScreen.jsx` gained a second query
-   param read (`?type=<id>`, alongside the existing `?tab=` one it already
-   supported for the My Bar ⋯ menu) and `TypesTab.jsx` gained one new prop
-   (`initialEditingTypeId`, used only as `useState`'s initial value for
-   the row-level `editingAdminTypeId` it already had) - both small,
-   additive, and exactly analogous to the `?tab=types` deep-link precedent
-   already established; the editor component itself (`IngredientTypeEditor
-   .jsx`) is completely untouched.
-
-   Always targets the resolved ingredient TYPE's own id, identically for
-   both `/bar/type/:id` and `/bar/product/:id` - a product always maps to
-   exactly one ingredient type (AGENTS.md's own rule), and there is no
-   separate product-level editor in Admin → Ingredient Types, so the type
-   it maps to is the one valid, existing edit target either way; there is
-   no "omit the action" branch needed for a product page in practice. The
-   real authorization boundary is completely unchanged - this is UI
-   visibility only, `save_ingredient_type()`'s own RLS/role check still
-   decides whether an edit is actually allowed.
-
-   **Extracted `src/domain/ingredientEditTarget.js`** (pure,
-   `resolveIngredientEditTarget({ isStaff, resolvedType })`) so the
-   isStaff gate and the always-the-type resolution are unit-tested without
-   rendering - 6 new tests: admin/moderator gets a valid target; a regular
-   member gets null regardless of `resolvedType`; a type-page route
-   resolves to its own id; a product-page route resolves to its *mapped*
-   type's id, never the product's own id (proving no fabricated/invalid
-   target); no resolved type (a stale link) → null; both conditions absent
-   at once → null.
-
-   **Verified:** `corepack pnpm@10.34.3 test` **341/341** (+6 new).
-   `corepack pnpm@10.34.3 build` clean (178 modules). `git status`
-   confirmed exactly 5 files changed (`IngredientDetailScreen.jsx`,
-   `AdminScreen.jsx`, `TypesTab.jsx` + 2 new domain files);
-   `docs/project.md` untouched. No migration, no schema/catalogue change,
-   no change to `IngredientTypeEditor.jsx` itself. **Not browser-verified**
-   (no browser tooling in this sandbox).
-
-   **Exact next action:** the user manually verifies I.4 (as a non-admin,
-   confirm no edit action appears on any `/bar/type/:id` or
-   `/bar/product/:id` page; as admin/moderator, tap it and confirm it
-   lands directly on that ingredient's editor, already expanded, in Admin
-   → Ingredient Types). **With I.4 verified, Ingredient Detail v1 (I.1-I.4)
-   is fully complete.** Linked Variations (Stage C,
-   `docs/plans/substitutes-and-variations.md`) remains NOT started,
-   independent, on a separate go-ahead - not started as part of this
-   session. The user has indicated a separate design/visual polish pass on
-   this screen is planned next, on its own go-ahead - not started here.
+**Ingredient Detail v1 (I.1 through I.4, `docs/plans/ingredient-detail-page.md`) is feature-complete, 2026-09-12/13.** Tappable ingredient links + shared-tier grouping + basic identity (I.1); My Bar Add/Remove action, household-basic-aware (I.2); Can provide / Can be replaced by / Homemade preparation sections (I.3); admin/moderator "Edit ingredient" shortcut deep-linking straight into the existing `IngredientTypeEditor` (I.4 - a deliberate expansion beyond that stage's original "not a new deep-link" text, per the user's own explicit I.4 request). **I.1-I.3 manually verified by the user** (ingredient navigation, Add/Remove My Bar, Homemade Preparation, and the directional relationships all confirmed working); **I.4 has only this session's automated verification (tests + build), not yet a manual/browser check** - as a non-admin, confirm no edit action appears on any `/bar/type/:id`/`/bar/product/:id` page; as admin/moderator, confirm it lands directly on that ingredient's editor, already expanded, in Admin → Ingredient Types. A separate design/visual polish pass on this screen is planned next, on its own go-ahead - not started here. See the chunk-history entries below for the full stage-by-stage detail.
 
 **Stage D itself (`docs/plans/substitutes-and-variations.md`) is feature-complete AND manually verified, 2026-09-12 - nothing outstanding.** D.1 through D.5 all DONE + pushed 2026-09-11; the Daiquiri (and other adapted cocktails, e.g. Gin Fizz) confirmed resolving correctly in the running app, Home showing "10 cocktails possible · 5 ready, 5 with substitutions or preparation." The adapted discovery category's name is finalized as **"Make With Adaptations"** (was "Make With Substitutions," renamed 2026-09-12 - see the chunk entry below for exactly what did/didn't change; the cocktail-level composed status text like "Make with substitutions · Prepare syrup first" is a different, more specific mechanism and was deliberately left alone). Stage C (Linked Variations) remains NOT started, independent, on a separate go-ahead whenever the user wants it. See the chunk entries below for the full history.
 
 1. **Household Basics is COMPLETE — Stages 1–3, closed out 2026-09-10.** See the "Household Basics Stage 3 — CLOSE-OUT" chunk below (two non-blocking limits: Home "Edit list" visual check; offline-save handling).
-2. **`docs/plans/substitutes-and-variations.md` — decisions D1–D6 APPROVED (D1 now superseded for the new Stage D feature, see item 0); Stage A + Stage A follow-up + Stage B all DONE + pushed 2026-09-10. Stage C (Linked Variations) NOT started. Stage D is now FULLY DONE + manually verified (see item 0 above, and the chunk entries below) - the line below predates that completion, kept as historical record of the decisions rather than rewritten.**
+2. **`docs/plans/substitutes-and-variations.md` — decisions D1–D6 APPROVED (D1 now superseded for the new Stage D feature, see item 0); Stage A + Stage A follow-up + Stage B all DONE + pushed 2026-09-10. Stage D is now FULLY DONE + manually verified (see item 0 above, and the chunk entries below) - the line below predates that completion, kept as historical record of the decisions rather than rewritten. Stage C (Linked Variations) NOT started; full dedicated planning done 2026-09-13 in `docs/plans/linked-variations.md` (see item 0) - that doc is now authoritative, superseding this doc's own "Part 3"/"Stage C" sketch.**
    - **Stage A verification confirmed by the user (2026-09-10):** revised editor layout approved; editing conversion guidance + confirming the inline edit + pressing the main **Cancel** discards the change; **Save changes → reload/reopen preserves the edited guidance**. (No other unreported checks claimed.)
    - **Stage B (this turn) — done + pushed:** two layers. **General catalogue substitutes** — new `ingredient_substitutions (id, from_type_id, to_type_id, flavor_note)` (migration `20260910190000`), directional, NOT symmetric, no inverse guard, no chaining; `is_member()` read / `is_admin_or_moderator()` write, `to authenticated` from the first migration; written only via `save_ingredient_type()` (dropped + recreated 5-arg with `p_substitutions jsonb default '[]'`, reconciled in the same atomic txn). **Never read by `computeAvail`** — availability / makeable counts / Buy Next unchanged. `buildSubstituteSuggester` (pure) → `DetailScreen` shows a muted "Try: X (in your bar) — note · …" line **on missing rows only**, owned stand-ins first, capped at 3. **Recipe-scoped** — `recipe_component_alternatives` gains nullable `note` (migration `20260910180000`, ≤200, no policy change); `mapRecipe` → `alternativeNotes`; `computeAvail`'s `substitutions[ingId]` gains passive `note` (precedence exact → Can provide → recipe-scoped substitution unchanged); `IngredientsSection` renders "Substituting: X — note"; the recipe editor's alternatives are now `[{ name, note }]` with a per-chip note field and a one-tap **+ &lt;name&gt;** adopt button for each catalogue suggestion (adopted rows are the only substitutions that affect availability, saved through the editor's existing flow). Editor gains a **"Can be replaced by"** section mirroring "Can provide" (compact rows, ⋯ menu, collapsed picker, one atomic Save changes). Audited paths — batch import / plain-text share / `get_shared_recipe` never carried alternatives (unchanged); clone/edit prefill + localStorage draft restore now carry notes forward.
    - **Stage B verified:** `pnpm test` **251/251** (+9), build clean (170 modules), isolated-LF `oxfmt --check` clean (14 files). **RLS suite** extended (`ingredient_substitutions` block + `note` round-trip on `recipe_component_alternatives` + `save_ingredient_type` `p_substitutions` reconcile + **atomic rollback on a bad substitution self-pair** + 5-arg member-denied). Full suite passes. `db advisors --type security` no new finding. Live REST: `RECIPE_SELECT` embed with `note` → 200; anon `ingredient_substitutions` read → `200 []`.
@@ -300,6 +133,109 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 needed). No migrations, no schema change - not needed to fix this.
 
 **Commit:** `7a22526`. `docs/project.md` untouched.
+
+---
+
+## Last completed chunk (Linked Variations — planning only, 2026-09-13 — `docs/plans/linked-variations.md` created, no code/migrations/catalogue changes)
+
+**Trigger:** with Ingredient Detail v1 complete, the user asked for a full
+planning pass on Linked Variations - letting recipes like Bloody Mary and
+Bloody Mary (Practical Version) declare a relationship, navigable and
+explicit, instead of relying on similar names.
+
+**Audit findings that shaped the plan:**
+- **Nothing is built** - confirmed via the schema migration's own header
+  comment (`20260815214307`): "Deliberately NOT in this migration:
+  substitution_groups and recipe_relationships (variations)." The only
+  adjacent mechanism is Clone (`?clone=`), a pure copy with no stored
+  link back to its source.
+- **`recipes.update`'s grant is column-restricted** (name/description/
+  glass_id/family_id/liquid_color/liquid_color_2/steps) - a
+  `variation_of_id` column directly on `recipes` would mean widening that
+  grant. A separate `recipe_relationships` table avoids touching it
+  entirely - the strongest reason to keep this in its own table, not a
+  column.
+- **`recipe_is_visible`/`recipe_is_editable`** (existing `SECURITY
+  DEFINER` helpers) are directly reusable for the new table's RLS - no
+  new function needed.
+- **Zero coupling risk to the availability engine** - confirmed by
+  inspection, not assumption: neither `computeMakeability()`/
+  `computeAvail()` nor `recommendations.js` (Buy Next) has any
+  cross-recipe concept in their signatures today, so there is no existing
+  code path that could accidentally read a relationship and no new
+  parameter is added to either.
+- **`updateRecipe()`'s own comment confirms the recipe editor's save flow
+  is NOT atomic today** ("No client-side multi-statement transaction is
+  available... same constraint `createRecipe()` already lives with") -
+  this directly answers "should Save/Cancel be atomic": adding one more
+  sequential Supabase call for the relationship row matches the
+  *existing, accepted* save model exactly, not a new atomicity promise.
+- **Batch import has no reliable identity to link against** - a
+  batch-imported recipe has no real id until after insert, and recipe
+  names are the only import-time handle, which AGENTS.md's own
+  no-fuzzy-matching rule forbids relying on. Decision: admin-editor-only
+  for v1, explicitly not attempted in import.
+- **Live catalogue query (read-only, no data changed) found two real,
+  already-existing candidate pairs**: Bloody Mary ↔ Bloody Mary
+  (Practical Version) (both classic/shared, same family); Zombie ↔
+  Zombie (Home Bar Spiced & Dark Spec) (both classic/shared, same
+  family). A third near-miss, Dark 'N' Stormy (Dark Rum Version), has no
+  plain base recipe to link to today - not usable without a catalogue
+  change, out of scope for planning.
+
+**Key model decisions (deliberately simpler than the earlier Stage C
+sketch in `docs/plans/substitutes-and-variations.md`):** one base → many
+variations, no general many-to-many table; **no `relationship_type`
+column** (the sketch had one "for a future `related_to`" - dropped per
+the explicit instruction not to design around a hypothetical second
+type); chains structurally allowed but the UI/domain resolver **never
+walks past one hop** in either direction, which also makes cycles inert
+(no cycle-detection algorithm needed - a cycle can't confuse a
+never-walk-past-one-hop display rule); self-link + duplicate-base
+prevented at the DB level (`check` + `unique(recipe_id)`); the
+variation's own editor controls the link (re-affirms Stage C's D4 - the
+base's owner is not asked and gets no new editor UI at all).
+
+**Availability:** each recipe keeps a fully independent
+`computeMakeability()` result - the relationship table is read only by a
+new UI section, never by the engine. A "can't make the original? try
+this variation" framing is presentation-only, reusing `display.tier` and
+`groupByDisplayTier`'s own sort order already on every `computed` recipe
+- no new ranking algorithm.
+
+**Discovery:** variations remain ordinary first-class recipes everywhere
+(Library/Home/search/favorites/lists) - zero code changes to any of them,
+confirmed by inspection that all already iterate `computed` with no
+relationship awareness needed. No card-level "Variation" badge
+recommended for v1 (a permanent visual tax on every grid view, for a fact
+only actionable from the recipe's own detail page).
+
+**Proposed stages:** V.1 (schema + a pure one-hop `src/domain/
+recipeRelationships.js` resolver) → V.2 (recipe editor "Variation of"
+field + a new `RecipeComboBox`, mirroring `TypeComboBox.jsx`'s own
+interaction pattern) → V.3 (Cocktail Detail "Variations"/"Variation of"
+UI, reusing existing card/navigate-to-recipe patterns) → V.4
+(makeability-aware sort/framing + the two real catalogue links found
+above).
+
+**Docs:** new `docs/plans/linked-variations.md` (the actual planning
+deliverable - product semantics, schema + RLS, relationship/depth rules,
+member-facing UX, admin/editor UX, availability/discovery behavior,
+import decision, staged plan, automated + manual testing, explicit
+deferred ideas). `docs/plans/substitutes-and-variations.md` updated with
+pointers at its "Part 3"/"Stage C" section and its own closing summary,
+redirecting to the new doc rather than duplicating the design (its
+original sketch text is kept, unedited, as historical record).
+`current-context.md` updated: new item 20, item 0 replaced (Ingredient
+Detail's full I.1-I.4 detail compacted into a summary paragraph, since
+that plan is complete and its own chunk-history entries below still carry
+the full detail), item 2 repointed. `docs/project.md` untouched.
+
+**Verified:** planning only - no test/build/migration run this turn (no
+code changed).
+
+**Commit:** see the git log for the exact hash. `docs/project.md`
+untouched.
 
 ---
 
