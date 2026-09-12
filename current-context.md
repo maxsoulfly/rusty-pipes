@@ -379,8 +379,7 @@ verification (tests + build), not yet a manual/browser check. Linked
 Variations (Stage C) and any broader Ingredient Detail visual/design
 polish remain explicitly NOT started, each on its own separate go-ahead.
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `a51c77c`. `docs/project.md` untouched.
 
 ---
 
