@@ -190,7 +190,7 @@ asserted the exact old string, nothing needed updating). `pnpm build`
 clean (174 modules). Isolated-LF `oxfmt --check` clean on all 5
 changed files (no reflow needed).
 
-**Commit:** see the git log for the exact hash (this file and
+**Commit:** `9214bed` (this file and
 `docs/plans/substitutes-and-variations.md` updated in the same commit/push).
 
 ---
