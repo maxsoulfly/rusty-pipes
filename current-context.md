@@ -180,8 +180,7 @@ touched). `corepack pnpm@10.34.3 build` clean (174 modules). `git status`
 confirmed only `IngredientsSection.jsx` changed; `docs/project.md`
 untouched.
 
-**Commit:** see the git log for the exact hash (this file's update lands
-in the same commit/push as the styling fix). `docs/project.md` untouched.
+**Commit:** `f17dd6c`. `docs/project.md` untouched.
 
 ---
 
