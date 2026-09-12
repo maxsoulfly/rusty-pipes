@@ -31,7 +31,7 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
 18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms (Concept 2) + Suggested Substitutes (Stage B) shipped via `docs/plans/substitutes-and-variations.md` (Stages A/B, DONE 2026-09-10). Homemade Preparations SUPERSEDED 2026-09-11 by a smaller design in that same doc ("Stage D — Adapted Availability & Minimal Homemade Preparations"), then that smaller design itself SHIPPED as Stage D.3 the same day. Stage D (D.1 adapted availability, D.2 discovery/grouping/ordering, D.3 tier-5 preparations, D.4 counts/breakdown + real Daiquiri catalogue rows, D.5 per-component exclusion + Buy Next ranking) is FULLY DONE + pushed 2026-09-11, **manually verified working correctly in the running app 2026-09-12, and the adapted category's user-facing name finalized as "Make With Adaptations"** (was "Make With Substitutions"). **Stage D is feature-complete and verified - nothing outstanding.** See item 0 and the chunk entries below. Linked cocktail variations (Stage C) remain NOT started, independent, on a separate go-ahead.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
 
-19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **I.1 + I.2 DONE + pushed 2026-09-12.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, and "cocktails using this" → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, and the single shared `useInventory()` instance; no schema changes (the ingredient description field this feature surfaces already exists, just unrendered). Staged **I.1 done** (tappable ingredient-name links from `IngredientsSection.jsx` and `HeroCard.jsx`'s missing-ingredient callout + the ingredient detail page's grouping switched to the shared `display.tier`, plus basic identity - category/description - now rendered) → **I.2 done** (My Bar Add/Remove action, household-basic-aware, reusing `inventory.toggleType`/`toggleProduct`) → **I.3 NOT started** (relationships + preparation display) → **I.4 NOT started** (admin edit link). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer.
+19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **I.1 + I.2 + I.3 DONE + pushed, 2026-09-12/13.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, and "cocktails using this" → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, the single shared `useInventory()` instance, and `isPreparationSatisfiable()`; no schema changes (every field/table this feature surfaces already existed, just unrendered to members). Staged **I.1 done** (tappable ingredient-name links + shared-tier grouping + basic identity) → **I.2 done** (My Bar Add/Remove action, household-basic-aware) → **I.3 done** (Can provide / Can be replaced by / Homemade preparation sections, each directional, reusing `IngredientLink` for related-ingredient navigation) → **I.4 NOT started** (admin edit link). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer.
 
 Each numbered step is a development chunk boundary for this file.
 
@@ -81,23 +81,72 @@ Each numbered step is a development chunk boundary for this file.
    (this project's vitest setup has no jsdom/component testing) - 10 new
    tests. The screen component itself stays a thin caller.
 
-   **Not touched (later stages, unchanged this turn):** Can-provide/
-   Can-be-replaced-by/preparation display (I.3), admin edit link (I.4). No
-   new routes, no migrations, no schema/catalogue changes, no changes to
-   `useInventory.js`/`MyBarScreen.jsx`/any other My Bar surface.
+   **I.3 shipped (relationships + homemade preparation), 2026-09-13:**
+   `IngredientDetailScreen.jsx` gains three more sections, each rendered
+   only when data exists (no empty headings), between the My Bar action
+   and "cocktails using this ingredient": **Can provide** (rows where this
+   type is the RAW side of `ingredient_form_conversions`, e.g. "Lemon" →
+   "Can provide: Lemon Juice", each with its guidance text and a "one-way"
+   caption); **Can be replaced by** (rows where this type is the FROM side
+   of `ingredient_substitutions`, e.g. "White Rum" → "Can be replaced by:
+   Spiced Rum — Adds sweetness and spice.", also captioned one-way);
+   **Homemade preparation** (at most one row, keyed by
+   `ingredient_preparations.produces_type_id` - inputs with resolved
+   names/amounts/units via the existing `formatAmount()`, then ordered
+   `instructions` as a numbered "Steps" list). Every related-ingredient
+   name is a tappable `IngredientLink` (reused as-is, no changes to that
+   component) to its own `/bar/type/:id` page. A small green dot next to
+   each related name/input is a secondary, muted "you already have this"
+   signal only - reuses the app-wide resolved ownership Set
+   (`owned`/`resolvedOwned` from `App.jsx`, already accounting for
+   household basics) for relationships, and reuses
+   `isPreparationSatisfiable()` (Stage D.1, called per-input with a
+   1-element array) for preparation inputs specifically, exactly as the
+   plan called for - never a new availability system, and the produced
+   ingredient itself is never marked owned just because its inputs are on
+   hand.
 
-   **Verified:** `corepack pnpm@10.34.3 test` 326/326 (+10 new). `corepack
-   pnpm@10.34.3 build` clean (176 modules). `git status` confirmed exactly
+   Deliberately excludes `recipe_component_alternatives` (Stage B's
+   recipe-scoped, adopted alternatives) from "Can be replaced by" - those
+   are true for one recipe, not a catalogue fact, and that table is never
+   read by the new code at all, so there's no path for one to leak in. A
+   component's `excluded_substitute_type_ids` (a per-recipe carve-out) is
+   likewise irrelevant here - this page describes the general catalogue
+   relationship, unaffected by any one recipe's exclusion. The reverse
+   direction (e.g. Lemon Juice's own page noting "Lemon can prepare into
+   this") is never looked up, per the plan's own explicit v1 boundary.
+
+   **Extracted `src/domain/ingredientRelationships.js`** (pure,
+   `resolveCanProvide()`/`resolveCanBeReplacedBy()`/
+   `resolveHomemadePreparation()`) so directionality and data shaping are
+   unit-tested without rendering - 9 new tests, covering: correct
+   direction for both relationship kinds; the reverse is never fabricated
+   (asserted for both); flavor notes preserved; preparation inputs/
+   quantities/steps shaped correctly from existing data; a recipe-specific
+   alternative has no path into the general list (the function is never
+   given that table at all); preparation lookup only matches the produced
+   type, not an input's own type. `resolveIngredientOwnershipState()`/
+   `toggleIngredientOwnership()` (I.2) are untouched this turn - their own
+   10 tests from I.2 still pass unchanged, which is exactly "household-
+   basic/ownership semantics not changed."
+
+   **Not touched:** admin edit link (I.4). No new routes, no migrations,
+   no schema/catalogue changes, no changes to `IngredientLink.jsx`,
+   `IngredientTypeEditor.jsx`, or any admin surface.
+
+   **Verified:** `corepack pnpm@10.34.3 test` 335/335 (+9 new). `corepack
+   pnpm@10.34.3 build` clean (177 modules). `git status` confirmed exactly
    3 files changed (`IngredientDetailScreen.jsx` + 2 new domain files);
    `docs/project.md` untouched. **Not browser-verified** (no browser
-   tooling in this sandbox) - see the chunk entry below for the two manual
-   checks still owed.
+   tooling in this sandbox) - see the chunk entry below for the manual
+   checks still owed (Lemon, White Rum, Simple Syrup).
 
-   **Exact next action:** the user manually verifies I.2 (Bloody Mary →
-   tap Tomato Juice → Add to My Bar → Back → Bloody Mary recalculates with
-   no manual reload; a household basic like Water shows the explanatory
-   line, never a button), then decides whether/when to proceed to I.3
-   (relationships + preparation display).
+   **Exact next action:** the user manually verifies I.3 using existing
+   catalogue data (Lemon → "Can provide: Lemon Juice"; White Rum → "Can be
+   replaced by: Spiced Rum" with its flavor note; Simple Syrup → its two
+   inputs with amounts/units and its numbered steps, each input's dot
+   reflecting real ownership), then decides whether/when to proceed to I.4
+   (admin edit link) or move on to broader visual/design polish.
 
 **Stage D itself (`docs/plans/substitutes-and-variations.md`) is feature-complete AND manually verified, 2026-09-12 - nothing outstanding.** D.1 through D.5 all DONE + pushed 2026-09-11; the Daiquiri (and other adapted cocktails, e.g. Gin Fizz) confirmed resolving correctly in the running app, Home showing "10 cocktails possible · 5 ready, 5 with substitutions or preparation." The adapted discovery category's name is finalized as **"Make With Adaptations"** (was "Make With Substitutions," renamed 2026-09-12 - see the chunk entry below for exactly what did/didn't change; the cocktail-level composed status text like "Make with substitutions · Prepare syrup first" is a different, more specific mechanism and was deliberately left alone). Stage C (Linked Variations) remains NOT started, independent, on a separate go-ahead whenever the user wants it. See the chunk entries below for the full history.
 
@@ -189,6 +238,89 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 needed). No migrations, no schema change - not needed to fix this.
 
 **Commit:** `7a22526`. `docs/project.md` untouched.
+
+---
+
+## Last completed chunk (Ingredient Detail Stage I.3 implemented - relationships + homemade preparation, 2026-09-13 — 3 files, no migrations, no catalogue changes)
+
+**Scope: exactly I.3** - three new read-only sections on
+`IngredientDetailScreen.jsx`. Explicitly not this turn: I.4 (admin edit
+link), any schema change, any change to `IngredientLink.jsx`,
+`IngredientTypeEditor.jsx`, or the household-basic/combined-ownership
+logic added in I.2 (unchanged, still passing its own 10 tests).
+
+**"Can provide"** - rows where the viewed type is the RAW side of
+`ingredient_form_conversions` (e.g. Lemon → Lemon Juice), each showing the
+configured guidance text and a "one-way" caption. **"Can be replaced by"**
+- rows where the viewed type is the FROM side of `ingredient_substitutions`
+(Stage B's general catalogue suggestions - e.g. White Rum → Spiced Rum),
+each showing its flavor note and the same one-way caption. Neither section
+ever reads `recipe_component_alternatives` (Stage B's separately adopted,
+recipe-scoped alternatives) - those are true for one recipe only, not a
+catalogue fact, and the new domain functions are never even given that
+table, so there is no path for one to leak in as a "global" relationship.
+A component's `excluded_substitute_type_ids` (a per-recipe carve-out) is
+equally irrelevant - this page describes the catalogue-wide relationship,
+unaffected by any one recipe's exclusion. Neither section ever looks up
+the reverse direction (e.g. Lemon Juice's own page does not note "Lemon
+can prepare into this") - per the plan's own explicit v1 boundary, there
+is no code path that reads the opposite column.
+
+**"Homemade preparation"** - at most one row, keyed by
+`ingredient_preparations.produces_type_id` (e.g. Simple Syrup's own page):
+its name (only shown when it differs from the page's own title), every
+input with its resolved name/amount/unit (reusing `formatAmount()`, the
+same ml/oz-aware rendering `IngredientsSection.jsx`'s own expandable panel
+already uses), and ordered `instructions` as a numbered "Steps" list.
+Never marks the produced ingredient itself as owned just because its
+inputs are satisfiable - that distinction (Stage D.1's "adapted," not
+"owned") is preserved exactly.
+
+**Availability context (kept secondary, per the request):** a small green
+dot next to each related-ingredient name/input signals "you already have
+this" - reuses the app-wide resolved ownership Set (`owned` from
+`App.jsx`'s `resolvedOwned`, exposed via outlet context and already
+accounting for household basics) for the two relationship sections, and
+`isPreparationSatisfiable()` (Stage D.1, called per input with a
+1-element array - "not a new check," per the plan) for preparation
+inputs specifically, since that additionally accounts for an input
+satisfiable via its own "Can provide" conversion, not just direct
+ownership. No new availability system either way.
+
+**Navigation:** every related-ingredient name (a "Can provide" target, a
+"Can be replaced by" target, a preparation input) is the existing
+`IngredientLink` component (`src/components/detail/IngredientLink.jsx`,
+built in the I.1 follow-up) - reused completely as-is, zero changes to
+that file - so the same no-underline/hover/focus/≥44px-tap-target
+treatment and `/bar/type/:id` route apply automatically.
+
+**New `src/domain/ingredientRelationships.js`** (pure,
+`resolveCanProvide()`/`resolveCanBeReplacedBy()`/
+`resolveHomemadePreparation()`) - the screen calls these instead of
+inlining the filters, so directionality and data shaping are unit-tested
+without rendering (this project's vitest setup has no jsdom/component
+testing). **9 new tests:** Can-provide direction correct + reverse not
+fabricated + empty when unconfigured; Can-be-replaced-by direction
+correct + flavor note preserved + reverse not fabricated + a
+recipe-specific alternative has no path in (the function is never passed
+that table); preparation inputs/quantities/steps shaped correctly from
+existing data + returns null when unconfigured + only matches by
+produced type (not an input's own type).
+
+**Verified:** `corepack pnpm@10.34.3 test` **335/335** (+9 new).
+`corepack pnpm@10.34.3 build` clean (177 modules, +1 for the new domain
+file). Diff reviewed for scope creep before committing - exactly 3 files
+changed (`IngredientDetailScreen.jsx`, new `ingredientRelationships.js` +
+`.test.js`); `docs/project.md` untouched. No migration, no RLS surface
+touched - `db advisors` not applicable. **Not browser-verified** (no
+browser tooling in this sandbox) - manual checks still owed using
+existing catalogue data: Lemon ("Can provide: Lemon Juice"), White Rum
+("Can be replaced by: Spiced Rum" with its flavor note), Simple Syrup
+(two inputs with amounts/units, numbered steps, each input's dot
+reflecting real ownership).
+
+**Commit:** see the git log for the exact hash. `docs/project.md`
+untouched.
 
 ---
 

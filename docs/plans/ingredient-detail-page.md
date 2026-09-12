@@ -6,11 +6,11 @@ substitutes-and-variations.md`) shipped and was manually verified. This
 feature reuses Stage D's shared `computeMakeability()` result rather than
 introducing a second one.
 
-**Status: Stages I.1 and I.2 DONE + pushed, 2026-09-12** (tappable
-ingredient links, shared-tier grouping, basic identity display, and the
-My Bar Add/Remove action - see the Staged implementation plan section
-below for exactly what shipped and what's still not started). Stages
-I.3-I.4 not started.
+**Status: Stages I.1, I.2, and I.3 DONE + pushed, 2026-09-12/13** (tappable
+ingredient links, shared-tier grouping, basic identity display, the My Bar
+Add/Remove action, and the relationships/homemade-preparation sections -
+see the Staged implementation plan section below for exactly what shipped
+and what's still not started). Stage I.4 not started.
 
 ---
 
@@ -354,15 +354,28 @@ layer in richer content, then admin polish"**:
   Add → Back → recalculated; a household basic shows the explanatory
   line) is still owed** - not browser-verified in this sandbox.
 
-**I.3 - Identity, relationships, and preparation display.**
-- Category name + description (already-loaded data, new rendering only).
-- "Can provide" / "Can be replaced by" read-only sections.
-- Preparation section: inputs + quantities/units + steps + per-input
-  satisfiability.
+**I.3 - Identity, relationships, and preparation display. DONE, 2026-09-13.**
+- Category name + description (already-loaded data, new rendering only) -
+  actually shipped as part of I.1's own expanded scope, not repeated here.
+- "Can provide" / "Can be replaced by" read-only sections - each row's
+  related-ingredient name is a tappable `IngredientLink` (reused as-is);
+  a small green dot is a secondary "you already have this" signal, reading
+  the app-wide resolved ownership Set (already household-basic-aware).
+  Decision/shaping logic extracted into a new pure
+  `src/domain/ingredientRelationships.js` (9 unit tests covering
+  directionality, no-reverse-fabrication, and that a recipe-specific
+  alternative has no path into this general list).
+- Preparation section: inputs + quantities/units (via the existing
+  `formatAmount()`) + ordered steps + per-input satisfiability (reusing
+  `isPreparationSatisfiable()`, called per-input with a 1-element array -
+  not a new check). The produced ingredient is never marked owned just
+  because its inputs are satisfiable.
 - *Acceptance:* Lemon's page shows "Can provide: Lemon Juice"; Simple
   Syrup's page shows its two inputs, their amounts, and its steps, with
   each input's own owned/missing state shown honestly; a type with none of
-  this configured shows none of these sections (no empty headings).
+  this configured shows none of these sections (no empty headings). **Not
+  yet browser-verified** - see `current-context.md`'s chunk entry for the
+  manual checks still owed (Lemon, White Rum, Simple Syrup).
 
 **I.4 - Admin affordance.**
 - Admin/moderator-only "Edit ingredient" link in the `TopBar`, to

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import clsx from "clsx"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { CocktailCard } from "@/components/CocktailCard"
+import { IngredientLink } from "@/components/detail/IngredientLink"
 import { IconBottle, IconGlass, IconStar } from "@/components/icons"
 import { TopBar } from "@/components/Nav"
 import {
@@ -11,6 +12,7 @@ import {
   SectionTitle,
 } from "@/components/primitives"
 import { AVAIL_GROUP_LABEL } from "@/data/constants"
+import { formatAmount } from "@/domain/availability"
 import {
   capGroupsByTotal,
   groupByDisplayTier,
@@ -20,6 +22,12 @@ import {
   toggleIngredientOwnership,
 } from "@/domain/ingredientOwnership"
 import { findRecipesUsingIngredient } from "@/domain/ingredientRecipeMatches"
+import {
+  resolveCanBeReplacedBy,
+  resolveCanProvide,
+  resolveHomemadePreparation,
+} from "@/domain/ingredientRelationships"
+import { isPreparationSatisfiable } from "@/domain/makeability"
 
 // Ingredient Detail Stage I.1: this screen used to group by raw `avail`
 // (it pre-dates Stage D's shared `display.tier` entirely - see
@@ -68,7 +76,15 @@ function matchAnnotation(match) {
 export default function IngredientDetailScreen({ kind }) {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { computed, catalog, inventory } = useOutletContext()
+  // `owned` renamed at destructure time to `resolvedOwnedTypeIds` - this is
+  // the app-wide resolved-ownership Set (App.jsx's `resolvedOwned`: direct
+  // ownership + product-mapped + ancestor walk + household basics already
+  // unioned in), used below for a secondary "do you have this related
+  // ingredient" indicator. Kept distinct from Stage I.2's own local `owned`
+  // (a boolean - "is THIS page's ingredient itself owned") so the two don't
+  // collide.
+  const { computed, catalog, inventory, owned: resolvedOwnedTypeIds, unit } =
+    useOutletContext()
   const { types, products } = catalog
 
   // Speed Rack pin/unpin lives here, not on the shelf tile (keeps the
@@ -138,6 +154,58 @@ export default function IngredientDetailScreen({ kind }) {
       setOwnershipPending(false)
     }
   }
+
+  // Ingredient Detail Stage I.3 - relationships + homemade preparation.
+  // Decision/shaping logic lives in domain/ingredientRelationships.js
+  // (pure, unit-tested there) so this component stays a thin caller; see
+  // that file for exactly why each is directional and never reads
+  // recipe_component_alternatives. Always keyed off `resolvedType.id` (the
+  // TYPE), never the product id - same rule as identity (I.1) and matching
+  // (below): these are facts about the ingredient TYPE, not one bottle.
+  const canProvideRows = resolvedType
+    ? resolveCanProvide(resolvedType.id, catalog.formConversions, types)
+    : []
+  const canBeReplacedByRows = resolvedType
+    ? resolveCanBeReplacedBy(
+        resolvedType.id,
+        catalog.ingredientSubstitutions,
+        types,
+      )
+    : []
+  const preparationRow = resolvedType
+    ? resolveHomemadePreparation(
+        resolvedType.id,
+        catalog.ingredientPreparations,
+        catalog.ingredientPreparationInputs,
+        types,
+      )
+    : null
+  // Reuses computeMakeability()'s exact input shape via
+  // isPreparationSatisfiable() below (per input), rather than inventing a
+  // new representation - `preparationRow.inputs` already has the shape it
+  // expects (ingredientTypeId/amount/unitLabel).
+  const preparationInputs = preparationRow?.inputs ?? []
+
+  // Household-basic id set + camelCase form-conversion list - both needed
+  // by `isPreparationSatisfiable()` below, neither exposed via outlet
+  // context today (App.jsx keeps them as its own local variables feeding
+  // computeMakeability directly) - recomputed here the same one-line way
+  // App.jsx already does, rather than widening shared context for one
+  // screen's read of a per-input "do you have this" signal.
+  const householdBasicIds = useMemo(
+    () =>
+      new Set(catalog.types.filter((t) => t.assumed_available).map((t) => t.id)),
+    [catalog.types],
+  )
+  const formConversionsForSatisfiability = useMemo(
+    () =>
+      (catalog.formConversions ?? []).map((c) => ({
+        rawTypeId: c.raw_type_id,
+        preparedTypeId: c.prepared_type_id,
+        guidance: c.guidance,
+      })),
+    [catalog.formConversions],
+  )
 
   const allMatches = useMemo(() => {
     if (!resolvedType) return []
@@ -273,6 +341,140 @@ export default function IngredientDetailScreen({ kind }) {
             </>
           )}
         </div>
+
+        {/* Ingredient Detail Stage I.3 - relationships. Each section is
+            only rendered when data exists (no empty headings). Directional
+            by construction: "Can provide"/"Can be replaced by" only ever
+            look up this type's own from/raw side, never the reverse - the
+            plan's own explicit "do not add the reverse direction" scope
+            boundary means there is no code path here that could show one. */}
+        {canProvideRows.length > 0 && (
+          <div className="mb-4">
+            <SectionTitle>Can provide</SectionTitle>
+            <p className="text-xs text-tx3 mb-2 leading-snug">
+              One-way - doesn't mean the reverse is also true.
+            </p>
+            <div className="flex flex-col gap-2">
+              {canProvideRows.map((row) => (
+                <div
+                  key={row.preparedTypeId}
+                  className="rounded-sm border border-bdr bg-surface2 p-2.5"
+                >
+                  <div className="flex items-center gap-2">
+                    {/* Secondary availability signal only (per the plan's
+                        "keep this secondary" instruction) - reads the same
+                        resolved ownership Set every other screen already
+                        reads, no new availability system. */}
+                    {resolvedOwnedTypeIds.has(row.preparedTypeId) && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-green shrink-0" />
+                    )}
+                    <IngredientLink
+                      ingId={row.preparedTypeId}
+                      className="text-[13px] text-tx font-display font-semibold"
+                    >
+                      {row.preparedName}
+                    </IngredientLink>
+                  </div>
+                  {row.guidance && (
+                    <div className="text-xs text-tx2 mt-0.5">
+                      {row.guidance}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {canBeReplacedByRows.length > 0 && (
+          <div className="mb-4">
+            <SectionTitle>Can be replaced by</SectionTitle>
+            <p className="text-xs text-tx3 mb-2 leading-snug">
+              One-way - doesn't mean these can replace {displayName} back.
+            </p>
+            <div className="flex flex-col gap-2">
+              {canBeReplacedByRows.map((row) => (
+                <div
+                  key={row.toTypeId}
+                  className="rounded-sm border border-bdr bg-surface2 p-2.5"
+                >
+                  <div className="flex items-center gap-2">
+                    {resolvedOwnedTypeIds.has(row.toTypeId) && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-green shrink-0" />
+                    )}
+                    <IngredientLink
+                      ingId={row.toTypeId}
+                      className="text-[13px] text-tx font-display font-semibold"
+                    >
+                      {row.toName}
+                    </IngredientLink>
+                  </div>
+                  {row.flavorNote && (
+                    <div className="text-xs text-tx2 mt-0.5">
+                      {row.flavorNote}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {preparationRow && (
+          <div className="mb-4">
+            <SectionTitle>Homemade preparation</SectionTitle>
+            {/* Only shown when it adds information beyond the page's own
+                title, same rule as the product/type name line above. */}
+            {preparationRow.name && preparationRow.name !== displayName && (
+              <p className="text-[13px] text-tx font-display font-semibold mb-1.5">
+                {preparationRow.name}
+              </p>
+            )}
+            <div className="flex flex-col gap-1.5 mb-2.5">
+              {preparationInputs.map((input) => (
+                <div
+                  key={input.ingredientTypeId}
+                  className="flex items-center gap-2"
+                >
+                  {/* Per-input satisfiability (Stage D.1's own helper, not
+                      a new check) - "you have 1 of 2," never implying the
+                      produced ingredient itself is owned just because its
+                      inputs are on hand. */}
+                  {isPreparationSatisfiable(
+                    [input],
+                    resolvedOwnedTypeIds,
+                    householdBasicIds,
+                    formConversionsForSatisfiability,
+                  ) && <span className="w-1.5 h-1.5 rounded-full bg-green shrink-0" />}
+                  <IngredientLink
+                    ingId={input.ingredientTypeId}
+                    className="text-[13px] text-tx font-body"
+                  >
+                    {input.name}
+                  </IngredientLink>
+                  <span className="text-[13px] font-mono text-tx2 ml-auto whitespace-nowrap">
+                    {formatAmount(
+                      { amount: input.amount, unitLabel: input.unitLabel },
+                      unit,
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+            {preparationRow.instructions?.length > 0 && (
+              <>
+                <div className="text-[11px] font-bold text-tx3 uppercase tracking-[0.06em] mb-1.5 font-display">
+                  Steps
+                </div>
+                <ol className="list-decimal list-inside text-[13px] text-tx2 flex flex-col gap-1">
+                  {preparationRow.instructions.map((step, i) => (
+                    <li key={i}>{step}</li>
+                  ))}
+                </ol>
+              </>
+            )}
+          </div>
+        )}
 
         {totalCount === 0 ? (
           <div className="flex flex-col items-center justify-center py-15 px-6 gap-3 text-tx3">
