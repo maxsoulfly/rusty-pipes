@@ -254,8 +254,7 @@ recalculates as makeable with no manual reload; (2) a household basic
 (e.g. Water) shows the explanatory line, never a button, on its own
 detail page.
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `0703a3a`. `docs/project.md` untouched.
 
 ---
 
