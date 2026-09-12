@@ -31,7 +31,7 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
 18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms (Concept 2) + Suggested Substitutes (Stage B) shipped via `docs/plans/substitutes-and-variations.md` (Stages A/B, DONE 2026-09-10). Homemade Preparations SUPERSEDED 2026-09-11 by a smaller design in that same doc ("Stage D — Adapted Availability & Minimal Homemade Preparations"), then that smaller design itself SHIPPED as Stage D.3 the same day. Stage D (D.1 adapted availability, D.2 discovery/grouping/ordering, D.3 tier-5 preparations, D.4 counts/breakdown + real Daiquiri catalogue rows, D.5 per-component exclusion + Buy Next ranking) is FULLY DONE + pushed 2026-09-11, **manually verified working correctly in the running app 2026-09-12, and the adapted category's user-facing name finalized as "Make With Adaptations"** (was "Make With Substitutions"). **Stage D is feature-complete and verified - nothing outstanding.** See item 0 and the chunk entries below. Linked cocktail variations (Stage C) remain NOT started, independent, on a separate go-ahead.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
 
-19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **I.1 DONE + pushed 2026-09-12.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, and "cocktails using this" → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, and the single shared `useInventory()` instance; no schema changes (the ingredient description field this feature surfaces already exists, just unrendered). Staged **I.1 done** (tappable ingredient-name links from `IngredientsSection.jsx` + the ingredient detail page's grouping switched to the shared `display.tier`, plus basic identity - category/description - now rendered) → **I.2 NOT started** (My Bar Add/Remove) → **I.3 NOT started** (relationships + preparation display) → **I.4 NOT started** (admin edit link). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer.
+19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **I.1 + I.2 DONE + pushed 2026-09-12.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, and "cocktails using this" → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, and the single shared `useInventory()` instance; no schema changes (the ingredient description field this feature surfaces already exists, just unrendered). Staged **I.1 done** (tappable ingredient-name links from `IngredientsSection.jsx` and `HeroCard.jsx`'s missing-ingredient callout + the ingredient detail page's grouping switched to the shared `display.tier`, plus basic identity - category/description - now rendered) → **I.2 done** (My Bar Add/Remove action, household-basic-aware, reusing `inventory.toggleType`/`toggleProduct`) → **I.3 NOT started** (relationships + preparation display) → **I.4 NOT started** (admin edit link). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer.
 
 Each numbered step is a development chunk boundary for this file.
 
@@ -45,11 +45,59 @@ Each numbered step is a development chunk boundary for this file.
 
    **I.1 follow-up (same day):** `HeroCard.jsx`'s "Missing: X" panel (the recipe's own detail page, e.g. "Missing: Tomato Juice" on the Bloody Mary) now links each missing ingredient's name the same way, via a new shared `src/components/detail/IngredientLink.jsx` (extracted since `IngredientsSection.jsx` needed the identical treatment). Deliberately NOT touched: `CocktailCard.jsx`/`SmallCard.jsx`'s grid-card badges and `HomeScreen.jsx`'s "Almost There" row - all three sit inside an element whose entire container already navigates to that cocktail, so nesting a link would conflict with that existing behavior.
 
-   **Not touched (later stages, unchanged this turn):** My Bar Add/Remove action (I.2), Can-provide/Can-be-replaced-by/preparation display (I.3), admin edit link (I.4). No new routes, no migrations, no catalogue data changes.
+   **I.2 shipped (My Bar Add/Remove action), 2026-09-12:**
+   `IngredientDetailScreen.jsx` now shows, right under identity (category/
+   description), a prominent `Btn` - "Add to My Bar" (primary) when not
+   owned, "Remove from My Bar" (secondary) when owned - for both
+   `kind="type"` and `kind="product"`. Clicking it calls the exact same
+   shared `inventory.toggleType()`/`toggleProduct()` every other My Bar
+   surface already calls (`useInventory.js`, one shared `AppShell`
+   instance) - no second write path, no new Supabase call. Because
+   `computed`/`owned` are derived from that same shared inventory state on
+   every render, navigating back to the cocktail that linked here shows it
+   recalculated with zero special-case refresh code - the architecture
+   Stage I.1's plan already banked on. A household-basic type
+   (`resolvedType.assumed_available`) shows a non-editable "Household basic
+   · Always considered available - not tracked as an owned item" line
+   instead of a button, for both `kind`s (the flag lives on the type, so a
+   product mapped to one is equally not a real per-user row to toggle). A
+   `kind="type"` page's `owned` read is a combined check (mirrors
+   `MyBarScreen.jsx`'s own `isOwned = ownedTypeIds.has(id) ||
+   productsByType.has(id)`) so a type owned only via a mapped product
+   doesn't wrongly show "Add" - the toggle itself still only ever writes
+   the generic row, matching `TypeCard.jsx`'s already-established rule (a
+   documented, pre-existing edge case, not a new one). Local
+   `ownershipPending`/`ownershipError` state disables the button and shows
+   "Adding…"/"Removing…" during the write (preventing a double-tap double
+   write) and surfaces a failure inline - `useInventory.js`'s own optimistic
+   update + `load()`-based rollback on failure is still the only place
+   ownership actually lives, so a failed write can never leave the button
+   showing a state that isn't real.
 
-   **Verified:** `pnpm test` 316/316 (unchanged - styling-only), build clean (174 modules). No RLS/migration impact. I.1's core functional flow (tap → navigate → Back; adapted recipe groups correctly) is now **user-confirmed passed**, per this turn's request; the visual polish itself has not had a separate browser confirmation round yet.
+   **Extracted `src/domain/ingredientOwnership.js`** (pure,
+   `resolveIngredientOwnershipState()` + `toggleIngredientOwnership()`) so
+   the household-basic/combined-ownership decision and the
+   type-vs-product mutation dispatch are unit-testable without rendering
+   (this project's vitest setup has no jsdom/component testing) - 10 new
+   tests. The screen component itself stays a thin caller.
 
-   **Exact next action:** the user reviews the restyled ingredient-name link (no underline, dot+name tap area, subtle hover/focus), then decides whether/when to proceed to I.2 (My Bar Add/Remove action).
+   **Not touched (later stages, unchanged this turn):** Can-provide/
+   Can-be-replaced-by/preparation display (I.3), admin edit link (I.4). No
+   new routes, no migrations, no schema/catalogue changes, no changes to
+   `useInventory.js`/`MyBarScreen.jsx`/any other My Bar surface.
+
+   **Verified:** `corepack pnpm@10.34.3 test` 326/326 (+10 new). `corepack
+   pnpm@10.34.3 build` clean (176 modules). `git status` confirmed exactly
+   3 files changed (`IngredientDetailScreen.jsx` + 2 new domain files);
+   `docs/project.md` untouched. **Not browser-verified** (no browser
+   tooling in this sandbox) - see the chunk entry below for the two manual
+   checks still owed.
+
+   **Exact next action:** the user manually verifies I.2 (Bloody Mary →
+   tap Tomato Juice → Add to My Bar → Back → Bloody Mary recalculates with
+   no manual reload; a household basic like Water shows the explanatory
+   line, never a button), then decides whether/when to proceed to I.3
+   (relationships + preparation display).
 
 **Stage D itself (`docs/plans/substitutes-and-variations.md`) is feature-complete AND manually verified, 2026-09-12 - nothing outstanding.** D.1 through D.5 all DONE + pushed 2026-09-11; the Daiquiri (and other adapted cocktails, e.g. Gin Fizz) confirmed resolving correctly in the running app, Home showing "10 cocktails possible · 5 ready, 5 with substitutions or preparation." The adapted discovery category's name is finalized as **"Make With Adaptations"** (was "Make With Substitutions," renamed 2026-09-12 - see the chunk entry below for exactly what did/didn't change; the cocktail-level composed status text like "Make with substitutions · Prepare syrup first" is a different, more specific mechanism and was deliberately left alone). Stage C (Linked Variations) remains NOT started, independent, on a separate go-ahead whenever the user wants it. See the chunk entries below for the full history.
 
@@ -141,6 +189,73 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 needed). No migrations, no schema change - not needed to fix this.
 
 **Commit:** `7a22526`. `docs/project.md` untouched.
+
+---
+
+## Last completed chunk (Ingredient Detail Stage I.2 implemented - My Bar Add/Remove action, 2026-09-12 — 3 files, no migrations, no catalogue changes)
+
+**Scope: exactly I.2** - the ownership action on `IngredientDetailScreen.jsx`.
+Explicitly not this turn: I.3 (relationships/preparation), I.4 (admin edit
+link), any schema change, any change to `useInventory.js`,
+`MyBarScreen.jsx`, or any other My Bar surface.
+
+**`IngredientDetailScreen.jsx`:** a prominent `Btn` right under identity
+(category/description) - "Add to My Bar" (primary) / "Remove from My Bar"
+(secondary) - for both `kind="type"` and `kind="product"`, calling the
+existing shared `inventory.toggleType()`/`toggleProduct()`
+(`useInventory.js`, the one `AppShell` instance every other screen already
+uses) - no second write path, no new Supabase call. A household basic
+(`resolvedType.assumed_available` - the flag lives on the TYPE, checked
+regardless of `kind`) shows a non-editable "Household basic · Always
+considered available - not tracked as an owned item" line instead, never a
+button. A `kind="type"` page's owned-read is combined (mirrors
+`MyBarScreen.jsx`'s own `isOwned = ownedTypeIds.has(id) ||
+productsByType.has(id)`), so a type owned only via a mapped product
+doesn't wrongly show "Add" - the toggle itself still only ever writes the
+generic row (matches `TypeCard.jsx`'s already-established rule; this
+exact edge case - tapping "Remove" while owned only via a product adds a
+new generic row rather than removing anything - already exists identically
+on `TypeCard.jsx`'s own checkmark, so this is parity, not a new gap).
+Local `ownershipPending`/`ownershipError` state disables the button and
+shows "Adding…"/"Removing…" mid-write (stops a double-tap from firing two
+writes) and surfaces a failure inline - `useInventory.js`'s own optimistic
+update + `load()`-based rollback on failure is still the only place
+ownership state actually lives, so a failed write can never leave the
+button showing something that isn't real.
+
+**New `src/domain/ingredientOwnership.js`** (pure,
+`resolveIngredientOwnershipState()` + `toggleIngredientOwnership()`) -
+extracted so the household-basic/combined-ownership decision and the
+type-vs-product mutation dispatch are unit-testable without rendering
+(this project's vitest setup has no jsdom/component testing - see
+AGENTS.md). The screen component itself stays a thin caller of both.
+
+**10 new tests** in `ingredientOwnership.test.js`: unowned type → not
+owned; owned type (direct row) → owned; owned-only-via-mapped-product →
+still reads owned; an unrelated product doesn't count; household basic
+reports `isHouseholdBasic` for both `kind`s regardless of the owned value;
+a `kind: "product"` read only consults `ownedProductIds` (the type being
+owned doesn't count for one specific bottle); re-deriving with an updated
+owned set reflects the new state (proves the read is live, never a stale
+snapshot); `toggleIngredientOwnership` dispatches to `toggleType` for
+`kind: "type"` and never calls `toggleProduct`, and the reverse for
+`kind: "product"`; a rejected mutation propagates rather than being
+swallowed (proves a failure can't silently leave local state wrong).
+
+**Verified:** `corepack pnpm@10.34.3 test` **326/326** (+10 new).
+`corepack pnpm@10.34.3 build` clean (176 modules, +1 for the new domain
+file). Diff reviewed for scope creep before committing - exactly 3 files
+changed (`IngredientDetailScreen.jsx`, new `ingredientOwnership.js` +
+`.test.js`); `docs/project.md` untouched. No migration, no RLS surface
+touched - `db advisors` not applicable. **Not browser-verified** (no
+browser tooling in this sandbox) - two manual checks still owed: (1)
+Bloody Mary → tap Tomato Juice → Add to My Bar → Back → Bloody Mary
+recalculates as makeable with no manual reload; (2) a household basic
+(e.g. Water) shows the explanatory line, never a button, on its own
+detail page.
+
+**Commit:** see the git log for the exact hash. `docs/project.md`
+untouched.
 
 ---
 

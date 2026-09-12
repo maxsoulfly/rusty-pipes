@@ -6,10 +6,11 @@ substitutes-and-variations.md`) shipped and was manually verified. This
 feature reuses Stage D's shared `computeMakeability()` result rather than
 introducing a second one.
 
-**Status: Stage I.1 DONE + pushed, 2026-09-12** (tappable ingredient
-links, shared-tier grouping, basic identity display - see the Staged
-implementation plan section below for exactly what shipped and what's
-still not started). Stages I.2-I.4 not started.
+**Status: Stages I.1 and I.2 DONE + pushed, 2026-09-12** (tappable
+ingredient links, shared-tier grouping, basic identity display, and the
+My Bar Add/Remove action - see the Staged implementation plan section
+below for exactly what shipped and what's still not started). Stages
+I.3-I.4 not started.
 
 ---
 
@@ -336,13 +337,22 @@ layer in richer content, then admin polish"**:
   target without moving it into the link's own DOM. Styling-only, one
   file (`IngredientsSection.jsx`) - no route/logic change.
 
-**I.2 - My Bar action (Add/Remove).**
+**I.2 - My Bar action (Add/Remove). DONE, 2026-09-12.**
 - The prominent ownership button described above, `type` and `product`
   variants, household-basic explanatory line instead of a button.
+  Decision logic (household-basic check, combined-ownership read for
+  `kind="type"`, and the type-vs-product mutation dispatch) extracted
+  into a new pure `src/domain/ingredientOwnership.js` (10 unit tests) so
+  it's testable without rendering; the screen calls it and adds only
+  local pending/error UI state around the existing `toggleType`/
+  `toggleProduct` calls.
 - *Acceptance:* adding/removing ownership here updates My Bar and Buy Next
   immediately (same shared `inventory` instance); navigating back to the
   cocktail that linked here shows it recalculated with no special-case
   code; a household-basic ingredient never shows an Add/Remove control.
+  **User verification of the actual flow (Bloody Mary → Tomato Juice →
+  Add → Back → recalculated; a household basic shows the explanatory
+  line) is still owed** - not browser-verified in this sandbox.
 
 **I.3 - Identity, relationships, and preparation display.**
 - Category name + description (already-loaded data, new rendering only).

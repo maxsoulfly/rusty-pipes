@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import clsx from "clsx"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
 import { CocktailCard } from "@/components/CocktailCard"
@@ -15,6 +15,10 @@ import {
   capGroupsByTotal,
   groupByDisplayTier,
 } from "@/domain/availabilityGroups"
+import {
+  resolveIngredientOwnershipState,
+  toggleIngredientOwnership,
+} from "@/domain/ingredientOwnership"
 import { findRecipesUsingIngredient } from "@/domain/ingredientRecipeMatches"
 
 // Ingredient Detail Stage I.1: this screen used to group by raw `avail`
@@ -98,6 +102,42 @@ export default function IngredientDetailScreen({ kind }) {
   const category = resolvedType
     ? catalog.categories.find((c) => c.id === resolvedType.category_id)
     : null
+
+  // Ingredient Detail Stage I.2 - My Bar action. Decision logic lives in
+  // domain/ingredientOwnership.js (pure, unit-tested there) so this
+  // component stays thin; no new ownership model or write path - see that
+  // file's own comments for exactly what's reused from MyBarScreen.jsx/
+  // IngredientTypeEditor.jsx/useInventory.js.
+  const { isHouseholdBasic, owned } = resolveIngredientOwnershipState({
+    kind,
+    id,
+    resolvedType,
+    products,
+    ownedTypeIds: inventory.ownedTypeIds,
+    ownedProductIds: inventory.ownedProductIds,
+  })
+
+  // Local pending/error state only - `toggleType`/`toggleProduct`
+  // (useInventory.js) already apply the ownership change optimistically
+  // and roll back to real state on failure via their own `load()`; this
+  // component only needs to (a) disable the button and show a transient
+  // label while the write is in flight, so a slow connection can't be
+  // double-tapped into two writes, and (b) surface a failure inline - the
+  // hook itself never lies about ownership on a failed write. No new
+  // Supabase call, no second ownership path.
+  const [ownershipPending, setOwnershipPending] = useState(false)
+  const [ownershipError, setOwnershipError] = useState(null)
+  const handleToggleOwnership = async () => {
+    setOwnershipError(null)
+    setOwnershipPending(true)
+    try {
+      await toggleIngredientOwnership(kind, id, inventory)
+    } catch (err) {
+      setOwnershipError(err.message)
+    } finally {
+      setOwnershipPending(false)
+    }
+  }
 
   const allMatches = useMemo(() => {
     if (!resolvedType) return []
@@ -192,6 +232,47 @@ export default function IngredientDetailScreen({ kind }) {
             )}
           </div>
         )}
+
+        {/* Ingredient Detail Stage I.2 - the My Bar action. Placed right
+            under identity, above "cocktails using this" - the whole point
+            (fix ownership without leaving the page) needs to be reachable
+            immediately, not buried under a long recipe list. */}
+        <div className="mb-4">
+          {isHouseholdBasic ? (
+            <div className="flex items-center gap-2.5 rounded-sm border border-green/30 bg-green/10 py-2.5 px-3.5">
+              <span className="w-2 h-2 rounded-full bg-green shrink-0" />
+              <div>
+                <div className="text-[13px] font-body font-medium text-tx">
+                  Household basic
+                </div>
+                <div className="text-xs text-tx3 leading-snug">
+                  Always considered available - not tracked as an owned
+                  item.
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <Btn
+                variant={owned ? "secondary" : "primary"}
+                full
+                disabled={ownershipPending}
+                onClick={handleToggleOwnership}
+              >
+                {owned
+                  ? ownershipPending
+                    ? "Removing..."
+                    : "Remove from My Bar"
+                  : ownershipPending
+                    ? "Adding..."
+                    : "Add to My Bar"}
+              </Btn>
+              {ownershipError && (
+                <p className="mt-1.5 text-xs text-coral">{ownershipError}</p>
+              )}
+            </>
+          )}
+        </div>
 
         {totalCount === 0 ? (
           <div className="flex flex-col items-center justify-center py-15 px-6 gap-3 text-tx3">
