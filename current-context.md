@@ -39,13 +39,15 @@ Each numbered step is a development chunk boundary for this file.
 
 0. **`docs/plans/ingredient-detail-page.md` — Stage I.1 DONE + pushed 2026-09-12.** Next feature after Stage D: make ingredients navigable first-class objects (tap an ingredient name on a recipe page → its own detail page → Add/Remove My Bar right there → back to the recipe, already recalculated). **Read that file before starting the next stage** - it's the source of truth for this item. This enriches the ingredient/bottle detail screen that already existed (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as part of item 16's Stage 3/4) rather than building a new one.
 
-   **I.1 shipped this turn:** `IngredientsSection.jsx`'s ingredient name (not the whole row - the row already owns the preparation-expand button from Stage D.3) is now a `Link` to `/bar/type/${ri.ingId}` (always the type route - a recipe component's `ingId` is never a product id), padded via `-my-3 py-3 -mx-1 px-1` to a real ≥44px tap target without changing the row's visual height. `IngredientDetailScreen.jsx`'s "cocktails using this" grouping switched from a local, `avail`-keyed `GROUP_ORDER`/`GROUP_LABEL` to the shared `groupByDisplayTier()` (Stage D.2) plus a new shared `capGroupsByTotal()` helper (added to `domain/availabilityGroups.js` this turn, unit-tested) that applies the existing "cap at 10 total" rule on top without re-flattening the tiers - a cocktail resolvable only via adaptation now correctly shows under "Make With Adaptations" here too, not "Unavailable". The screen also now renders basic identity: category name (`catalog.categories` looked up by `resolvedType.category_id`) and `resolvedType.description` when non-blank - both fields already existed and were already fetched, just never rendered to a member before now; no schema change. `AVAIL_GROUP_LABEL` (the tier-heading dict) was extracted from `LibraryScreen.jsx` into `src/data/constants.js` so both screens share one copy instead of `IngredientDetailScreen` keeping its own second (and, until this turn, stale/avail-based) one.
+   **I.1 shipped:** `IngredientsSection.jsx`'s ingredient name (not the whole row - the row already owns the preparation-expand button from Stage D.3) is now a `Link` to `/bar/type/${ri.ingId}` (always the type route - a recipe component's `ingId` is never a product id), padded to a real ≥44px tap target without changing the row's visual height. `IngredientDetailScreen.jsx`'s "cocktails using this" grouping switched from a local, `avail`-keyed `GROUP_ORDER`/`GROUP_LABEL` to the shared `groupByDisplayTier()` (Stage D.2) plus a new shared `capGroupsByTotal()` helper (added to `domain/availabilityGroups.js`, unit-tested) that applies the existing "cap at 10 total" rule on top without re-flattening the tiers - a cocktail resolvable only via adaptation now correctly shows under "Make With Adaptations" here too, not "Unavailable". The screen also now renders basic identity: category name (`catalog.categories` looked up by `resolvedType.category_id`) and `resolvedType.description` when non-blank - both fields already existed and were already fetched, just never rendered to a member before now; no schema change. `AVAIL_GROUP_LABEL` (the tier-heading dict) was extracted from `LibraryScreen.jsx` into `src/data/constants.js` so both screens share one copy instead of `IngredientDetailScreen` keeping its own second (and, until this turn, stale/avail-based) one.
+
+   **I.1 polish pass (same day, after functional manual verification passed):** the user found the ingredient-name link's permanent underline visually noisy/too-hyperlink-like for a dense ingredient list. Restyled `IngredientsSection.jsx`'s `Link` only - no underline, typography reverted to plain pre-I.1 text (`text-sm text-tx font-body`); interactivity now communicated via a subtle neutral hover/active tint (`hover:bg-tx3/10`/`active:bg-tx3/15`, not a link-blue color change) plus a visible keyboard focus ring (`focus-visible:ring-2 ring-inset ring-cyan`, matching `Card`'s own existing convention in `primitives.jsx`). The link's invisible hit area now also bleeds left by exactly the dot's width + its gap (`pl-5 -ml-5`, canceling in layout) so the status dot right next to the name is effectively part of the same tap target, without moving the dot into the link's own DOM or changing its independent styling/meaning. Vertical ≥44px padding (`py-3 -my-3`) unchanged from I.1. No navigation/route/makeability change.
 
    **Not touched (later stages, unchanged this turn):** My Bar Add/Remove action (I.2), Can-provide/Can-be-replaced-by/preparation display (I.3), admin edit link (I.4). No new routes, no migrations, no catalogue data changes.
 
-   **Verified:** `pnpm test` 316/316 (+5 new: `capGroupsByTotal` cases in `availabilityGroups.test.js`), build clean (174 modules). No RLS/migration impact (no schema touched) - `db advisors` not applicable. **Not browser-verified** (no browser tooling in this sandbox) - the tap-to-navigate flow and the identity/grouping rendering are unconfirmed in a running app; see the chunk entry below for the two manual checks still owed.
+   **Verified:** `pnpm test` 316/316 (unchanged - styling-only), build clean (174 modules). No RLS/migration impact. I.1's core functional flow (tap → navigate → Back; adapted recipe groups correctly) is now **user-confirmed passed**, per this turn's request; the visual polish itself has not had a separate browser confirmation round yet.
 
-   **Exact next action:** the user manually verifies I.1 (tap an ingredient name on a recipe with a missing ingredient → lands on its detail page → Back returns to the recipe; an adapted recipe like the Daiquiri shows under "Make With Adaptations" on that ingredient's own page), then decides whether/when to proceed to I.2 (My Bar Add/Remove action).
+   **Exact next action:** the user reviews the restyled ingredient-name link (no underline, dot+name tap area, subtle hover/focus), then decides whether/when to proceed to I.2 (My Bar Add/Remove action).
 
 **Stage D itself (`docs/plans/substitutes-and-variations.md`) is feature-complete AND manually verified, 2026-09-12 - nothing outstanding.** D.1 through D.5 all DONE + pushed 2026-09-11; the Daiquiri (and other adapted cocktails, e.g. Gin Fizz) confirmed resolving correctly in the running app, Home showing "10 cocktails possible · 5 ready, 5 with substitutions or preparation." The adapted discovery category's name is finalized as **"Make With Adaptations"** (was "Make With Substitutions," renamed 2026-09-12 - see the chunk entry below for exactly what did/didn't change; the cocktail-level composed status text like "Make with substitutions · Prepare syrup first" is a different, more specific mechanism and was deliberately left alone). Stage C (Linked Variations) remains NOT started, independent, on a separate go-ahead whenever the user wants it. See the chunk entries below for the full history.
 
@@ -137,6 +139,49 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 needed). No migrations, no schema change - not needed to fix this.
 
 **Commit:** `7a22526`. `docs/project.md` untouched.
+
+---
+
+## Last completed chunk (Ingredient Detail Stage I.1 polish - link styling only, 2026-09-12 — 1 file, no migrations, no catalogue changes)
+
+**Trigger:** the user manually verified I.1's functional flow (ingredient
+names navigate correctly, Back returns to the cocktail) but disliked the
+visual treatment - the ingredient name's permanent underline read as a
+conventional browser hyperlink, visually noisy in a dense ingredient list
+and inconsistent with the rest of the app's look.
+
+**Scope: styling only, one file (`IngredientsSection.jsx`), no other
+change.** No route/navigation change, no makeability logic touched.
+
+- Removed the permanent underline; the link's typography reverted to the
+  plain pre-I.1 look (`text-sm text-tx font-body`, same as the static
+  `<span>` it replaced).
+- Interactivity is now communicated only via a subtle neutral hover/active
+  background tint (`hover:bg-tx3/10`, `active:bg-tx3/15` - not a
+  link-colored change) plus a visible keyboard focus ring
+  (`focus-visible:ring-2 ring-inset ring-cyan`), reusing the exact ring
+  convention `Card` already uses elsewhere (`primitives.jsx`) rather than
+  inventing a new focus style.
+- The link's real (invisible at rest) hit area now bleeds left by exactly
+  the status dot's width plus its `gap-3` (`pl-5 -ml-5` = 20px, canceling
+  in layout) so the dot immediately to the name's left is effectively part
+  of the same tap target, without restructuring the DOM (the dot stays a
+  separate sibling with its own independent color/meaning) - satisfies
+  "dot + name is the natural tap target" without the complexity of a
+  separate absolutely-positioned hit-area overlay.
+- The existing ≥44px vertical tap-target padding (`py-3 -my-3`) is
+  unchanged from I.1 - only the horizontal bleed and the visual/typography
+  treatment changed this turn.
+- The row itself is still not clickable - quantity and the preparation-
+  expand button (Stage D.3) keep their own independent behavior, unchanged.
+
+**Verified:** `corepack pnpm@10.34.3 test` 316/316 (unchanged - no logic
+touched). `corepack pnpm@10.34.3 build` clean (174 modules). `git status`
+confirmed only `IngredientsSection.jsx` changed; `docs/project.md`
+untouched.
+
+**Commit:** see the git log for the exact hash (this file's update lands
+in the same commit/push as the styling fix). `docs/project.md` untouched.
 
 ---
 

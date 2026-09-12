@@ -303,11 +303,16 @@ layer in richer content, then admin polish"**:
   opens that ingredient's page; a cocktail resolvable only via adaptation
   now correctly appears under "Make With Adaptations" here too, not
   "Unavailable"; existing Speed-Rack/"View all"/not-found behavior is
-  unchanged. **Verified:** `pnpm test` 316/316 (+5), `pnpm build` clean.
-  **Not yet browser-verified** - see `current-context.md`'s chunk entry
-  for the two manual checks still owed (tap-through-and-back on a real
-  missing ingredient; an adapted recipe showing under "Make With
-  Adaptations" on its own ingredient's page).
+  unchanged. **User-confirmed passed** (functional flow: navigate + Back).
+- **Polish pass (same day):** the ingredient-name link's permanent
+  underline read as a conventional hyperlink and was visually noisy in a
+  dense ingredient list. Restyled: no underline, typography back to plain
+  pre-I.1 text; interactivity communicated via a subtle neutral hover/
+  active tint + a visible focus ring (matching `Card`'s existing
+  convention) instead; the link's invisible hit area bleeds left by the
+  status dot's width so the dot is effectively part of the same tap
+  target without moving it into the link's own DOM. Styling-only, one
+  file (`IngredientsSection.jsx`) - no route/logic change.
 
 **I.2 - My Bar action (Add/Remove).**
 - The prominent ownership button described above, `type` and `product`
