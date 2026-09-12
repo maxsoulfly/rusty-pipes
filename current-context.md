@@ -319,8 +319,7 @@ existing catalogue data: Lemon ("Can provide: Lemon Juice"), White Rum
 (two inputs with amounts/units, numbered steps, each input's dot
 reflecting real ownership).
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `afc79c3`. `docs/project.md` untouched.
 
 ---
 
