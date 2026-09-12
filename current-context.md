@@ -198,8 +198,7 @@ the new file). `git status` confirmed exactly 3 files changed
 logic change - `c.missingRequired`/`c.missingRequiredIds` are read as-is,
 never recomputed.
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `52bded1`. `docs/project.md` untouched.
 
 ---
 
