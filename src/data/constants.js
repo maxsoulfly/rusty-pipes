@@ -19,6 +19,22 @@
 // filter (Library/Lists).
 export const ADAPTED_CATEGORY_LABEL = "Make With Adaptations"
 
+// Shared "grouped by makeability" section headings - matches
+// HomeScreen.jsx's own section names exactly, for the same tiers.
+// AVAIL_CFG's own `label` (primitives.jsx - "Perfect", not "Ready to Pour")
+// is a different, shorter string used on the per-card badge, kept as-is;
+// this is the group HEADING text specifically. Extracted from
+// LibraryScreen.jsx (Ingredient Detail Stage I.1, `docs/plans/
+// ingredient-detail-page.md`) so IngredientDetailScreen can share the exact
+// same wording instead of keeping a second, drifting copy.
+export const AVAIL_GROUP_LABEL = {
+  perfect: "Ready to Pour",
+  good: "Good Enough",
+  adapted: ADAPTED_CATEGORY_LABEL,
+  almost: "Almost There",
+  unavail: "Unavailable",
+}
+
 // Keys match computeMakeability()'s `display.tier` (Stage D.1/D.2,
 // src/domain/makeability.js) - "adapted" was added 2026-09-11 for a recipe
 // resolvable via a configured, owned general substitute or a satisfiable

@@ -31,13 +31,21 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
 18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms (Concept 2) + Suggested Substitutes (Stage B) shipped via `docs/plans/substitutes-and-variations.md` (Stages A/B, DONE 2026-09-10). Homemade Preparations SUPERSEDED 2026-09-11 by a smaller design in that same doc ("Stage D — Adapted Availability & Minimal Homemade Preparations"), then that smaller design itself SHIPPED as Stage D.3 the same day. Stage D (D.1 adapted availability, D.2 discovery/grouping/ordering, D.3 tier-5 preparations, D.4 counts/breakdown + real Daiquiri catalogue rows, D.5 per-component exclusion + Buy Next ranking) is FULLY DONE + pushed 2026-09-11, **manually verified working correctly in the running app 2026-09-12, and the adapted category's user-facing name finalized as "Make With Adaptations"** (was "Make With Substitutions"). **Stage D is feature-complete and verified - nothing outstanding.** See item 0 and the chunk entries below. Linked cocktail variations (Stage C) remain NOT started, independent, on a separate go-ahead.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
 
-19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **planning done 2026-09-12, not started.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, and "cocktails using this" → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, and the single shared `useInventory()` instance; no schema changes (the ingredient description field this feature surfaces already exists, just unrendered). Staged **I.1** (tappable links from `DetailScreen` + shared-tier grouping) → **I.2** (My Bar Add/Remove) → **I.3** (relationships + preparation display) → **I.4** (admin edit link). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer.
+19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **I.1 DONE + pushed 2026-09-12.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, and "cocktails using this" → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, and the single shared `useInventory()` instance; no schema changes (the ingredient description field this feature surfaces already exists, just unrendered). Staged **I.1 done** (tappable ingredient-name links from `IngredientsSection.jsx` + the ingredient detail page's grouping switched to the shared `display.tier`, plus basic identity - category/description - now rendered) → **I.2 NOT started** (My Bar Add/Remove) → **I.3 NOT started** (relationships + preparation display) → **I.4 NOT started** (admin edit link). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer.
 
 Each numbered step is a development chunk boundary for this file.
 
 ## Exact next action (2026-09-12)
 
-0. **`docs/plans/ingredient-detail-page.md` (new, 2026-09-12) — planning only, nothing implemented.** Next feature after Stage D: make ingredients navigable first-class objects (tap an ingredient name on a recipe page → its own detail page → Add/Remove My Bar right there → back to the recipe, already recalculated). **Read that file before starting implementation** - it's the source of truth for this item. Headline finding from the audit: **an ingredient/bottle detail screen and its two routes (`/bar/type/:id`, `/bar/product/:id`) already exist and are already linked from My Bar** (`IngredientDetailScreen.jsx`, shipped as part of item 16's Stage 3/4) - this feature *enriches* that existing screen (My Bar action, relationships, preparation display, shared-tier-based grouping, admin link) rather than building a new one, and reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, and the single shared `useInventory()` instance - no new domain logic, no schema changes (the one "new" field this feature surfaces, `ingredient_types.description`, already exists in the schema, just was never rendered to a member). Proposed stages **I.1** (tappable ingredient links from `DetailScreen`'s ingredient list + switch the existing ingredient-detail page's grouping from `avail` to the shared `display.tier`) → **I.2** (Add/Remove My Bar action, reusing `inventory.toggleType`/`toggleProduct`) → **I.3** (identity/category/description + Can-provide/Can-be-replaced-by + preparation display) → **I.4** (admin-only "Edit ingredient" link to `/admin?tab=types`, matching a pattern this project already tried once as an inline editor and deliberately replaced with a plain shortcut - see the plan doc's Audit section). **Exact next action:** the user reviews the plan and decides whether to proceed, and if so with which stage first (I.1 is recommended - it directly fixes the friction example, the Bloody Mary/Tomato Juice case).
+0. **`docs/plans/ingredient-detail-page.md` — Stage I.1 DONE + pushed 2026-09-12.** Next feature after Stage D: make ingredients navigable first-class objects (tap an ingredient name on a recipe page → its own detail page → Add/Remove My Bar right there → back to the recipe, already recalculated). **Read that file before starting the next stage** - it's the source of truth for this item. This enriches the ingredient/bottle detail screen that already existed (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as part of item 16's Stage 3/4) rather than building a new one.
+
+   **I.1 shipped this turn:** `IngredientsSection.jsx`'s ingredient name (not the whole row - the row already owns the preparation-expand button from Stage D.3) is now a `Link` to `/bar/type/${ri.ingId}` (always the type route - a recipe component's `ingId` is never a product id), padded via `-my-3 py-3 -mx-1 px-1` to a real ≥44px tap target without changing the row's visual height. `IngredientDetailScreen.jsx`'s "cocktails using this" grouping switched from a local, `avail`-keyed `GROUP_ORDER`/`GROUP_LABEL` to the shared `groupByDisplayTier()` (Stage D.2) plus a new shared `capGroupsByTotal()` helper (added to `domain/availabilityGroups.js` this turn, unit-tested) that applies the existing "cap at 10 total" rule on top without re-flattening the tiers - a cocktail resolvable only via adaptation now correctly shows under "Make With Adaptations" here too, not "Unavailable". The screen also now renders basic identity: category name (`catalog.categories` looked up by `resolvedType.category_id`) and `resolvedType.description` when non-blank - both fields already existed and were already fetched, just never rendered to a member before now; no schema change. `AVAIL_GROUP_LABEL` (the tier-heading dict) was extracted from `LibraryScreen.jsx` into `src/data/constants.js` so both screens share one copy instead of `IngredientDetailScreen` keeping its own second (and, until this turn, stale/avail-based) one.
+
+   **Not touched (later stages, unchanged this turn):** My Bar Add/Remove action (I.2), Can-provide/Can-be-replaced-by/preparation display (I.3), admin edit link (I.4). No new routes, no migrations, no catalogue data changes.
+
+   **Verified:** `pnpm test` 316/316 (+5 new: `capGroupsByTotal` cases in `availabilityGroups.test.js`), build clean (174 modules). No RLS/migration impact (no schema touched) - `db advisors` not applicable. **Not browser-verified** (no browser tooling in this sandbox) - the tap-to-navigate flow and the identity/grouping rendering are unconfirmed in a running app; see the chunk entry below for the two manual checks still owed.
+
+   **Exact next action:** the user manually verifies I.1 (tap an ingredient name on a recipe with a missing ingredient → lands on its detail page → Back returns to the recipe; an adapted recipe like the Daiquiri shows under "Make With Adaptations" on that ingredient's own page), then decides whether/when to proceed to I.2 (My Bar Add/Remove action).
 
 **Stage D itself (`docs/plans/substitutes-and-variations.md`) is feature-complete AND manually verified, 2026-09-12 - nothing outstanding.** D.1 through D.5 all DONE + pushed 2026-09-11; the Daiquiri (and other adapted cocktails, e.g. Gin Fizz) confirmed resolving correctly in the running app, Home showing "10 cocktails possible · 5 ready, 5 with substitutions or preparation." The adapted discovery category's name is finalized as **"Make With Adaptations"** (was "Make With Substitutions," renamed 2026-09-12 - see the chunk entry below for exactly what did/didn't change; the cocktail-level composed status text like "Make with substitutions · Prepare syrup first" is a different, more specific mechanism and was deliberately left alone). Stage C (Linked Variations) remains NOT started, independent, on a separate go-ahead whenever the user wants it. See the chunk entries below for the full history.
 
@@ -129,6 +137,79 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 needed). No migrations, no schema change - not needed to fix this.
 
 **Commit:** `7a22526`. `docs/project.md` untouched.
+
+---
+
+## Last completed chunk (Ingredient Detail Stage I.1 implemented, 2026-09-12 — `src/**` only, no migrations, no catalogue changes)
+
+**Scope:** exactly Stage I.1 of `docs/plans/ingredient-detail-page.md` -
+tappable ingredient links + shared-tier grouping + basic identity display.
+Explicitly NOT this turn: My Bar Add/Remove (I.2), relationships/
+substitutions/preparation content (I.3), admin edit link (I.4), any new
+route, any schema change.
+
+**`IngredientsSection.jsx`:** each ingredient row's name is now a `Link` to
+`/bar/type/${ri.ingId}` - name only, not the whole row, since the row
+already owns Stage D.3's preparation-expand button (mirrors
+`TypeCard.jsx`'s established "explore vs. act are separate controls"
+split). `ri.ingId` is always a recipe component's ingredient TYPE id
+(confirmed in `domain/availability.js`), so this is always the `/bar/
+type/:id` route - there is no product-id case to handle here (that
+branching already lives entirely inside `IngredientDetailScreen.jsx`,
+unchanged). Padded `-my-3 py-3 -mx-1 px-1` (padding + a canceling negative
+margin) so the real tap target reaches the mobile-first ≥44px minimum
+without growing the row's own visual height.
+
+**`IngredientDetailScreen.jsx`:** replaced its local, `avail`-keyed
+`GROUP_ORDER`/`GROUP_LABEL`/`byTier` construction (a leftover that
+pre-dates Stage D and was flagged in the plan's audit as the one place
+still not using the shared tier) with `groupByDisplayTier()` (Stage D.2)
+plus a new `capGroupsByTotal()` helper. **Fixes a real bug**: a cocktail
+resolvable only through a configured substitute or a satisfiable
+preparation used to show under "Unavailable" on an ingredient's own page
+even though Library/Home already correctly showed it as makeable -
+verified with a dedicated test (see below) mirroring
+`availabilityGroups.test.js`'s existing daiquiri/negroni case. Also now
+renders basic identity: category name (`catalog.categories` looked up by
+`resolvedType.category_id`) and `resolvedType.description` when non-blank -
+both already-fetched fields, never rendered to a member before now.
+
+**`domain/availabilityGroups.js` (new `capGroupsByTotal`):** caps an
+already-tiered group list to `max` items total, filling from the
+highest-ranked tier down (so a Perfect match is never dropped to make room
+for an Unavailable one) - the shared replacement for
+`IngredientDetailScreen`'s old local "cap at 10" logic, now composable with
+`groupByDisplayTier` instead of re-deriving it inline. 5 new tests in
+`availabilityGroups.test.js`: fills high-tier-first; keeps an adapted
+recipe in "adapted" (not "almost") through the cap; drops an
+exhausted tier entirely; passes items through unchanged under the cap;
+empty input.
+
+**`src/data/constants.js` (new `AVAIL_GROUP_LABEL`):** the tier-heading
+dict (Ready to Pour / Good Enough / Make With Adaptations / Almost There /
+Unavailable) extracted from `LibraryScreen.jsx`'s own local copy so
+`IngredientDetailScreen.jsx` shares the exact same wording instead of
+keeping a second, drifting copy. `LibraryScreen.jsx` now imports it instead
+of declaring it locally - no visual change there.
+
+**Verified:** `corepack pnpm@10.34.3 test` **316/316** (+5 new
+`capGroupsByTotal` cases). `corepack pnpm@10.34.3 build` clean (174
+modules). Diff reviewed for scope creep before committing - only the 6
+files above changed, matching I.1 exactly; `docs/project.md` untouched. No
+migration, no RLS surface touched - `db advisors` not applicable. **Not
+browser-verified** (no browser tooling in this sandbox) - two manual
+checks are still owed from the user: (1) open a recipe with a missing
+ingredient (e.g. Bloody Mary / Tomato Juice) → tap the ingredient's name →
+confirm it lands on that ingredient's detail page → Back returns to the
+recipe with normal browser/app back behavior, no special-case navigation
+state added; (2) open an adapted recipe's ingredient (e.g. the Daiquiri's
+own missing component, per Stage D's own verification) from its detail
+page's "cocktails using this" list and confirm it now appears under "Make
+With Adaptations", not "Unavailable".
+
+**Commit:** see the git log for the exact hash (this chunk's `src/**`
+changes and this `current-context.md`/plan-doc update land in the same
+commit/push). `docs/project.md` untouched.
 
 ---
 

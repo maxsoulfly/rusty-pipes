@@ -33,3 +33,29 @@ export function groupByDisplayTier(computed) {
     items: byTier[tier],
   })).filter((g) => g.items.length > 0)
 }
+
+// Caps an already-tiered group list (groupByDisplayTier's own output shape)
+// to at most `max` items total, filling from the highest-ranked tier down
+// (DISPLAY_TIER_ORDER's own order, since that's the order `groups` already
+// arrives in) - never truncates a Perfect match to make room for an
+// Unavailable one just because the latter happened to be enumerated first.
+// Added for IngredientDetailScreen's "up to 10 matching recipes" cap
+// (Ingredient Detail Stage I.1) - previously a local, avail-keyed version of
+// this same cap lived on that screen; this is the shared, tier-aware
+// replacement so the cap composes correctly with `groupByDisplayTier` above
+// instead of each caller re-deriving it.
+/**
+ * @param {{ tier: string, items: object[] }[]} groups
+ * @param {number} max
+ * @returns {{ tier: string, items: object[] }[]} - non-empty tiers only
+ */
+export function capGroupsByTotal(groups, max) {
+  let remaining = max
+  return groups
+    .map(({ tier, items }) => {
+      const sliced = items.slice(0, Math.max(remaining, 0))
+      remaining -= sliced.length
+      return { tier, items: sliced }
+    })
+    .filter((g) => g.items.length > 0)
+}

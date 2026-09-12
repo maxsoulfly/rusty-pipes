@@ -1,10 +1,15 @@
 # Ingredient Detail Page
 
-**Planning document — 2026-09-12. Planning only, nothing implemented.**
-Written after Stage D (Adapted Availability & Homemade Preparations,
-`docs/plans/substitutes-and-variations.md`) shipped and was manually
-verified. This feature reuses Stage D's shared `computeMakeability()`
-result rather than introducing a second one.
+**Planning document — 2026-09-12.** Written after Stage D (Adapted
+Availability & Homemade Preparations, `docs/plans/
+substitutes-and-variations.md`) shipped and was manually verified. This
+feature reuses Stage D's shared `computeMakeability()` result rather than
+introducing a second one.
+
+**Status: Stage I.1 DONE + pushed, 2026-09-12** (tappable ingredient
+links, shared-tier grouping, basic identity display - see the Staged
+implementation plan section below for exactly what shipped and what's
+still not started). Stages I.2-I.4 not started.
 
 ---
 
@@ -278,19 +283,31 @@ since it already exists and everything it needs is already loaded, the
 actual work reorders cleanly around **"ship the friction fix first, then
 layer in richer content, then admin polish"**:
 
-**I.1 - Tappable ingredient links + correct (shared) tier grouping.**
+**I.1 - Tappable ingredient links + correct (shared) tier grouping. DONE,
+2026-09-12.**
 - `IngredientsSection.jsx`: ingredient names become links to
-  `/bar/type/:ingId` (name only, ≥44px target, no change to the row's own
-  preparation-expand button).
-- `IngredientDetailScreen.jsx`: replace its local `GROUP_ORDER`/`byTier`
-  construction with `groupByDisplayTier()` (Stage D.2's shared function);
-  extract Library's `AVAIL_GROUP_LABEL` into `src/data/constants.js` so
-  both screens import the same heading dict (no third copy).
+  `/bar/type/:ingId` (name only, ≥44px target via padding + a canceling
+  negative margin, no change to the row's own preparation-expand button).
+- `IngredientDetailScreen.jsx`: replaced its local `GROUP_ORDER`/`byTier`
+  construction with `groupByDisplayTier()` (Stage D.2's shared function)
+  plus a new shared `capGroupsByTotal()` (added to `domain/
+  availabilityGroups.js`, unit-tested) for the existing "cap at 10 total"
+  rule; extracted Library's `AVAIL_GROUP_LABEL` into `src/data/
+  constants.js` so both screens import the same heading dict (no third
+  copy). Also added basic identity for this stage (category name +
+  `description`, both already-loaded fields, no schema change) - the
+  request for I.1 was expanded slightly beyond this doc's original
+  staging to include identity display; relationships/substitutions/
+  preparation content remain I.3, unchanged.
 - *Acceptance:* tapping an ingredient name on any recipe's detail page
   opens that ingredient's page; a cocktail resolvable only via adaptation
   now correctly appears under "Make With Adaptations" here too, not
   "Unavailable"; existing Speed-Rack/"View all"/not-found behavior is
-  unchanged.
+  unchanged. **Verified:** `pnpm test` 316/316 (+5), `pnpm build` clean.
+  **Not yet browser-verified** - see `current-context.md`'s chunk entry
+  for the two manual checks still owed (tap-through-and-back on a real
+  missing ingredient; an adapted recipe showing under "Make With
+  Adaptations" on its own ingredient's page).
 
 **I.2 - My Bar action (Add/Remove).**
 - The prominent ownership button described above, `type` and `product`

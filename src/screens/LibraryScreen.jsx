@@ -22,8 +22,8 @@ import {
   SectionTitle,
 } from "@/components/primitives"
 import {
-  ADAPTED_CATEGORY_LABEL,
   AVAIL_FILTERS,
+  AVAIL_GROUP_LABEL,
   SORT_FILTERS,
   SOURCE_FILTERS,
 } from "@/data/constants"
@@ -47,20 +47,10 @@ import {
 // domain/availabilityGroups.js (Stage D.2) - grouped by `display.tier`, not
 // raw `avail`, so a recipe resolvable via a configured, owned substitute
 // ranks ahead of one that's genuinely still missing something, and never
-// appears under "Almost There" once it's adapted. Only the group HEADING
-// text is screen-specific, kept here.
-//
-// Matches HomeScreen.jsx's own section names exactly, for the same
-// availability tiers - AVAIL_CFG's own `label` ("Perfect", not "Ready to
-// Pour") is a different, shorter string used on the per-card badge, kept
-// as-is; these are the group headings specifically.
-const AVAIL_GROUP_LABEL = {
-  perfect: "Ready to Pour",
-  good: "Good Enough",
-  adapted: ADAPTED_CATEGORY_LABEL,
-  almost: "Almost There",
-  unavail: "Unavailable",
-}
+// appears under "Almost There" once it's adapted. The group HEADING text
+// (`AVAIL_GROUP_LABEL`) is shared with IngredientDetailScreen.jsx via
+// src/data/constants.js (Ingredient Detail Stage I.1) rather than kept as a
+// second, screen-local copy.
 
 export default function LibraryScreen() {
   const navigate = useNavigate()

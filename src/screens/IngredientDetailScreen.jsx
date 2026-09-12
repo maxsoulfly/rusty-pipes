@@ -10,19 +10,21 @@ import {
   Btn,
   SectionTitle,
 } from "@/components/primitives"
+import { AVAIL_GROUP_LABEL } from "@/data/constants"
+import {
+  capGroupsByTotal,
+  groupByDisplayTier,
+} from "@/domain/availabilityGroups"
 import { findRecipesUsingIngredient } from "@/domain/ingredientRecipeMatches"
 
-// Same grouping language LibraryScreen.jsx's ?sort=availability view
-// already established (Stage 2 of this same effort) - one shared visual
-// vocabulary for "here's how available this is" across the app, not a
-// second one invented for this screen.
-const GROUP_ORDER = ["perfect", "good", "almost", "unavail"]
-const GROUP_LABEL = {
-  perfect: "Ready to Pour",
-  good: "Good Enough",
-  almost: "Almost There",
-  unavail: "Unavailable",
-}
+// Ingredient Detail Stage I.1: this screen used to group by raw `avail`
+// (it pre-dates Stage D's shared `display.tier` entirely - see
+// docs/plans/ingredient-detail-page.md's audit), so a cocktail resolvable
+// only via a configured substitute or a satisfiable preparation showed
+// under "Unavailable" here even though Library/Home correctly showed it as
+// makeable. Now shares the exact same grouping (`groupByDisplayTier`) and
+// heading wording (`AVAIL_GROUP_LABEL`) as Library instead of keeping a
+// second, stale copy of both.
 
 // "Up to 10 matching recipes total" per the approved requirement - a
 // straight cap on the tier-ordered list (perfect, then good, then almost,
@@ -87,6 +89,15 @@ export default function IngredientDetailScreen({ kind }) {
     kind === "product"
       ? types.find((t) => t.id === product?.ingredient_type_id)
       : types.find((t) => t.id === id)
+  // Ingredient Detail Stage I.1 - identity only (category + description).
+  // Both already loaded on every `catalog.types` row (services/catalog.js) -
+  // `description` was fetched for batch import but never rendered to a
+  // member anywhere before now; no new query, no new schema. Always the
+  // resolved TYPE's own fields, even on a product page - a bottle doesn't
+  // carry its own separate description (see the plan's Data model impact).
+  const category = resolvedType
+    ? catalog.categories.find((c) => c.id === resolvedType.category_id)
+    : null
 
   const allMatches = useMemo(() => {
     if (!resolvedType) return []
@@ -95,15 +106,11 @@ export default function IngredientDetailScreen({ kind }) {
   }, [computed, resolvedType, kind, id, types, products])
 
   const { visibleGroups, totalCount } = useMemo(() => {
-    const byTier = { perfect: [], good: [], almost: [], unavail: [] }
-    allMatches.forEach((m) => byTier[m.avail]?.push(m))
-    let remaining = MAX_VISIBLE
-    const groups = GROUP_ORDER.map((tier) => {
-      const items = byTier[tier].slice(0, Math.max(remaining, 0))
-      remaining -= items.length
-      return { tier, items }
-    }).filter((g) => g.items.length > 0)
-    return { visibleGroups: groups, totalCount: allMatches.length }
+    const groups = groupByDisplayTier(allMatches)
+    return {
+      visibleGroups: capGroupsByTotal(groups, MAX_VISIBLE),
+      totalCount: allMatches.length,
+    }
   }, [allMatches])
 
   // Invalid/stale link (a deleted type, a typo'd id, a product whose type
@@ -164,7 +171,26 @@ export default function IngredientDetailScreen({ kind }) {
             directly never shows this, since it would just repeat the
             title above. */}
         {kind === "product" && resolvedType.name !== displayName && (
-          <p className="text-xs text-tx3 mb-4">{resolvedType.name}</p>
+          <p className="text-xs text-tx3 mb-1">{resolvedType.name}</p>
+        )}
+
+        {/* Ingredient Detail Stage I.1 - identity. Category only when it
+            exists (an uncategorized type isn't expected in practice, but
+            this stays defensive); description only when non-blank - no
+            empty heading either way. */}
+        {(category || resolvedType.description) && (
+          <div className="mb-4 flex flex-col gap-1.5">
+            {category && (
+              <span className="text-[11px] uppercase tracking-[0.06em] text-tx3 font-display">
+                {category.name}
+              </span>
+            )}
+            {resolvedType.description && (
+              <p className="text-[13px] text-tx2 leading-snug">
+                {resolvedType.description}
+              </p>
+            )}
+          </div>
         )}
 
         {totalCount === 0 ? (
@@ -182,7 +208,7 @@ export default function IngredientDetailScreen({ kind }) {
             {visibleGroups.map(({ tier, items }) => (
               <div key={tier}>
                 <div className="flex items-center justify-between mb-3">
-                  <SectionTitle>{GROUP_LABEL[tier]}</SectionTitle>
+                  <SectionTitle>{AVAIL_GROUP_LABEL[tier]}</SectionTitle>
                   <span
                     className={clsx(
                       "text-xs font-mono flex items-center gap-1",

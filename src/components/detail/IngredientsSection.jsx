@@ -1,5 +1,6 @@
 import { useState } from "react"
 import clsx from "clsx"
+import { Link } from "react-router-dom"
 import { SectionTitle } from "@/components/primitives"
 import { formatAmount } from "@/domain/availability"
 import {
@@ -177,9 +178,27 @@ export function IngredientsSection({
                       )}
                     />
                     <span className="flex-1">
-                      <span className="text-sm text-tx font-body">
+                      {/* Ingredient Detail Stage I.1 - the name itself
+                          (not the whole row) is the tap target: the row
+                          below already owns the preparation-expand button
+                          (Stage D.3), so per TypeCard.jsx's own established
+                          split, "explore" and "act" stay two separate
+                          controls. `ri.ingId` is always the component's
+                          ingredient TYPE id (never a product id - see
+                          domain/availability.js), so this is always the
+                          `/bar/type/:id` route, never `/bar/product/:id`.
+                          py-3/-my-3 (and px-1/-mx-1) pad the real hit area
+                          out to the ≥44px mobile-first minimum without
+                          growing the row's own visual height - the
+                          padding and its matching negative margin cancel
+                          out in layout, so only the invisible tap target
+                          grows. */}
+                      <Link
+                        to={`/bar/type/${ri.ingId}`}
+                        className="inline-block -my-3 -mx-1 px-1 py-3 text-sm text-tx font-body underline decoration-tx3/40 underline-offset-2"
+                      >
                         {ri.name ?? ri.ingId}
-                      </span>
+                      </Link>
                       {substitution ? (
                         <span className="block text-[11px] text-tx3">
                           Substituting: {substitution.matchedName}

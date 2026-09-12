@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { DISPLAY_TIER_ORDER, groupByDisplayTier } from "./availabilityGroups"
+import {
+  capGroupsByTotal,
+  DISPLAY_TIER_ORDER,
+  groupByDisplayTier,
+} from "./availabilityGroups"
 
 function recipe(id, tier, avail) {
   // A caller that's gone through computeMakeability() always has `display`
@@ -75,5 +79,55 @@ describe("groupByDisplayTier", () => {
 
   it("returns an empty array for an empty input", () => {
     expect(groupByDisplayTier([])).toEqual([])
+  })
+})
+
+// Ingredient Detail Stage I.1 - the shared cap this screen's "up to 10
+// matching recipes" now uses, on top of groupByDisplayTier's own output.
+describe("capGroupsByTotal", () => {
+  it("fills from the highest-ranked tier down, never trimming a Perfect match to make room for an Unavailable one", () => {
+    const groups = [
+      { tier: "perfect", items: ["p1", "p2"] },
+      { tier: "unavail", items: ["u1", "u2", "u3"] },
+    ]
+    expect(capGroupsByTotal(groups, 3)).toEqual([
+      { tier: "perfect", items: ["p1", "p2"] },
+      { tier: "unavail", items: ["u1"] },
+    ])
+  })
+
+  it("keeps an adapted recipe in its own 'adapted' group even when capping - the exact regression this cap must not reintroduce", () => {
+    // Same daiquiri/negroni shape as groupByDisplayTier's own test above:
+    // daiquiri is display.tier "adapted" despite avail "almost" - capping
+    // must never merge or reclassify it into "almost".
+    const groups = groupByDisplayTier([
+      { id: "daiquiri", name: "daiquiri", avail: "almost", display: { tier: "adapted" } },
+      { id: "negroni", name: "negroni", avail: "almost", display: { tier: "almost" } },
+    ])
+    const capped = capGroupsByTotal(groups, 10)
+    const byTier = Object.fromEntries(
+      capped.map((g) => [g.tier, g.items.map((i) => i.id)]),
+    )
+    expect(byTier.adapted).toEqual(["daiquiri"])
+    expect(byTier.almost).toEqual(["negroni"])
+  })
+
+  it("drops a tier entirely once the cap is exhausted, rather than rendering an empty group", () => {
+    const groups = [
+      { tier: "perfect", items: ["p1", "p2", "p3"] },
+      { tier: "almost", items: ["a1"] },
+    ]
+    expect(capGroupsByTotal(groups, 3)).toEqual([
+      { tier: "perfect", items: ["p1", "p2", "p3"] },
+    ])
+  })
+
+  it("returns every item unchanged when the total is under the cap", () => {
+    const groups = [{ tier: "perfect", items: ["p1"] }]
+    expect(capGroupsByTotal(groups, 10)).toEqual(groups)
+  })
+
+  it("returns an empty array for an empty input", () => {
+    expect(capGroupsByTotal([], 10)).toEqual([])
   })
 })
