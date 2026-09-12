@@ -224,8 +224,20 @@ linked in v1 - a reasonable later enhancement (all its data - `matchedId` -
 already exists), deliberately out of scope for a first pass to keep the
 row simple.
 
-**Deliberately not wired in v1** (per explicit scope, and because each of
-these rows already has its own tap meaning that would conflict):
+**Second tappable entry point, added as a same-day I.1 follow-up:
+`HeroCard.jsx`'s "Missing: X" panel** (the recipe's own detail page's
+prominent missing-ingredient callout, e.g. "Missing: Tomato Juice" on the
+Bloody Mary - the exact example that motivated this feature). Each name in
+`c.missingRequired` links via `c.missingRequiredIds[i]` (the same-order id
+array `domain/availability.js` builds `missingRequired` from). The shared
+interactive treatment (route, ≥44px tap target, no-underline hover/focus)
+was extracted into `src/components/detail/IngredientLink.jsx` once a
+second component needed it identically - typography and any
+host-specific horizontal bleed stay per-caller.
+
+**Deliberately not wired** (per explicit scope, and because each of these
+already has its own tap meaning, or is nested inside an element with its
+own conflicting navigation):
 - `AddIngredientsScreen.jsx` / `ExpandedProducts.jsx` - tapping there
   already means "own/select this," the exact tension `TypeCard.jsx`'s own
   comment already documents avoiding; changing that is an unrelated My Bar
@@ -235,6 +247,16 @@ these rows already has its own tap meaning that would conflict):
   label; navigating away would risk the draft. Does not fit naturally.
 - Admin screens - out of scope; admin already has its own ingredient
   management surface.
+- `CocktailCard.jsx`/`SmallCard.jsx`'s grid-card "missing" badges, and
+  `HomeScreen.jsx`'s "Almost There" list row - all three name a missing
+  ingredient too, but sit *inside* a card/row whose entire container
+  already has its own `onClick` navigating to that cocktail's own page.
+  Nesting an ingredient link inside would conflict with that existing
+  navigation (not just a style question) - left alone.
+- `IngredientsSection.jsx`'s `missingOptional` footer line ("Optional/
+  garnish: X not in your bar") - a plain-text summary of non-required
+  items, not a per-ingredient "missing requirement" callout, and doesn't
+  currently have ids threaded through to that component at all.
 
 ---
 

@@ -43,6 +43,8 @@ Each numbered step is a development chunk boundary for this file.
 
    **I.1 polish pass (same day, after functional manual verification passed):** the user found the ingredient-name link's permanent underline visually noisy/too-hyperlink-like for a dense ingredient list. Restyled `IngredientsSection.jsx`'s `Link` only - no underline, typography reverted to plain pre-I.1 text (`text-sm text-tx font-body`); interactivity now communicated via a subtle neutral hover/active tint (`hover:bg-tx3/10`/`active:bg-tx3/15`, not a link-blue color change) plus a visible keyboard focus ring (`focus-visible:ring-2 ring-inset ring-cyan`, matching `Card`'s own existing convention in `primitives.jsx`). The link's invisible hit area now also bleeds left by exactly the dot's width + its gap (`pl-5 -ml-5`, canceling in layout) so the status dot right next to the name is effectively part of the same tap target, without moving the dot into the link's own DOM or changing its independent styling/meaning. Vertical ≥44px padding (`py-3 -my-3`) unchanged from I.1. No navigation/route/makeability change.
 
+   **I.1 follow-up (same day):** `HeroCard.jsx`'s "Missing: X" panel (the recipe's own detail page, e.g. "Missing: Tomato Juice" on the Bloody Mary) now links each missing ingredient's name the same way, via a new shared `src/components/detail/IngredientLink.jsx` (extracted since `IngredientsSection.jsx` needed the identical treatment). Deliberately NOT touched: `CocktailCard.jsx`/`SmallCard.jsx`'s grid-card badges and `HomeScreen.jsx`'s "Almost There" row - all three sit inside an element whose entire container already navigates to that cocktail, so nesting a link would conflict with that existing behavior.
+
    **Not touched (later stages, unchanged this turn):** My Bar Add/Remove action (I.2), Can-provide/Can-be-replaced-by/preparation display (I.3), admin edit link (I.4). No new routes, no migrations, no catalogue data changes.
 
    **Verified:** `pnpm test` 316/316 (unchanged - styling-only), build clean (174 modules). No RLS/migration impact. I.1's core functional flow (tap → navigate → Back; adapted recipe groups correctly) is now **user-confirmed passed**, per this turn's request; the visual polish itself has not had a separate browser confirmation round yet.
@@ -139,6 +141,65 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 needed). No migrations, no schema change - not needed to fix this.
 
 **Commit:** `7a22526`. `docs/project.md` untouched.
+
+---
+
+## Last completed chunk (Ingredient Detail Stage I.1 follow-up - link the missing-ingredient callout on the recipe's own detail page, 2026-09-12 — 3 files, no migrations, no catalogue changes)
+
+**Trigger:** after confirming I.1's link styling looked right, the user
+wanted ingredient-name navigation discoverable anywhere a recipe's own
+detail page explicitly calls out a specific missing ingredient - e.g.
+HeroCard's "Missing: Tomato Juice" panel on the Bloody Mary page - not just
+the ingredient list below it.
+
+**Surface updated: `HeroCard.jsx`'s "Missing: X" / "Original recipe still
+needs: X" panel only.** Each name in `c.missingRequired` is now its own tap
+target (`c.missingRequiredIds[i]` - the exact same-order id array
+`domain/availability.js` builds `missingRequired` from), joined by ", "
+between them so a future multi-missing case (today `avail === "almost"`
+only ever means exactly one) would still render every name as its own
+link. The panel's own background/border/text styling is untouched; `font-
+bold` on each link replaces the old `<strong>` wrapping the whole joined
+string, still inheriting the panel's `text-almost` color.
+
+**Deliberately NOT touched:** `CocktailCard.jsx`/`SmallCard.jsx`'s small
+"−X"/"needs X" grid-card badges, and `HomeScreen.jsx`'s "Almost There"
+list row ("Missing: X"). All three sit *inside* an element whose entire
+container already has its own `onClick` navigating to that cocktail's own
+page (the card/row itself is the tap target for "open this cocktail") -
+nesting an ingredient link inside would create a real interactive-nesting
+conflict with that existing navigation, not just a style question, and
+wasn't part of what the user asked for (the given example was the
+recipe's own detail page, already reached). `IngredientsSection.jsx`'s
+`missingOptional` footer line ("Optional/garnish: X not in your bar") was
+also left alone - it's a plain-text summary of non-required items, not a
+per-ingredient "missing requirement" callout, and doesn't currently carry
+ids through to that component at all (would need a prop-wiring change,
+out of scope for this polish pass).
+
+**Shared helper introduced (genuinely reduces duplication, not just
+extracted for its own sake): `src/components/detail/IngredientLink.jsx`.**
+Both `IngredientsSection.jsx`'s per-row name and HeroCard's new per-
+ingredient links needed the identical route/tap-target/hover-focus
+treatment (Stage I.1's earlier polish fix) - `IngredientLink` centralizes
+only the interactive concerns (`/bar/type/:id` route, ≥44px vertical tap
+target, the no-underline neutral hover/active/focus-ring treatment);
+typography and any host-specific horizontal bleed (IngredientsSection's
+dot-covering `pl-5 -ml-5`, not needed in HeroCard) stay in each caller's
+own `className`, so extraction didn't force one component's layout onto
+the other. `IngredientsSection.jsx` now imports and uses it instead of a
+second inline `<Link className="...">`.
+
+**Verified:** `corepack pnpm@10.34.3 test` 316/316 (unchanged - no domain
+logic touched). `corepack pnpm@10.34.3 build` clean (175 modules, +1 for
+the new file). `git status` confirmed exactly 3 files changed
+(`HeroCard.jsx`, `IngredientsSection.jsx`, new `IngredientLink.jsx`);
+`docs/project.md` untouched. No route/makeability/missing-ingredient-
+logic change - `c.missingRequired`/`c.missingRequiredIds` are read as-is,
+never recomputed.
+
+**Commit:** see the git log for the exact hash. `docs/project.md`
+untouched.
 
 ---
 

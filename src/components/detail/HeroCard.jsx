@@ -1,4 +1,5 @@
 import { GlassSvg } from "@/components/GlassSvg"
+import { IngredientLink } from "@/components/detail/IngredientLink"
 import { AvailBadge, SourceBadge, TasteTag } from "@/components/primitives"
 
 export function HeroCard({ c }) {
@@ -42,7 +43,34 @@ export function HeroCard({ c }) {
         <div className="bg-almost/10 border border-almost/30 rounded-sm py-2 px-3.5 text-center">
           <span className="text-[13px] text-almost">
             {display.isAdapted ? "Original recipe still needs" : "Missing"}:{" "}
-            <strong>{c.missingRequired.join(", ")}</strong>
+            {/* Ingredient Detail follow-up - each missing ingredient's own
+                name is tappable (same route/styling as IngredientsSection's
+                per-row links, via the shared IngredientLink), so this
+                panel doubles as a shortcut into fixing what it names.
+                `missingRequiredIds` is the exact same-order id array
+                domain/availability.js builds `missingRequired` from -
+                see availability.test.js's own parallel assertions - so
+                zipping them by index is safe. `avail === "almost"` only
+                ever means exactly one missing required ingredient today
+                (availability.js), but this still maps/joins generally so a
+                future multi-missing case would render correctly rather
+                than silently only covering the first. IngredientLink
+                supplies the no-underline hover/focus treatment and the
+                route; `font-bold` replaces the old <strong> (color still
+                inherited from this span, unchanged), and the link itself
+                is the only new tap target - the surrounding panel keeps
+                its existing styling untouched. */}
+            {c.missingRequired.map((name, i) => (
+              <span key={c.missingRequiredIds[i] ?? name}>
+                {i > 0 && ", "}
+                <IngredientLink
+                  ingId={c.missingRequiredIds[i]}
+                  className="px-1 -mx-1 font-bold"
+                >
+                  {name}
+                </IngredientLink>
+              </span>
+            ))}
           </span>
         </div>
       )}

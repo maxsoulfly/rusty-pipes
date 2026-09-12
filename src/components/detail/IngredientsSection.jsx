@@ -1,6 +1,6 @@
 import { useState } from "react"
 import clsx from "clsx"
-import { Link } from "react-router-dom"
+import { IngredientLink } from "@/components/detail/IngredientLink"
 import { SectionTitle } from "@/components/primitives"
 import { formatAmount } from "@/domain/availability"
 import {
@@ -178,43 +178,29 @@ export function IngredientsSection({
                       )}
                     />
                     <span className="flex-1">
-                      {/* Ingredient Detail Stage I.1 (polish pass) - the
-                          name itself (not the whole row) is the tap
-                          target: the row below already owns the
-                          preparation-expand button (Stage D.3), so per
-                          TypeCard.jsx's own established split, "explore"
-                          and "act" stay two separate controls.
-                          `ri.ingId` is always the component's ingredient
-                          TYPE id (never a product id - see
-                          domain/availability.js), so this is always the
-                          `/bar/type/:id` route, never `/bar/product/:id`.
-                          No permanent underline - a plain hyperlink look
-                          read as noisy in a dense ingredient list; typography
-                          stays identical to a pre-I.1 plain name (text-sm
-                          text-tx font-body), and interactivity is
-                          communicated only on hover/focus/press (a subtle
-                          neutral tint, not a link-blue color change) plus a
-                          visible keyboard focus ring, matching Card's own
-                          focus-visible:ring convention elsewhere in the app.
-                          pl-5/-ml-5 extends the real (invisible at rest)
-                          hit + hover area leftward by exactly the dot's own
-                          width plus its gap-3 (8px + 12px = 20px), so the
-                          status dot right next to the name is effectively
-                          part of the same tap target without moving it
-                          into the link's own DOM (the dot keeps its
-                          independent styling/meaning). py-3/-my-3 pads the
-                          real hit area out to the ≥44px mobile-first
-                          minimum without growing the row's own visual
-                          height - each padding side cancels against its
-                          matching negative margin in layout, so only the
-                          invisible tap target grows, never the visible
-                          row. */}
-                      <Link
-                        to={`/bar/type/${ri.ingId}`}
-                        className="inline-block rounded-sm pl-5 -ml-5 pr-2 -mr-2 py-3 -my-3 text-sm text-tx font-body transition-colors duration-150 hover:bg-tx3/10 active:bg-tx3/15 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan"
+                      {/* Ingredient Detail Stage I.1 - the name itself
+                          (not the whole row) is the tap target: the row
+                          below already owns the preparation-expand button
+                          (Stage D.3), so per TypeCard.jsx's own established
+                          split, "explore" and "act" stay two separate
+                          controls. IngredientLink (shared with HeroCard's
+                          "Missing: X" callout - see that file) supplies
+                          the route, the ≥44px vertical tap target, and the
+                          no-underline hover/focus/press treatment; pl-5/
+                          -ml-5 here additionally extends the real
+                          (invisible at rest) hit + hover area leftward by
+                          exactly the dot's own width plus its gap-3 (8px +
+                          12px = 20px), so the status dot right next to the
+                          name is effectively part of the same tap target
+                          without moving it into the link's own DOM (the
+                          dot keeps its independent styling/meaning) - a
+                          bleed specific to this row layout, not shared. */}
+                      <IngredientLink
+                        ingId={ri.ingId}
+                        className="pl-5 -ml-5 pr-2 -mr-2 text-sm text-tx font-body"
                       >
                         {ri.name ?? ri.ingId}
-                      </Link>
+                      </IngredientLink>
                       {substitution ? (
                         <span className="block text-[11px] text-tx3">
                           Substituting: {substitution.matchedName}
