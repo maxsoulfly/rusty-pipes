@@ -207,9 +207,9 @@ own missing component, per Stage D's own verification) from its detail
 page's "cocktails using this" list and confirm it now appears under "Make
 With Adaptations", not "Unavailable".
 
-**Commit:** see the git log for the exact hash (this chunk's `src/**`
-changes and this `current-context.md`/plan-doc update land in the same
-commit/push). `docs/project.md` untouched.
+**Commit:** `ab04fb0` (this chunk's `src/**` changes and this
+`current-context.md`/plan-doc update landed in the same commit/push).
+`docs/project.md` untouched.
 
 ---
 
