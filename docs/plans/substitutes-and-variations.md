@@ -17,8 +17,12 @@ component substitute exclusion + the Buy Next unlock-vs-restore ranking
 split) DONE + pushed together in one session, 2026-09-11** - the user's own
 instruction bundled both remaining stages into a single implementation pass
 rather than doing them one at a time; see "Stage D.4 & D.5 — DONE" below.
-**Stage D is now feature-complete.** Stage C (Linked Variations) remains
-NOT started, independent, on a separate go-ahead.
+**Stage D is feature-complete AND manually verified in the running app,
+2026-09-12** (the Daiquiri and other adapted cocktails resolve correctly;
+see "Stage D manual verification — PASSED" below). The adapted discovery
+category is finalized as **"Make With Adaptations"** (renamed from "Make
+With Substitutions" the same day - see the same section). Stage C (Linked
+Variations) remains NOT started, independent, on a separate go-ahead.
 
 > **D1 is SUPERSEDED, 2026-09-11 — planning only, not yet implemented.** The
 > user has decided general catalogue substitutes should be able to affect
@@ -1766,20 +1770,70 @@ in-browser confirmation is outstanding.
 
 ---
 
+## Stage D manual verification — PASSED 2026-09-12, plus a terminology finalization
+
+**Manual verification, confirmed by the user on the real app:** the
+Daiquiri now correctly appears in the adapted/makeable category, resolving
+through White Rum → owned Spiced Rum, Lime Juice → owned Lemon Juice, and
+Simple Syrup via its homemade preparation (White Sugar + Water). Other
+adapted cocktails (e.g. Gin Fizz) are also correctly discovered. Owning
+Lemon Juice does **not** imply owning whole Lemon (directional, as
+designed - Lemon → Lemon Juice only, never the reverse). Home correctly
+showed **"10 cocktails possible · 5 ready, 5 with substitutions or
+preparation."** **The prior screenshot showing the Daiquiri unavailable was
+expected behavior at the time** (Lemon Juice simply wasn't owned yet) -
+explicitly not a bug, no fix was needed or made for it.
+
+**Terminology finalized, 2026-09-12: the adapted discovery CATEGORY is
+renamed "Make With Adaptations"** (was "Make With Substitutions"). The
+category also holds cocktails resolvable through a homemade preparation
+alone, with no substitute involved at all (e.g. a cocktail missing only
+Simple Syrup) - "...Substitutions" under-described that case once tier 5
+shipped (Stage D.3). Centralized in one place -
+`src/data/constants.js`'s new `ADAPTED_CATEGORY_LABEL` - and consumed by
+`AVAIL_FILTERS`'s `adapted` entry (the shared Library/Lists availability
+filter), Library's `AVAIL_GROUP_LABEL.adapted` (its grouped-view heading),
+and Home's section heading, so the category reads identically everywhere
+it appears.
+
+**Deliberately NOT renamed** (per explicit instruction, and because
+nothing about them is actually about the CATEGORY):
+- The `display.tier === "adapted"` identifier itself, and every internal
+  name built on it (`computeAdaptedResult`, `rankAdapted`,
+  `AVAIL_CFG.adapted`/`AVAIL_TONE.adapted`, the `adapted` field on
+  `computeMakeability()`'s return value) - no genuine technical reason to
+  touch these, and the instruction was explicit that a wording cleanup
+  alone doesn't justify it.
+- A cocktail's own composed status text - `"Make with substitutions"` /
+  `"Prepare <name> first"` / both joined with `" · "` - produced by
+  `composeAdaptedLabel()` in `src/domain/makeability.js`, and the same
+  fallback string on `AVAIL_CFG.adapted.label` in
+  `src/components/primitives.jsx`. This describes what ONE specific
+  cocktail actually needs and stays more informative than the category
+  name - it is a different mechanism from the category label, not a
+  duplicate of it, even though the two read similarly before this rename.
+
+This session's own planning-doc/chunk-history prose above (the Stage
+D.1-D.5 write-ups) still says "Make With Substitutions" throughout, since
+that was the accurate name at the time each of those sections was written
+- left as the historical record rather than rewritten, per this file's own
+convention of not editing completed stage write-ups after the fact.
+
+---
+
 ## Exact next action
 
-**Stage D is feature-complete** - D.1 through D.5 are all DONE, tested, and
-pushed (see the five "Stage D.N — DONE" sections above). The full acceptance
-scenario's catalogue prerequisites are confirmed in place (White Rum →
-Spiced Rum, the newly-added Lime Juice → Lemon Juice, and the user's own
-manually-configured Simple Syrup preparation). **The user reviews the whole
-of Stage D** - primarily the Daiquiri scenario end-to-end (own Spiced Rum +
-Lemon Juice, confirm the primary status and the detail page's explanation
-of both adaptations), plus the new count lines on Library/Home/Build Your
-Bar and the editor's exclusion chips - since none of this has been
-confirmed in a running browser yet. Stage B's own outstanding manual checks
+**Stage D is feature-complete AND manually verified, 2026-09-12** - D.1
+through D.5 are all DONE, tested, pushed, and the full Daiquiri acceptance
+scenario (plus other adapted cocktails like Gin Fizz) was confirmed working
+correctly in the running app, including the "10 cocktails possible · 5
+ready, 5 with substitutions or preparation" breakdown on Home. The adapted
+discovery category's user-facing name is finalized as **"Make With
+Adaptations"** (see the manual-verification/terminology section above for
+the full rationale and exactly what was/wasn't renamed). **Nothing is
+outstanding for Stage D itself.** Stage B's own outstanding manual checks
 stay unverified/outstanding, not passed — re-check them against the now-
-complete Stage D UI rather than in isolation.
+complete Stage D UI if they're ever revisited, rather than in isolation.
 
 **Stage C (Linked Variations) remains NOT started** and independent of Stage
 D — on a separate go-ahead: migration `..._recipe_relationships.sql`

@@ -1,17 +1,36 @@
 // Pure UI vocabulary (not admin-managed catalog data, unlike taste tags and
 // glasses - those are real Supabase tables now, fetched via useCatalog()).
 
+// The one shared name for the "adapted" discovery category - the tier's
+// own internal identifier (`display.tier === "adapted"`) is unrelated and
+// deliberately NOT renamed alongside this (see the finalization note in
+// docs/plans/substitutes-and-variations.md, 2026-09-12). Named
+// "...Adaptations", not "...Substitutions" - the category also holds
+// cocktails resolvable through a homemade PREPARATION alone (no
+// substitute involved at all, e.g. a cocktail only missing Simple Syrup),
+// so "Substitutions" alone under-described it once preparations shipped
+// (Stage D.3). A cocktail's own composed status text
+// ("Make with substitutions" / "Prepare X first" / both joined) is a
+// separate, more specific mechanism (computeAdaptedResult() /
+// composeAdaptedLabel() in src/domain/makeability.js) and is NOT this
+// constant - that text describes what ONE cocktail actually needs; this
+// one names the CATEGORY that groups every such cocktail together, on
+// Library's grouped view, Home's section, and the shared availability
+// filter (Library/Lists).
+export const ADAPTED_CATEGORY_LABEL = "Make With Adaptations"
+
 // Keys match computeMakeability()'s `display.tier` (Stage D.1/D.2,
 // src/domain/makeability.js) - "adapted" was added 2026-09-11 for a recipe
-// resolvable via a configured, owned general substitute. Every consumer of
-// this list (LibraryScreen, ListsScreen) must compare against a recipe's
-// `display.tier`, not its raw `avail`, or a filter like "Almost" would
-// wrongly surface an adapted recipe that no longer belongs there.
+// resolvable via a configured, owned general substitute or a satisfiable
+// homemade preparation. Every consumer of this list (LibraryScreen,
+// ListsScreen) must compare against a recipe's `display.tier`, not its raw
+// `avail`, or a filter like "Almost" would wrongly surface an adapted
+// recipe that no longer belongs there.
 export const AVAIL_FILTERS = [
   { key: "all", label: "All" },
   { key: "perfect", label: "Perfect" },
   { key: "good", label: "Good Enough" },
-  { key: "adapted", label: "Make With Substitutions" },
+  { key: "adapted", label: ADAPTED_CATEGORY_LABEL },
   { key: "almost", label: "Almost" },
   { key: "unavail", label: "Unavailable" },
 ]

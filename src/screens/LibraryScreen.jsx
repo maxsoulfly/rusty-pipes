@@ -21,7 +21,12 @@ import {
   FilterChip,
   SectionTitle,
 } from "@/components/primitives"
-import { AVAIL_FILTERS, SORT_FILTERS, SOURCE_FILTERS } from "@/data/constants"
+import {
+  ADAPTED_CATEGORY_LABEL,
+  AVAIL_FILTERS,
+  SORT_FILTERS,
+  SOURCE_FILTERS,
+} from "@/data/constants"
 import { groupByDisplayTier } from "@/domain/availabilityGroups"
 import { findRecipesUsingIngredient } from "@/domain/ingredientRecipeMatches"
 import {
@@ -52,7 +57,7 @@ import {
 const AVAIL_GROUP_LABEL = {
   perfect: "Ready to Pour",
   good: "Good Enough",
-  adapted: "Make With Substitutions",
+  adapted: ADAPTED_CATEGORY_LABEL,
   almost: "Almost There",
   unavail: "Unavailable",
 }
@@ -147,7 +152,7 @@ export default function LibraryScreen() {
         // Stage D.2: compares against the shared `display.tier`, not raw
         // `avail` - selecting "Almost" must not surface a recipe that's
         // actually adapted (display.tier === "adapted"), and selecting
-        // "Make With Substitutions" must actually find something.
+        // "Make With Adaptations" must actually find something.
         if (
           availFilter !== "all" &&
           (c.display?.tier ?? c.avail) !== availFilter

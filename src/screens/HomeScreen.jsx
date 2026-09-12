@@ -12,6 +12,7 @@ import { BuildYourBar } from "@/components/home/BuildYourBar"
 import { GlassSvg } from "@/components/GlassSvg"
 import { SmallCard } from "@/components/CocktailCard"
 import { Card, SectionTitle } from "@/components/primitives"
+import { ADAPTED_CATEGORY_LABEL } from "@/data/constants"
 import { rankAdapted, rankAlmostThere } from "@/domain/almostThere"
 import {
   formatMakeabilityBreakdown,
@@ -99,11 +100,11 @@ export default function HomeScreen() {
   const almost = showAllAlmost
     ? almostRanked
     : almostRanked.slice(0, ALMOST_INITIAL_LIMIT)
-  // Stage D.2 - "Make With Substitutions": resolvable via a configured,
-  // owned general substitute. Shown as its own section, ranked between
-  // Good Enough and Almost There (see HomeScreen's render order below),
-  // never mixed into Almost There even when the underlying `strict.avail`
-  // happens to be "almost" too.
+  // Stage D.2 - "Make With Adaptations": resolvable via a configured,
+  // owned general substitute and/or a satisfiable preparation. Shown as
+  // its own section, ranked between Good Enough and Almost There (see
+  // HomeScreen's render order below), never mixed into Almost There even
+  // when the underlying `strict.avail` happens to be "almost" too.
   const adaptedRanked = useMemo(() => rankAdapted(computed), [computed])
 
   // Stage D.4 - the same shared "how many can I make" answer Library and
@@ -220,16 +221,19 @@ export default function HomeScreen() {
           </div>
         )}
 
-        {/* Stage D.2 - "Make With Substitutions": ranked after Perfect/Good
-            Enough (cocktails needing no adaptation still come first) and
-            ahead of Almost There, matching Library's own group order
-            (domain/availabilityGroups.js). SmallCard already renders each
-            recipe's own violet "adapted" primary status (Stage D.1) -
-            nothing further to distinguish here beyond the section itself. */}
+        {/* Stage D.2 - "Make With Adaptations" (renamed 2026-09-12 from
+            "Make With Substitutions" - the category also holds cocktails
+            resolvable through a preparation alone, no substitute
+            involved): ranked after Perfect/Good Enough (cocktails needing
+            no adaptation still come first) and ahead of Almost There,
+            matching Library's own group order (domain/availabilityGroups
+            .js). SmallCard already renders each recipe's own violet
+            "adapted" primary status (Stage D.1) - nothing further to
+            distinguish here beyond the section itself. */}
         {adaptedRanked.length > 0 && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3">
-              <SectionTitle>Make With Substitutions</SectionTitle>
+              <SectionTitle>{ADAPTED_CATEGORY_LABEL}</SectionTitle>
               <span className="text-xs font-mono text-violet">
                 ⇄ {adaptedRanked.length}
               </span>

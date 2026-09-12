@@ -29,13 +29,13 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
    (Note: item 17's "Stage 1 done, mobile verification pending" / "admin type editing moved to an `IngredientDetailScreen` overflow action" text predates the My Bar redesign's later stages — see the corrected current state in item 18's plan doc: inline admin edit pencils are gone, editing now goes through Admin → Ingredient Types via the ⋯ menu.)
 
-18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms (Concept 2) + Suggested Substitutes (Stage B) shipped via `docs/plans/substitutes-and-variations.md` (Stages A/B, DONE 2026-09-10). Homemade Preparations SUPERSEDED 2026-09-11 by a smaller design in that same doc ("Stage D — Adapted Availability & Minimal Homemade Preparations"), then that smaller design itself SHIPPED as Stage D.3 the same day. Stage D (D.1 adapted availability, D.2 discovery/grouping/ordering, D.3 tier-5 preparations, D.4 counts/breakdown + real Daiquiri catalogue rows, D.5 per-component exclusion + Buy Next ranking) is now FULLY DONE + pushed 2026-09-11 - **Stage D is feature-complete.** See item 0 and the chunk entries below. Linked cocktail variations (Stage C) remain NOT started, independent, on a separate go-ahead.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
+18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms (Concept 2) + Suggested Substitutes (Stage B) shipped via `docs/plans/substitutes-and-variations.md` (Stages A/B, DONE 2026-09-10). Homemade Preparations SUPERSEDED 2026-09-11 by a smaller design in that same doc ("Stage D — Adapted Availability & Minimal Homemade Preparations"), then that smaller design itself SHIPPED as Stage D.3 the same day. Stage D (D.1 adapted availability, D.2 discovery/grouping/ordering, D.3 tier-5 preparations, D.4 counts/breakdown + real Daiquiri catalogue rows, D.5 per-component exclusion + Buy Next ranking) is FULLY DONE + pushed 2026-09-11, **manually verified working correctly in the running app 2026-09-12, and the adapted category's user-facing name finalized as "Make With Adaptations"** (was "Make With Substitutions"). **Stage D is feature-complete and verified - nothing outstanding.** See item 0 and the chunk entries below. Linked cocktail variations (Stage C) remain NOT started, independent, on a separate go-ahead.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
 
 Each numbered step is a development chunk boundary for this file.
 
-## Exact next action (2026-09-11)
+## Exact next action (2026-09-12)
 
-0. **`docs/plans/substitutes-and-variations.md` → "Stage D — Adapted Availability & Minimal Homemade Preparations" (revised v2, 2026-09-11). Stage D.1 through D.5 are ALL DONE + pushed 2026-09-11 - Stage D is feature-complete.** See the chunk entries below (D.4 and D.5 shipped together in one session, per explicit instruction that bundled both remaining stages into a single implementation pass). The user decided general catalogue substitutes should be able to affect **discoverable makeability** — this **supersedes decision D1** ("general substitutes never affect availability") for a NEW mechanism layered on top of Stage B, not a change to Stage B's own shipped mechanism. **Important, do not misread:** the screenshot showing White Rum as "Try: Spiced Rum (in your bar)" while Daiquiri still reads as missing/unavailable is Stage B working **exactly as specified at the time** — it is **not a bug**, and Stage B's own outstanding manual-verification checklist (editor layout on a real phone; the recipe-editor adopt+note flow; clone/edit note round-trip) is **still not marked passed** and stays outstanding — re-verify it against Stage D's UI once that ships, don't check Stage B twice.
+0. **`docs/plans/substitutes-and-variations.md` → "Stage D — Adapted Availability & Minimal Homemade Preparations" (revised v2, 2026-09-11). Stage D.1 through D.5 are ALL DONE + pushed 2026-09-11, and manually verified working correctly in the running app 2026-09-12 - Stage D is feature-complete AND verified.** The adapted discovery category's user-facing name is finalized as **"Make With Adaptations"** (was "Make With Substitutions" - renamed 2026-09-12, see the new chunk entry below for exactly what did/didn't change). See the chunk entries below (D.4 and D.5 shipped together in one session, per explicit instruction that bundled both remaining stages into a single implementation pass). The user decided general catalogue substitutes should be able to affect **discoverable makeability** — this **supersedes decision D1** ("general substitutes never affect availability") for a NEW mechanism layered on top of Stage B, not a change to Stage B's own shipped mechanism. **Important, do not misread:** the screenshot showing White Rum as "Try: Spiced Rum (in your bar)" while Daiquiri still reads as missing/unavailable is Stage B working **exactly as specified at the time** — it is **not a bug**, and Stage B's own outstanding manual-verification checklist (editor layout on a real phone; the recipe-editor adopt+note flow; clone/edit note round-trip) is **still not marked passed** and stays outstanding — re-verify it against Stage D's UI once that ships, don't check Stage B twice.
    - **Stages resequenced 2026-09-11, by explicit user instruction:** the discovery/grouping/ordering slice originally folded into the plan's old "D.3" (Library/Home grouping + counts + the full Daiquiri scenario) was pulled forward, narrowed to exclude preparations/the aggregate counts-breakdown/Buy Next/`excluded_substitute_type_ids`, and shipped as **Stage D.2**. The old D.2 (minimal homemade preparations) is renumbered **D.3**; the old D.3's remainder (combine tiers 4+5, counts/breakdown, curate the two missing catalogue rows) is renumbered **D.4**; the old D.4 (per-substitute override + Buy Next ranking split) is renumbered **D.5**. See `docs/plans/substitutes-and-variations.md`'s own resequencing note for the full mapping.
    - **v2 revision (this turn):** the first Stage D draft kept the canonical badge as primary and "adapted" as an additive secondary line (so a card could read "Unavailable" next to "Make with substitutions"), and left Buy Next's ranking untouched. The user rejected that as still missing the point and asked for a rewrite — see full detail in the plan doc's "Stage D revised (v2)" blockquote and the chunk entry below. The open question from v1 is **resolved**, not open anymore (see below).
    - **Concrete target:** own Spiced Rum + Lemon Juice; White Sugar + Water are household basics; Daiquiri needs White Rum + Lime Juice + Simple Syrup. Once `Lime Juice → Lemon Juice` (substitute) and a Simple Syrup preparation (from White Sugar + Water) are curated, Daiquiri's **primary** status everywhere becomes **"Make with substitutions · Prepare syrup first"** — it must never show "Unavailable" as the leading badge next to that.
@@ -46,7 +46,8 @@ Each numbered step is a development chunk boundary for this file.
    - **Buy Next (revised — a ranking change, not just rendering):** `rankPurchaseRecommendations` now splits candidates by the target recipe's `display.tier` at gather time — a recipe already `display.tier === "adapted"` never counts its one remaining strict-missing ingredient as an "unlock" (`unlockCount`/the "Unlocks N" reason); instead it's tracked separately as `restoresOriginalRecipes`, ranked below genuine unlocks, with its own reason text ("Also lets you make the original version of N already-possible recipe(s)"). Genuine not-yet-adapted unlocks are scored exactly as today.
    - **Open question RESOLVED, no longer open:** the user's own instruction directly settled it — counts include adapted in the main total with a breakdown (see above), not a literal-only primary number.
    - **D.4 and D.5 are now ALSO DONE + pushed 2026-09-11** (see the new chunk entry below) - the counts/breakdown, the Buy Next unlock-vs-restore ranking split, and the per-component substitute exclusion are all shipped, plus the real Lime Juice → Lemon Juice catalogue row was added (White Rum → Spiced Rum already existed; Simple Syrup's preparation was already configured manually by the user and was NOT touched). **Every catalogue prerequisite for the full Daiquiri acceptance scenario now genuinely exists.**
-   - **Exact next action:** the user reviews the complete Stage D feature end-to-end in the running app - primarily the Daiquiri scenario (own Spiced Rum + Lemon Juice; confirm it leads with "Make with substitutions · Prepare Simple Syrup first" and that the detail page explains both adaptations without marking Simple Syrup owned), plus the new count lines on Library/Home/Build Your Bar and the editor's exclusion chips. None of this has been confirmed in a browser yet (no browser tooling in this sandbox).
+   - **Manual verification PASSED 2026-09-12, terminology finalized:** the user confirmed the Daiquiri (and other adapted cocktails, e.g. Gin Fizz) resolve correctly in the running app, and Home showed "10 cocktails possible · 5 ready, 5 with substitutions or preparation." The prior screenshot showing the Daiquiri unavailable was expected behavior at the time (Lemon Juice wasn't owned yet) - explicitly not a bug, no fix needed. The adapted category's name is finalized as **"Make With Adaptations"** (see the new chunk entry below). **Nothing is outstanding for Stage D.**
+   - **Exact next action:** none outstanding for Stage D itself. Stage C (Linked Variations) remains not started, independent, on a separate go-ahead whenever the user wants it.
 
 1. **Household Basics is COMPLETE — Stages 1–3, closed out 2026-09-10.** See the "Household Basics Stage 3 — CLOSE-OUT" chunk below (two non-blocking limits: Home "Edit list" visual check; offline-save handling).
 2. **`docs/plans/substitutes-and-variations.md` — decisions D1–D6 APPROVED (D1 now superseded for the new Stage D feature, see item 0); Stage A + Stage A follow-up + Stage B all DONE + pushed 2026-09-10. Stage C (Linked Variations) NOT started. Stage D is planning-only (see item 0).**
@@ -136,6 +137,61 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 needed). No migrations, no schema change - not needed to fix this.
 
 **Commit:** `7a22526`. `docs/project.md` untouched.
+
+---
+
+## Last completed chunk (Substitutes & Variations — Stage D manual verification PASSED + adapted-category rename, 2026-09-12 — `src/**` only, no migrations, no catalogue changes)
+
+**Manual verification, confirmed by the user on the real app:** the
+Daiquiri now correctly appears in the adapted/makeable category, resolving
+through White Rum → owned Spiced Rum, Lime Juice → owned Lemon Juice, and
+Simple Syrup via its homemade preparation (White Sugar + Water). Other
+adapted cocktails (Gin Fizz) also correctly discovered. Owning Lemon Juice
+does **not** imply owning whole Lemon (directional Can-provide, as
+designed). Home showed **"10 cocktails possible · 5 ready, 5 with
+substitutions or preparation."** The prior screenshot showing the Daiquiri
+unavailable was expected behavior at the time (Lemon Juice wasn't owned
+yet) - **explicitly not a bug; no investigation or fix was needed or
+made.**
+
+**Terminology cleanup: the adapted discovery CATEGORY renamed "Make With
+Adaptations"** (was "Make With Substitutions") - the category also holds
+cocktails resolvable through a homemade preparation alone with no
+substitute involved (e.g. missing only Simple Syrup), which "...
+Substitutions" under-described once tier 5 shipped. Centralized in one
+new export, `ADAPTED_CATEGORY_LABEL` (`src/data/constants.js`), consumed
+by `AVAIL_FILTERS`'s `adapted` entry (shared Library/Lists filter),
+Library's `AVAIL_GROUP_LABEL.adapted` (grouped-view heading), and Home's
+section heading - one source, same wording everywhere.
+
+**Deliberately NOT renamed** (no genuine technical reason to, and not what
+was asked): the `display.tier === "adapted"` identifier and everything
+built on it (`computeAdaptedResult`, `rankAdapted`, `AVAIL_CFG.adapted`/
+`AVAIL_TONE.adapted`, `computeMakeability()`'s `adapted` field); and a
+cocktail's own composed status text ("Make with substitutions" / "Prepare
+X first" / both joined - `composeAdaptedLabel()` in
+`src/domain/makeability.js`, plus the same string as `AVAIL_CFG.adapted
+.label`'s fallback in `primitives.jsx`) - that's a different, more specific
+mechanism describing what ONE cocktail needs, not the category name, and
+stays exactly as it was.
+
+Comments in `src/domain/almostThere.js`, `src/screens/HomeScreen.jsx`, and
+`src/screens/ListsScreen.jsx` that quoted the old category name were
+updated to match; two comments that explicitly document the rename itself
+(as a historical note) still mention the old name on purpose. This
+planning doc's own Stage D.1-D.5 write-ups still say "Make With
+Substitutions" throughout, since that was accurate at the time each was
+written - left as historical record, not rewritten (see the plan doc's own
+"Stage D manual verification — PASSED" section for the full finalization
+note).
+
+**Verified:** `corepack pnpm@10.34.3 test` **311/311** (unchanged - no test
+asserted the exact old string, nothing needed updating). `pnpm build`
+clean (174 modules). Isolated-LF `oxfmt --check` clean on all 5
+changed files (no reflow needed).
+
+**Commit:** see the git log for the exact hash (this file and
+`docs/plans/substitutes-and-variations.md` updated in the same commit/push).
 
 ---
 

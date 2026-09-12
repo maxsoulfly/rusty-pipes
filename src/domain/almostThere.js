@@ -1,5 +1,7 @@
-// Ranks Home's "Almost There" and "Make With Substitutions" (Stage D.2)
-// lists. Both buckets are read off the shared `display.tier` (Stage D.1,
+// Ranks Home's "Almost There" and "Make With Adaptations" (Stage D.2,
+// renamed from "Make With Substitutions" 2026-09-12 - see
+// docs/plans/substitutes-and-variations.md's finalization note) lists.
+// Both buckets are read off the shared `display.tier` (Stage D.1,
 // domain/makeability.js), not raw `avail` - a recipe resolvable via a
 // configured, owned general substitute has `display.tier === "adapted"`
 // and belongs in the second list, never the first, even though its
@@ -14,7 +16,7 @@
 // that same definition, so real cross-user popularity (favoriteCount +
 // wantToMakeCount, a denormalized counter - see
 // 20260826110000_recipe_popularity_counters.sql) is the only signal that
-// actually differentiates them. "Make With Substitutions" has no such
+// actually differentiates them. "Make With Adaptations" has no such
 // single shared "closeness" number (an adapted recipe can have resolved
 // any number of components), so it uses the same popularity tie-break for
 // consistency rather than inventing a second ranking rule.
