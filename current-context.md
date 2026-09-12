@@ -234,8 +234,7 @@ the full detail), item 2 repointed. `docs/project.md` untouched.
 **Verified:** planning only - no test/build/migration run this turn (no
 code changed).
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `ae9bd35`. `docs/project.md` untouched.
 
 ---
 
