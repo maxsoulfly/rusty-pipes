@@ -27,6 +27,17 @@ import {
   resolveVariationCandidates,
 } from "@/domain/recipeRelationships"
 import { parseUnitLabel } from "@/domain/servings"
+import {
+  MAX_DRAFTS,
+  hasDraftContent,
+  isSelfAssignedDraft,
+  readDraftContent,
+  readDraftIndex,
+  removeDraftIndexEntry,
+  shouldAutosaveDraft,
+  upsertDraftIndexEntry,
+  writeDraftContent,
+} from "@/lib/recipeDrafts"
 import { buildRecipeImportPrompt } from "@/schemas/recipeImport"
 import { parseRecipePaste } from "@/schemas/recipePaste"
 import { createRecipe, updateRecipe } from "@/services/recipes"
@@ -42,56 +53,6 @@ function unitLabelToForm(ri) {
   if (ri.unitLabel === "ml") return { amount: String(ri.amount), unit: "ml" }
   const { amount, unit } = parseUnitLabel(ri.unitLabel)
   return { amount, unit: unit || NON_VOLUME_UNITS[0] }
-}
-
-// New-recipe drafts (see the isDraftable block in the component below) used
-// a single localStorage slot per user - starting a second in-progress
-// recipe silently overwrote the first one, which read as "my draft got
-// deleted" the moment someone had two blocked recipes going at once. Each
-// draft now gets its own id (reflected in the URL as ?draft=<id> so a
-// refresh/return-from-ingredient-request keeps pointing at the same one),
-// with a small index tracking id/name/updatedAt for all of them. Capped at
-// MAX_DRAFTS, oldest evicted first, so this can't grow without bound.
-const MAX_DRAFTS = 5
-const draftIndexKeyFor = (userId) => `recipe-drafts:${userId}`
-const draftContentKeyFor = (userId, draftId) =>
-  `recipe-draft:${userId}:${draftId}`
-function readDraftIndex(userId) {
-  if (!userId) return []
-  try {
-    return JSON.parse(localStorage.getItem(draftIndexKeyFor(userId))) ?? []
-  } catch {
-    return []
-  }
-}
-function upsertDraftIndexEntry(userId, entry) {
-  const list = readDraftIndex(userId).filter((d) => d.id !== entry.id)
-  list.unshift(entry)
-  while (list.length > MAX_DRAFTS) {
-    const evicted = list.pop()
-    localStorage.removeItem(draftContentKeyFor(userId, evicted.id))
-  }
-  localStorage.setItem(draftIndexKeyFor(userId), JSON.stringify(list))
-}
-function removeDraftIndexEntry(userId, draftId) {
-  const list = readDraftIndex(userId).filter((d) => d.id !== draftId)
-  localStorage.setItem(draftIndexKeyFor(userId), JSON.stringify(list))
-  localStorage.removeItem(draftContentKeyFor(userId, draftId))
-}
-// Shared by the autosave effect (decides whether the live form has enough
-// to save) and the mount-check effect (decides whether a saved draft has
-// enough to offer restoring) - a real bug had these disagree: saving
-// allowed a blank name as long as an ingredient or step was filled in
-// (upsertDraftIndexEntry falls back to "Untitled draft" for display), but
-// restoring only ever checked the name, so a nameless-but-real draft saved
-// correctly and even showed up in the "other drafts" picker, but its own
-// restore banner could never trigger.
-function hasDraftContent(draft) {
-  return Boolean(
-    draft?.name?.trim() ||
-      draft?.ings?.some((i) => i.ingredientName?.trim()) ||
-      draft?.steps?.some((s) => s?.trim()),
-  )
 }
 
 export default function EditorScreen() {
@@ -182,10 +143,6 @@ export default function EditorScreen() {
   // have their own prefill source and a saved copy to fall back to.
   const isDraftable = !isEditing && !cloneSourceId
   const draftId = isDraftable ? searchParams.get("draft") : null
-  const draftKey =
-    isDraftable && userId && draftId
-      ? draftContentKeyFor(userId, draftId)
-      : null
   const [draftBanner, setDraftBanner] = useState(null)
   // Shown instead of draftBanner when landing on a genuinely blank New
   // Recipe (no ?draft= yet) and other drafts already exist on this browser -
@@ -213,17 +170,9 @@ export default function EditorScreen() {
       setOtherDrafts(readDraftIndex(userId))
       return
     }
-    if (draftId === selfAssignedDraftIdRef.current) return
-    const raw = localStorage.getItem(draftKey)
-    if (!raw) return
-    try {
-      const draft = JSON.parse(raw)
-      if (hasDraftContent(draft)) setDraftBanner(draft)
-    } catch {
-      // Corrupted entry - leave it alone rather than deleting it here.
-      // There's nothing to restore either way; if the user keeps typing,
-      // autosave below overwrites it with valid content anyway.
-    }
+    if (isSelfAssignedDraft(draftId, selfAssignedDraftIdRef.current)) return
+    const draft = readDraftContent(userId, draftId)
+    if (draft && hasDraftContent(draft)) setDraftBanner(draft)
     // Only ever check once, right after mount - restoring/discarding is a
     // one-time user decision, not something to re-run as the form changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -237,8 +186,15 @@ export default function EditorScreen() {
   // successful save) - a stray empty entry is low-cost and self-heals the
   // moment the user types something, or ages out via MAX_DRAFTS eviction.
   useEffect(() => {
-    if (!isDraftable || !userId || draftBanner) return
-    if (!hasDraftContent({ name, ings, steps })) return
+    if (
+      !shouldAutosaveDraft({
+        isDraftable,
+        userId,
+        draftBanner,
+        formValues: { name, ings, steps },
+      })
+    )
+      return
     const id =
       draftId ??
       (() => {
@@ -254,20 +210,17 @@ export default function EditorScreen() {
         )
         return newId
       })()
-    localStorage.setItem(
-      draftContentKeyFor(userId, id),
-      JSON.stringify({
-        name,
-        desc,
-        glassName,
-        familyId,
-        liquidColor,
-        liquidColor2,
-        ings,
-        steps,
-        tasteTagIds,
-      }),
-    )
+    writeDraftContent(userId, id, {
+      name,
+      desc,
+      glassName,
+      familyId,
+      liquidColor,
+      liquidColor2,
+      ings,
+      steps,
+      tasteTagIds,
+    })
     upsertDraftIndexEntry(userId, {
       id,
       name: name.trim() || "Untitled draft",
