@@ -316,8 +316,7 @@ tooling in this sandbox) - two manual checks still owed (see item 0
 above for the exact steps: prefill-on-reopen, and a cyclic-assignment
 error leaving the draft intact).
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `e48b588`. `docs/project.md` untouched.
 
 ---
 
