@@ -1,6 +1,6 @@
 # Component modularization, round 2
 
-**Status: executed and committed, 2026-09-14.** Follow-up to `docs/plans/archive/component-size-refactor.md` (2026-08-24), which split `AdminScreen`/`EditorScreen`/`MyBarScreen`/`DetailScreen` but predates `IngredientTypeEditor.jsx` and `IngredientDetailScreen.jsx` entirely — both grew large without ever going through that pass. Scope and target structure came from a read-only maintainability audit earlier this session (largest-files inventory + responsibility analysis), approved by the user for these two files only. All three stages (IngredientTypeEditor split, IngredientDetailScreen split, `mockData.js` removal) landed with `pnpm test`/`pnpm build` green throughout and zero `oxlint -D no-undef` hits (beyond the same expected `crypto` browser-global false positive the 2026-08-24 refactor already documented). Manual browser click-through is still owed — see the handoff checklist in the commit(s) covering this work.
+**Status: executed and committed, 2026-09-14.** Follow-up to `docs/plans/archive/component-size-refactor.md` (2026-08-24), which split `AdminScreen`/`EditorScreen`/`MyBarScreen`/`DetailScreen` but predates `IngredientTypeEditor.jsx` and `IngredientDetailScreen.jsx` entirely — both grew large without ever going through that pass. Scope and target structure came from a read-only maintainability audit earlier this session (largest-files inventory + responsibility analysis), approved by the user for these two files only. All three stages (IngredientTypeEditor split, IngredientDetailScreen split, `mockData.js` removal) landed with `pnpm test`/`pnpm build` green throughout and zero `oxlint -D no-undef` hits (beyond the same expected `crypto` browser-global false positive the 2026-08-24 refactor already documented). **Manually verified by the user, 2026-09-14** — both the Ingredient Type editor and Ingredient Detail click-through checklists passed with no regressions.
 
 ## Scope
 
@@ -37,7 +37,7 @@ src/screens/IngredientDetailScreen.jsx        (shell: route/data resolution, own
 - [x] `pnpm build` — clean after each stage and combined.
 - [x] Diff read carefully for accidental behavior drift (payload shapes, disabled conditions, aria-labels, key stability, empty-state fallback text) — including the one deliberate divergence preserved as-is: "Can provide" shows an italic "No guidance" fallback for a blank note, "Can be replaced by" does not (pre-existing inconsistency, not introduced or fixed here).
 - [x] `mockData.js`: fresh repo-wide grep confirmed no import/reference anywhere (only this plan doc and `availability.js`'s own comment named it); `availability.js`'s comment updated to drop the stale reference.
-- [ ] No UI verification claimed here — a short manual click-through list is handed to the user separately.
+- [x] Manually verified by the user, 2026-09-14 — Ingredient Type editor and Ingredient Detail click-through checklists both passed.
 
 ## Commits
 

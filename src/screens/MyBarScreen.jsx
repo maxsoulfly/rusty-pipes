@@ -426,6 +426,7 @@ export default function MyBarScreen() {
                     key={parent.id}
                     parent={parent}
                     children={children}
+                    categoryName={categoryName}
                     renderCard={renderCard}
                     renderExpanded={renderExpanded}
                   />
