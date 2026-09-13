@@ -400,8 +400,7 @@ not the in-progress edit; check narrow/mobile width for safe truncation
 on both the name and the "Edit Recipe" caption; open New Recipe and
 confirm it still just says "New Recipe" with no subtitle.
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `af01b1a`. `docs/project.md` untouched.
 
 ---
 
