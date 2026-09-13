@@ -1,6 +1,6 @@
 # MyBarScreen modularization
 
-**Status: executed and committed, 2026-09-14.** Fifth round of the component-size cleanup, after the AdminScreen/EditorScreen rounds earlier the same day and the 2026-08-24 original refactor. `MyBarScreen.jsx` was 301 lines right after that pass and grew to 462 since (My Bar owned-first redesign, Speed Rack, Household Basics-era changes, the Beer duplicate-heading fix). Re-inspected fresh rather than trusting the earlier audit's line count. Ends at 303 lines - back near its post-2026-08-24 size, with the removed ~160 lines now living in a unit-tested domain module and a focused hook.
+**Status: executed and committed, 2026-09-14.** Fifth round of the component-size cleanup, after the AdminScreen/EditorScreen rounds earlier the same day and the 2026-08-24 original refactor. `MyBarScreen.jsx` was 301 lines right after that pass and grew to 462 since (My Bar owned-first redesign, Speed Rack, Household Basics-era changes, the Beer duplicate-heading fix). Re-inspected fresh rather than trusting the earlier audit's line count. Ends at 303 lines - back near its post-2026-08-24 size, with the removed ~160 lines now living in a unit-tested domain module and a focused hook. **Manually verified by the user, 2026-09-14** — category/family grouping, the Beer heading fix, Speed Rack pin/unpin, search/category filter, ingredient-detail navigation with scroll/expanded-state restoration, and independent generic/product ownership toggles all confirmed working.
 
 ## Responsibilities found
 
@@ -33,4 +33,4 @@
 - [x] `src/domain/myBarGrouping.test.js` (new, 7 tests) covers: `byPriorityThenName` ordering (essential/common/specialized/niche, alphabetical tiebreak, unknown-priority-sorts-last) and `buildFamilyClusters` (singles-only, a parent with filtered/sorted children, an orphan child whose parent didn't pass the filter, cluster order preservation).
 - [x] `corepack pnpm@10.34.3 test` (427/427) and `corepack pnpm@10.34.3 build` green.
 - [x] Diff read carefully - the hook's returned field names match what the JSX/render functions already referenced exactly, so this was a pure relocation with zero JSX changes (`categoryNameById`/`aliasesByTypeId` dropped from `MyBarScreen.jsx`'s own destructuring since nothing there reads them directly anymore - both are still computed and returned by the hook).
-- [ ] No manual UI verification claimed here - handed to the user as a short checklist.
+- [x] Manually verified by the user, 2026-09-14 — category/family grouping, Beer heading fix, Speed Rack, search/filter, ingredient-detail navigation + scroll/expanded-state restoration, and independent ownership toggles all confirmed working.
