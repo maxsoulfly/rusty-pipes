@@ -1777,6 +1777,168 @@ begin
 end;
 $$;
 
+-- ── recipe_relationships (Linked Variations Stage V.1) ──────────────────
+-- Directional "recipe_id is a variation of related_recipe_id", gated the
+-- same way recipe_components/recipe_component_alternatives are - no owner
+-- column of its own, entirely through recipe_is_editable(recipe_id) (the
+-- VARIATION's own edit permission - the base recipe's owner does not
+-- control who links to it) / recipe_is_visible() on BOTH sides for reads.
+-- Plus: a BEFORE INSERT/UPDATE trigger (forbid_recipe_relationship_cycle())
+-- rejects a self-link and any cycle, not just an inert-but-undisplayed one.
+
+create temporary table rls_relationship_recipe_ids (
+  a_id uuid, b_id uuid, c_id uuid, d_id uuid, other_private_id uuid
+) on commit drop;
+insert into rls_relationship_recipe_ids values (null, null, null, null, null);
+grant all on rls_relationship_recipe_ids to authenticated, anon;
+
+do $$
+declare f record; v_a uuid; v_b uuid; v_c uuid; v_d uuid; v_other uuid;
+begin
+  select * into f from rls_fixture_ids;
+
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  insert into public.recipes (name, source_type, owner_id, visibility, glass_id)
+  values ('RLS_TEST relationship A', 'user', f.member_owner_id, 'private', f.glass_id) returning id into v_a;
+  insert into public.recipes (name, source_type, owner_id, visibility, glass_id)
+  values ('RLS_TEST relationship B', 'user', f.member_owner_id, 'private', f.glass_id) returning id into v_b;
+  insert into public.recipes (name, source_type, owner_id, visibility, glass_id)
+  values ('RLS_TEST relationship C', 'user', f.member_owner_id, 'private', f.glass_id) returning id into v_c;
+  insert into public.recipes (name, source_type, owner_id, visibility, glass_id)
+  values ('RLS_TEST relationship D', 'user', f.member_owner_id, 'private', f.glass_id) returning id into v_d;
+
+  perform pg_temp.set_identity('authenticated', f.member_other_id);
+  insert into public.recipes (name, source_type, owner_id, visibility, glass_id)
+  values ('RLS_TEST relationship other-owner private', 'user', f.member_other_id, 'private', f.glass_id) returning id into v_other;
+
+  update rls_relationship_recipe_ids
+    set a_id = v_a, b_id = v_b, c_id = v_c, d_id = v_d, other_private_id = v_other;
+  perform pg_temp.assert(true, 'recipe_relationships: fixture recipes created (A/B/C/D owned by member_owner, one private recipe owned by member_other)');
+end;
+$$;
+
+do $$
+declare f record; r record; v_id uuid; n int; affected int; v_note text;
+begin
+  select * into f from rls_fixture_ids;
+  select * into r from rls_relationship_recipe_ids;
+
+  -- B is a variation of A, as the owner of both.
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  insert into public.recipe_relationships (recipe_id, related_recipe_id, note)
+  values (r.b_id, r.a_id, 'RLS_TEST practical version')
+  returning id into v_id;
+  perform pg_temp.assert(true, 'recipe_relationships: the variation''s own editor can link it to a base they can also see');
+  select note into v_note from public.recipe_relationships where id = v_id;
+  perform pg_temp.assert(v_note = 'RLS_TEST practical version', 'recipe_relationships: the note round-trips for the owner');
+
+  -- Self-link rejected. The BEFORE trigger fires before the CHECK
+  -- constraint is ever evaluated (a self-link is a degenerate, zero-length
+  -- cycle - `walker` starts at related_recipe_id, which for a self-link
+  -- already equals recipe_id), so this is caught as raise_exception, not
+  -- check_violation - the CHECK constraint stays in place as a structural
+  -- backstop regardless (e.g. if triggers were ever disabled for a bulk
+  -- operation).
+  begin
+    insert into public.recipe_relationships (recipe_id, related_recipe_id)
+    values (r.a_id, r.a_id);
+    perform pg_temp.assert(false, 'recipe_relationships: a self-link should be rejected');
+  exception when raise_exception then
+    perform pg_temp.assert(true, 'recipe_relationships: a self-link is rejected (caught by the cycle trigger as a degenerate zero-length cycle)');
+  end;
+
+  -- Duplicate base rejected (unique(recipe_id)) - B already has a base (A).
+  begin
+    insert into public.recipe_relationships (recipe_id, related_recipe_id)
+    values (r.b_id, r.c_id);
+    perform pg_temp.assert(false, 'recipe_relationships: a second base for the same variation should be rejected');
+  exception when unique_violation then
+    perform pg_temp.assert(true, 'recipe_relationships: a variation can have at most one base (unique violation on a second insert)');
+  end;
+
+  -- Valid, non-cyclic chain: C is a variation of B (A <- B <- C).
+  insert into public.recipe_relationships (recipe_id, related_recipe_id)
+  values (r.c_id, r.b_id);
+  perform pg_temp.assert(true, 'recipe_relationships: a valid non-cyclic chain (A <- B <- C) is allowed');
+
+  -- Direct cycle rejected: A -> B would close A -> B -> A (B's base is
+  -- already A).
+  begin
+    insert into public.recipe_relationships (recipe_id, related_recipe_id)
+    values (r.a_id, r.b_id);
+    perform pg_temp.assert(false, 'recipe_relationships: a direct cycle (A -> B -> A) should be rejected');
+  exception when raise_exception then
+    perform pg_temp.assert(true, 'recipe_relationships: a direct cycle is rejected by the cycle-prevention trigger');
+  end;
+
+  -- Longer cycle rejected: A -> C would close A -> C -> B -> A (C's base
+  -- is B, B's base is A).
+  begin
+    insert into public.recipe_relationships (recipe_id, related_recipe_id)
+    values (r.a_id, r.c_id);
+    perform pg_temp.assert(false, 'recipe_relationships: a longer cycle (A -> C -> B -> A) should be rejected');
+  exception when raise_exception then
+    perform pg_temp.assert(true, 'recipe_relationships: a longer (3-hop) cycle is rejected by the same trigger');
+  end;
+
+  -- D is a second, independent variation of A - one base, many variations.
+  insert into public.recipe_relationships (recipe_id, related_recipe_id)
+  values (r.d_id, r.a_id);
+  select count(*) into n from public.recipe_relationships where related_recipe_id = r.a_id;
+  perform pg_temp.assert(n = 2, 'recipe_relationships: one base can have multiple direct variations (A has B and D)');
+
+  -- A non-editor cannot link FROM someone else's recipe.
+  perform pg_temp.set_identity('authenticated', f.member_other_id);
+  begin
+    insert into public.recipe_relationships (recipe_id, related_recipe_id)
+    values (r.a_id, r.other_private_id);
+    perform pg_temp.assert(false, 'recipe_relationships: a non-editor should not be able to link someone else''s recipe');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'recipe_relationships: a non-editor cannot insert a relationship for a recipe they don''t own');
+  end;
+
+  -- The link is invisible to a viewer who can't see one side (here: the
+  -- OTHER member's own private recipe, linked to nothing - simulate by
+  -- reading a relationship whose related side is member_owner's private
+  -- recipe A, as member_other, who owns neither A nor B).
+  select count(*) into n from public.recipe_relationships where recipe_id = r.b_id and related_recipe_id = r.a_id;
+  perform pg_temp.assert(n = 0, 'recipe_relationships: a member who can''t see either private recipe in the link cannot read it');
+
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  select count(*) into n from public.recipe_relationships where recipe_id = r.b_id and related_recipe_id = r.a_id;
+  perform pg_temp.assert(n = 1, 'recipe_relationships: the owner of both sides can read the relationship');
+
+  perform pg_temp.set_identity('anon', null);
+  select count(*) into n from public.recipe_relationships where recipe_id = r.b_id and related_recipe_id = r.a_id;
+  perform pg_temp.assert(n = 0, 'recipe_relationships: anon cannot read a relationship');
+  begin
+    -- other_private_id/d_id deliberately: a pair that would NOT form a
+    -- cycle (unlike a_id/c_id, already exercised above), so a denial here
+    -- is unambiguously RLS, not a coincidental cycle rejection.
+    insert into public.recipe_relationships (recipe_id, related_recipe_id) values (r.other_private_id, r.d_id);
+    perform pg_temp.assert(false, 'recipe_relationships: anon should not be able to insert a relationship');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'recipe_relationships: anon cannot insert a relationship');
+  end;
+
+  -- Owner can delete/unlink; doing so touches only this table, never the
+  -- recipes themselves (recipe content independence - no column on
+  -- `recipes` is written by this whole block at any point).
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  delete from public.recipe_relationships where recipe_id = r.d_id;
+  get diagnostics affected = row_count;
+  perform pg_temp.assert(affected = 1, 'recipe_relationships: the variation''s own editor can unlink it from its base');
+  select count(*) into n from public.recipes where id = r.a_id or id = r.d_id;
+  perform pg_temp.assert(n = 2, 'recipe_relationships: unlinking leaves both recipes'' own rows completely untouched');
+
+  -- Cascade: deleting the base recipe removes the (remaining) relationship
+  -- row pointing at it.
+  delete from public.recipes where id = r.a_id;
+  select count(*) into n from public.recipe_relationships where related_recipe_id = r.a_id;
+  perform pg_temp.assert(n = 0, 'recipe_relationships: deleting the base recipe cascades and removes relationships pointing at it');
+end;
+$$;
+
 -- ── recipe_taste_tags ─────────────────────────────────────────────────────
 -- Same shape as recipe_components/recipe_component_alternatives above: no
 -- owner column of its own, gates entirely through

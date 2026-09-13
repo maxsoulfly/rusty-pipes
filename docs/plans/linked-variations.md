@@ -1,16 +1,31 @@
 # Linked Variations
 
-**Planning document — 2026-09-13. Planning only, nothing implemented.**
-Written after Ingredient Detail v1 (I.1–I.4, `docs/plans/
-ingredient-detail-page.md`) shipped and was manually verified. This is
-Stage C of `docs/plans/substitutes-and-variations.md`, which sketched an
-early version of this model in its "Part 3 — Linked cocktail variations"
-section (2026-09-10) before Stage D existed. That sketch is a useful
-starting point but predates several decisions below; where this doc
-differs, this doc is authoritative and the reason for the difference is
-called out explicitly. `docs/plans/substitutes-and-variations.md` itself
-is updated with a pointer to this doc rather than duplicating the design
-in two places (see its own "Part 3"/Stage C section).
+**Planning document — 2026-09-13, revised 2026-09-13 (cycle rule
+correction) and now Stage V.1 DONE + pushed, 2026-09-13.** Written after
+Ingredient Detail v1 (I.1–I.4, `docs/plans/ingredient-detail-page.md`)
+shipped and was manually verified. This is Stage C of `docs/plans/
+substitutes-and-variations.md`, which sketched an early version of this
+model in its "Part 3 — Linked cocktail variations" section (2026-09-10)
+before Stage D existed. That sketch is a useful starting point but
+predates several decisions below; where this doc differs, this doc is
+authoritative and the reason for the difference is called out explicitly.
+`docs/plans/substitutes-and-variations.md` itself is updated with a
+pointer to this doc rather than duplicating the design in two places
+(see its own "Part 3"/Stage C section).
+
+**Correction applied before/during V.1 (2026-09-13):** the original plan
+below treated a relationship cycle as "inert, so not worth preventing at
+the DB level" (see the struck-through reasoning still visible in the
+Relationship model section, kept as historical record). The user
+corrected this: Linked Variations are semantic parent/base facts, so a
+cycle is invalid catalogue data even though the member-facing UI only
+ever resolves one hop - "the UI doesn't show it" is not the same claim as
+"it's fine for it to exist." **V.1 ships with cycle prevention at write
+time** (a database trigger - see Relationship model and Staged
+implementation plan below for what actually shipped). Self-links remain
+rejected too, now caught by the same mechanism as a degenerate
+zero-length cycle, with the original `check` constraint kept as a
+structural backstop.
 
 ---
 
@@ -191,33 +206,67 @@ that isn't asked for. If a genuinely different relationship type is ever
 needed, that's a new, deliberate migration then, not a speculative column
 now.
 
-**Depth/chains: allowed to exist, never walked past one hop.** Nothing
+**Depth/chains: allowed to exist as a chain; a CYCLE is rejected at write
+time. Member-facing resolution stays one hop only, regardless.** Nothing
 stops a variation from itself becoming the base of another variation (B is
-a variation of A; C is a variation of B) — preventing that would need a
-recursive check with no real benefit, since nothing in this design ever
-computes anything *from* the chain. The **display** rule is the actual
-guard: a recipe's own page only ever shows **its own direct base** (one
-hop up) and **its own direct variations** (one hop down) — never walks
-further. This makes the "how deep can chains go" question moot for the
-UI (always exactly one hop, however deep the underlying graph gets) and
-means no cycle-detection algorithm is needed either: a theoretical cycle
-(A → B → C → A, each an ordinary one-hop edge) is inert under a
-never-walk-past-one-hop display rule — each recipe still only ever shows
-its own direct neighbors correctly, regardless of what the wider graph
-looks like elsewhere. This is called out explicitly as a deliberate
-simplification, not an oversight: preventing cycles at the DB level would
-need a recursive CTE constraint (real complexity) to guard against a
-scenario the display model already can't be confused by. If real misuse
-ever created a genuinely misleading chain, that's a moderation matter
-(matches D4's own precedent: "misleading links stay a moderation matter,"
-not something the schema polices) — revisit only if it actually happens.
+a variation of A; C is a variation of B) — that's an ordinary, valid chain,
+and preventing chains themselves would need a recursive check with no real
+benefit, since nothing in this design ever computes anything *from* the
+chain. The **display** rule stays exactly as originally designed: a
+recipe's own page only ever shows **its own direct base** (one hop up) and
+**its own direct variations** (one hop down) — never walks further,
+however deep the underlying chain actually is.
 
-**Self-link and duplicate prevention** (both trivial, both at the DB
-level): `check (recipe_id <> related_recipe_id)`; `unique (recipe_id)`
-(a variation has *one* base — a second insert for the same `recipe_id`
-fails, so "change the base" is delete-then-insert, or a single UPSERT
-keyed on `recipe_id`, matching how the recipe editor already treats
-`recipe_component_alternatives` — delete + re-insert, no UPDATE policy).
+~~**Superseded correction, 2026-09-13 (kept as historical record of the
+original reasoning, not acted on):** the original text here argued a
+cycle (A → B → C → A) is "inert" under the one-hop display rule and
+therefore not worth preventing at the DB level, leaving cycle prevention
+as an explicitly deferred item. The user corrected this: a linked
+variation is a semantic parent/base *fact*, and a cycle is invalid
+catalogue data regardless of whether the member UI happens to only
+resolve one hop - "the display can't be confused by it" is not the same
+claim as "it's fine for it to exist as stored data." Self-links must be
+rejected; assigning a base must be rejected if it would create a cycle;
+chains may otherwise exist; member-facing resolution stays one hop only.
+See below for what actually shipped in V.1.~~
+
+**What V.1 actually ships:** a self-link is rejected, and assigning a base
+is rejected outright if it would create a cycle of any length - both
+enforced in the database, not left to the one-hop display model to paper
+over. This is cheap to do correctly here specifically because
+`unique(recipe_id)` (below) already limits every recipe to **at most one**
+outgoing base edge - the whole relationship graph is always a *forest of
+trees*, never a general graph, so checking whether a proposed new edge
+would close a loop only ever means walking a **single linked list**
+upward from the proposed base, checking whether it ever leads back to the
+recipe being assigned. A `BEFORE INSERT OR UPDATE` trigger
+(`forbid_recipe_relationship_cycle()`, `SECURITY DEFINER` so it sees every
+row regardless of the calling member's own read visibility) does exactly
+that walk, with a generous fixed depth cap as a defensive guard against
+corrupted data rather than a real expectation of ever being hit - this is
+a bounded iterative walk over a linked list, not a recursive CTE or a
+general graph library, matching the explicit instruction to use the
+simplest reliable implementation for this specific shape of data. A
+self-link is caught by the same trigger as a degenerate zero-length cycle
+(`related_recipe_id` already equals `recipe_id` on the very first check) -
+the original `check (recipe_id <> related_recipe_id)` constraint stays in
+place too, as a structural backstop that holds even if triggers were ever
+disabled for some bulk operation.
+
+If real misuse ever created a genuinely misleading (but non-cyclic) chain
+- e.g. a technically-valid but confusing multi-hop lineage - that stays a
+moderation matter (matches D4's own precedent: "misleading links stay a
+moderation matter," not something the schema polices). Only an actual
+cycle is treated as invalid data; a long but honest chain is not.
+
+**Self-link, duplicate, and cycle prevention** (all at the DB level):
+`check (recipe_id <> related_recipe_id)` (structural backstop; in
+practice the cycle trigger below catches a self-link first, as a
+zero-length cycle); `unique (recipe_id)` (a variation has *one* base — a
+second insert for the same `recipe_id` fails, so "change the base" is
+delete-then-insert, matching how the recipe editor already treats
+`recipe_component_alternatives` — delete + re-insert, no UPDATE policy);
+a `BEFORE INSERT OR UPDATE` trigger that rejects any cycle (see above).
 
 **Deletion/archive.** `on delete cascade` on both FKs — deleting either
 side's recipe removes the link, no orphaned row, no special handling
@@ -226,7 +275,7 @@ needed (matches every other child table in this schema). Unpublishing
 being visible to non-owners the moment `recipe_is_visible` says so on
 either side, via the same RLS-composed read policy below.
 
-### Proposed schema
+### Schema — DONE, shipped as V.1, `20260913120000_recipe_relationships.sql`
 
 ```sql
 create table public.recipe_relationships (
@@ -244,6 +293,34 @@ create index recipe_relationships_related_recipe_id_idx
 -- recipe_id already has an implicit index via the unique constraint above;
 -- related_recipe_id needs its own for the reverse "variations of me" lookup.
 
+-- Cycle prevention (the corrected rule - see above): unique(recipe_id)
+-- above already guarantees the graph is a forest of trees (at most one
+-- outgoing edge per node), so checking a proposed new edge is a single
+-- linked-list walk upward from the proposed base, not a general graph
+-- traversal.
+create function public.forbid_recipe_relationship_cycle()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare walker uuid := new.related_recipe_id; steps int := 0;
+begin
+  loop
+    if walker = new.recipe_id then
+      raise exception 'recipe_relationships: assigning this base would create a cycle';
+    end if;
+    select related_recipe_id into walker from public.recipe_relationships where recipe_id = walker;
+    exit when walker is null;
+    steps := steps + 1;
+    if steps > 10000 then
+      raise exception 'recipe_relationships: relationship chain too deep to verify (possible data corruption)';
+    end if;
+  end loop;
+  return new;
+end;
+$$;
+revoke execute on function public.forbid_recipe_relationship_cycle() from public, anon, authenticated;
+create trigger recipe_relationships_forbid_cycle
+  before insert or update on public.recipe_relationships
+  for each row execute function public.forbid_recipe_relationship_cycle();
+
 alter table public.recipe_relationships enable row level security;
 
 -- read: only if the viewer can see BOTH sides
@@ -260,10 +337,13 @@ create policy "recipe_relationships: delete" on public.recipe_relationships
 -- matching recipe_component_alternatives' own precedent exactly.
 ```
 
-No new SECURITY DEFINER function, no new GRANT beyond the table's own
-policies (this table carries no column-restricted grant — every column is
-either system-managed or covered by insert/delete, there's no "member can
-update some columns" case here at all).
+No new authorization SECURITY DEFINER function (the cycle trigger is a
+new SECURITY DEFINER function, but for data-integrity, not authorization -
+`recipe_is_visible`/`recipe_is_editable` are reused as-is for the RLS
+policies themselves). No new GRANT beyond the table's own policies (this
+table carries no column-restricted grant — every column is either
+system-managed or covered by insert/delete, there's no "member can update
+some columns" case here at all).
 
 **Who can link, confirmed from Stage C's D4 (re-affirmed, not silently
 inherited):** the variation's own editor sets its own base — `recipe_
@@ -397,13 +477,16 @@ mirroring `recipe_component_alternatives`' own note field's UX).
   list (client-side) *and* the `check` constraint (server-side) — UI
   convenience, DB is the real gate, same "convenience vs. authority" split
   I.4 already established for the admin edit shortcut.
-- **Cyclic relationships:** per the model above, a cycle is inert under
-  the one-hop display rule, so **no client-side cycle check is added** —
-  consistent with "prevent invalid/cyclic relationships according to the
-  chosen model," where the chosen model's own answer is "a cycle isn't
-  invalid here, it's just not displayed past one hop." The only actually
-  *invalid* relationship is a self-link, which the picker already can't
-  produce.
+- **Cyclic relationships:** rejected in the database by V.1's cycle
+  trigger (see Relationship model above) - no client-side cycle check is
+  *required* for correctness, since the DB is the real gate. A future V.2
+  polish item (not required for V.1, not blocking): catch the trigger's
+  error message and show it inline as a friendly "That would create a
+  cycle" instead of a raw Postgres error string, the same convenience-
+  layer treatment every other server-enforced rule in this editor already
+  gets (e.g. a duplicate name). Self-links are excluded from the picker's
+  own list as before, so the picker itself can't produce one to begin
+  with.
 - **Save/Cancel:** one more sequential Supabase call inside the existing
   (non-atomic) save flow — see the Audit's own note on `updateRecipe()`'s
   documented, accepted lack of cross-table atomicity. Changing or removing
@@ -462,30 +545,40 @@ without a clean, reliable identity mechanism.
 
 ## Staged implementation plan
 
-**V.1 — Schema + domain relationship resolution.**
-- Migration: `recipe_relationships` table + indexes + RLS (as above) +
-  `supabase/tests/rls_suite.sql` block (owner links their variation;
-  self-link rejected; duplicate base rejected — second insert for the same
-  `recipe_id` fails unique; a non-editor can't link from someone else's
-  recipe; the link is invisible to a viewer who can't see the private
-  side; deleting either recipe cascades the link; anon denied).
-- Fetch: `recipe_relationships` as its own small flat table, fetched once
-  alongside recipes (mirrors how `catalog.formConversions`/
-  `ingredientSubstitutions` are already flat-fetched-then-joined
-  client-side, rather than embedding a doubly-self-referencing PostgREST
-  select into `RECIPE_SELECT` — simpler, lower-risk, and consistent with
-  this app's own established pattern for relationship data; refetched via
-  the same `refetchRecipes()` every recipe mutation already triggers).
-- New pure `src/domain/recipeRelationships.js`: given `recipeId` + the
-  flat relationship rows, resolve `{ baseRecipeId, note } | null` (one
-  hop up) and `[{ recipeId, note }]` (one hop down, direct variations
-  only) — the "one-hop, never walk further" rule lives here, in one
-  small, fully unit-tested place, not repeated per screen.
-- *Acceptance:* given a small fixture graph (including a deliberately
-  self-referencing chain, A←B←C), resolving B's base returns exactly A
-  (not walking to see what A's own base is, if any); resolving A's
-  variations returns exactly B (not C); a recipe with no relationships
-  resolves to `null`/`[]` cleanly. No UI yet.
+**V.1 — Schema + domain relationship resolution. DONE, 2026-09-13.**
+- Migration `20260913120000_recipe_relationships.sql`: `recipe_relationships`
+  table + index + RLS + the cycle-prevention trigger (all per the
+  corrected model above), pushed via `supabase db push --linked`.
+  `supabase/tests/rls_suite.sql` gained a new block: the variation's own
+  editor can link it to a visible base (note round-trips); a self-link is
+  rejected (caught by the cycle trigger as a zero-length cycle); a second
+  base for an already-linked variation is rejected (unique violation); a
+  valid 3-node chain (A←B←C) is allowed; a direct cycle (A→B→A) is
+  rejected; a longer 3-hop cycle (A→C→B→A) is rejected; one base can have
+  multiple direct variations; a non-editor cannot link someone else's
+  recipe; the link is invisible to a viewer who can't see both sides;
+  anon is denied on read/insert; unlinking (delete) leaves both recipes'
+  own rows completely untouched; deleting the base recipe cascades and
+  removes the relationship. Full suite passes; `db advisors --type
+  security` shows no new finding (the cycle-check function is revoked
+  from public/anon/authenticated, same discipline as every other
+  SECURITY DEFINER function in this codebase).
+- New pure `src/domain/recipeRelationships.js` (not yet wired to any
+  fetch/service - that's V.2/V.3's job): `resolveBaseRelationship()`,
+  `resolveDirectVariations()`, and a screen-ready
+  `resolveRecipeVariationContext()` that additionally looks each side up
+  in a caller-supplied `recipesById` map and drops (never crashes on) a
+  missing/stale target. 16 new unit tests covering exactly the "one-hop,
+  never walk further" rule, multi-variation bases, null-safety, and that
+  unlinking (an empty relationships array) never touches the recipe
+  objects themselves.
+- *Acceptance:* given a small fixture chain (A←B←C), resolving B's base
+  returns exactly A (not walking to see what A's own base is, if any);
+  resolving A's direct variations returns exactly B (not C); a recipe with
+  no relationships resolves to `null`/`[]` cleanly; a missing/invisible
+  related recipe is dropped, not thrown on. No UI yet - `pnpm test`
+  357/357 (+16), `pnpm build` clean (178 modules - the new files aren't
+  imported by app code yet, only by their own tests).
 
 **V.2 — Recipe editor assignment.**
 - `EditorScreen.jsx` gains the "Variation of" field + note; new
@@ -525,15 +618,22 @@ this session.
 
 **Explicitly deferred (not v1, recorded so a later session doesn't
 re-derive why):** a variation's own page showing sibling variations;
-walking/displaying multi-hop chains; cycle prevention at the DB level;
-a Library/Home card "Variation" badge; batch-import variation references;
-relationship data on the public share page; collapsing/grouping
-near-duplicate variations in discovery; any `relationship_type` beyond
-"variation of."
+walking/displaying multi-hop chains; a friendly client-side "that would
+create a cycle" message in the editor (V.1 only has the DB-level
+rejection - see Admin/editor UX); a Library/Home card "Variation" badge;
+batch-import variation references; relationship data on the public share
+page; collapsing/grouping near-duplicate variations in discovery; any
+`relationship_type` beyond "variation of."
 
 ---
 
 ## Testing plan
+
+**Status: V.1's share of this plan is DONE - see the exact tests/results
+recorded in the Staged implementation plan's V.1 entry above.** The
+sub-sections below are the original testing plan, kept as the checklist
+V.1 was measured against (all satisfied) plus what's still ahead for
+V.2-V.4.
 
 **Automated (domain, `src/domain/recipeRelationships.js`):**
 - Cannot link a recipe to itself (constraint-level, plus a pure-function
@@ -556,10 +656,13 @@ near-duplicate variations in discovery; any `relationship_type` beyond
 - Owner of a private recipe can insert its own `recipe_relationships` row
   pointing at a visible base; a non-editor cannot insert one on someone
   else's recipe; a duplicate base for the same `recipe_id` is rejected
-  (unique violation); a self-link is rejected (check violation); the link
-  is invisible to a member who can't see the private side; deleting
-  either recipe cascades the relationship row; anon denied on all
-  operations.
+  (unique violation); a self-link is rejected (caught by the cycle
+  trigger as a degenerate zero-length cycle - not a plain check violation,
+  since the BEFORE trigger fires first); a direct cycle (A→B→A) is
+  rejected; a longer cycle (A→C→B→A) is rejected; a valid non-cyclic chain
+  (A←B←C) is allowed; the link is invisible to a member who can't see the
+  private side; deleting either recipe cascades the relationship row;
+  anon denied on all operations.
 
 **Editor (structural, matching this project's own honest testing limits —
 no jsdom/component rendering available):** Cancel-makes-no-writes is
