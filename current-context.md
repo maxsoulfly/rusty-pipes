@@ -359,8 +359,7 @@ note as a caption under its own card, unchanged from V.3; confirm the
 V.4 makeability framing/ordering still behaves identically (unaffected by
 this layout-only change).
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `e4978b0`. `docs/project.md` untouched.
 
 ---
 
