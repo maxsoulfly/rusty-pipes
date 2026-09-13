@@ -417,8 +417,7 @@ pages) at the same width, confirm each variation also takes a full row;
 widen to tablet, then desktop, and confirm the denser 2/3/4-column grid
 returns; confirm the sticky header/bottom nav are unaffected.
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `df48202`. `docs/project.md` untouched.
 
 ---
 
