@@ -1939,97 +1939,168 @@ begin
 end;
 $$;
 
--- ── set_recipe_variation_of() (Linked Variations Stage V.2) ─────────────
--- The atomic "replace this recipe's one relationship row" RPC the recipe
--- editor calls on Save. Fresh fixture recipes (E/F/G) - A/B/C/D above were
--- consumed (A deleted) by the block just above.
+-- ── save_recipe() (Linked Variations - editor Save atomicity fix) ───────
+-- Supersedes set_recipe_variation_of() (dropped, 20260913140000) - that
+-- function only made the relationship's own delete-then-insert atomic;
+-- it did NOT stop the relationship from committing successfully and then
+-- a LATER recipe/component/tag write failing, leaving the relationship
+-- "ahead of" the rest of the recipe. save_recipe() owns the recipe's own
+-- fields, its full component/alternative set, its full taste-tag set, AND
+-- the relationship, all in one call - the actual regression test below is
+-- the whole point of this block.
 
-create temporary table rls_setvar_recipe_ids (e_id uuid, f_id uuid, g_id uuid) on commit drop;
-insert into rls_setvar_recipe_ids values (null, null, null);
-grant all on rls_setvar_recipe_ids to authenticated, anon;
+create temporary table rls_saverecipe_ids (h_id uuid, i_id uuid, j_id uuid) on commit drop;
+insert into rls_saverecipe_ids values (null, null, null);
+grant all on rls_saverecipe_ids to authenticated, anon;
 
 do $$
-declare f record; v_e uuid; v_f uuid; v_g uuid;
+declare f record; v_h uuid; v_i uuid; v_j uuid;
 begin
   select * into f from rls_fixture_ids;
   perform pg_temp.set_identity('authenticated', f.member_owner_id);
   insert into public.recipes (name, source_type, owner_id, visibility, glass_id)
-  values ('RLS_TEST setvar E', 'user', f.member_owner_id, 'private', f.glass_id) returning id into v_e;
+  values ('RLS_TEST saverecipe H', 'user', f.member_owner_id, 'private', f.glass_id) returning id into v_h;
   insert into public.recipes (name, source_type, owner_id, visibility, glass_id)
-  values ('RLS_TEST setvar F', 'user', f.member_owner_id, 'private', f.glass_id) returning id into v_f;
+  values ('RLS_TEST saverecipe I', 'user', f.member_owner_id, 'private', f.glass_id) returning id into v_i;
   insert into public.recipes (name, source_type, owner_id, visibility, glass_id)
-  values ('RLS_TEST setvar G', 'user', f.member_owner_id, 'private', f.glass_id) returning id into v_g;
-  update rls_setvar_recipe_ids set e_id = v_e, f_id = v_f, g_id = v_g;
-  perform pg_temp.assert(true, 'set_recipe_variation_of: fixture recipes created (E/F/G, owned by member_owner)');
+  values ('RLS_TEST saverecipe J', 'user', f.member_owner_id, 'private', f.glass_id) returning id into v_j;
+
+  -- I is a variation of H; J is a variation of I - a valid chain H<-I<-J.
+  insert into public.recipe_relationships (recipe_id, related_recipe_id, note)
+  values (v_i, v_h, 'RLS_TEST original note');
+  insert into public.recipe_relationships (recipe_id, related_recipe_id)
+  values (v_j, v_i);
+
+  update rls_saverecipe_ids set h_id = v_h, i_id = v_i, j_id = v_j;
+  perform pg_temp.assert(true, 'save_recipe: fixture recipes created (H/I/J, I variation of H, J variation of I)');
 end;
 $$;
 
 do $$
-declare f record; r record; n int; v_note text; v_related uuid;
+declare f record; r record; v_name text; v_related uuid; v_note text; v_created uuid; n int;
 begin
   select * into f from rls_fixture_ids;
-  select * into r from rls_setvar_recipe_ids;
-
+  select * into r from rls_saverecipe_ids;
   perform pg_temp.set_identity('authenticated', f.member_owner_id);
 
-  -- F becomes a variation of E, via the RPC (not a bare insert).
-  perform public.set_recipe_variation_of(r.f_id, r.e_id, 'RLS_TEST practical');
-  select related_recipe_id, note into v_related, v_note from public.recipe_relationships where recipe_id = r.f_id;
-  perform pg_temp.assert(v_related = r.e_id and v_note = 'RLS_TEST practical', 'set_recipe_variation_of: creates the relationship row with its note');
-
-  -- G becomes a variation of F - a valid chain (E <- F <- G).
-  perform public.set_recipe_variation_of(r.g_id, r.f_id, null);
-  perform pg_temp.assert(true, 'set_recipe_variation_of: a valid non-cyclic chain (E <- F <- G) is allowed through the RPC too');
-
-  -- Reassigning F's base to G would close E<-F<-G into a cycle (G's base
-  -- is F, so F -> G -> F). The RPC's own DELETE (of F's real F->E row)
-  -- must roll back together with the rejected INSERT - F must still point
-  -- at E afterward, not at nothing.
+  -- THE regression this whole fix exists for: reassign I's base to J
+  -- (would close H<-I<-J into a cycle: I -> J -> I, since J's own base is
+  -- I) WHILE ALSO changing I's own name in the same call. Previously
+  -- (set_recipe_variation_of called first, then a separate updateRecipe()
+  -- sequence), the relationship write would have been attempted and
+  -- rejected FIRST, correctly stopping the name change too - but only
+  -- because of call ORDER, not real atomicity: if the name update had run
+  -- first and the relationship failed after, the name change would have
+  -- already committed. save_recipe() closes that gap for real - both are
+  -- in the same transaction regardless of internal ordering.
   begin
-    perform public.set_recipe_variation_of(r.f_id, r.g_id, null);
-    perform pg_temp.assert(false, 'set_recipe_variation_of: reassigning to a base that would create a cycle should be rejected');
+    perform public.save_recipe(
+      r.i_id,
+      jsonb_build_object(
+        'name', 'RLS_TEST SHOULD NOT PERSIST',
+        'description', null, 'glass_id', f.glass_id, 'family_id', null,
+        'liquid_color', null, 'liquid_color_2', null, 'steps', '[]'::jsonb
+      ),
+      '[]'::jsonb,
+      '[]'::jsonb,
+      jsonb_build_object('base_recipe_id', r.j_id, 'note', null)
+    );
+    perform pg_temp.assert(false, 'save_recipe: reassigning to a base that would create a cycle should be rejected');
   exception when raise_exception then
-    perform pg_temp.assert(true, 'set_recipe_variation_of: a cyclic reassignment is rejected');
+    perform pg_temp.assert(true, 'save_recipe: a cyclic reassignment through save_recipe is rejected');
   end;
-  select related_recipe_id into v_related from public.recipe_relationships where recipe_id = r.f_id;
-  perform pg_temp.assert(v_related = r.e_id, 'set_recipe_variation_of: a rejected reassignment leaves the ORIGINAL relationship intact - the delete-then-insert did not partially apply (genuine atomicity, the whole point of this function)');
 
-  -- Removing a relationship (p_base_recipe_id null) deletes it and nothing
-  -- else - G's own recipe row is completely unaffected.
-  perform public.set_recipe_variation_of(r.g_id, null, null);
-  select count(*) into n from public.recipe_relationships where recipe_id = r.g_id;
-  perform pg_temp.assert(n = 0, 'set_recipe_variation_of: passing a null base removes the relationship');
-  select count(*) into n from public.recipes where id = r.g_id;
-  perform pg_temp.assert(n = 1, 'set_recipe_variation_of: removing a relationship never touches the recipe''s own row');
+  select name into v_name from public.recipes where id = r.i_id;
+  perform pg_temp.assert(v_name = 'RLS_TEST saverecipe I', 'save_recipe: a failed save leaves the recipe''s OTHER fields (name) completely unchanged - genuine whole-function atomicity, not just the relationship half');
 
-  -- A non-editor cannot call this on someone else's recipe - SECURITY
-  -- INVOKER means the same recipe_is_editable()-gated RLS policies apply
-  -- to the caller, not a bypassed/elevated check. (g_id, e_id) deliberately
-  -- - a pair that would NOT form a cycle (E has no base at all), so a
-  -- denial here is unambiguously RLS, not a coincidental cycle rejection
-  -- (the BEFORE trigger fires before RLS regardless of role, so a
-  -- cycle-forming pair would mask this test the same way it did earlier
-  -- in the recipe_relationships block above).
+  select related_recipe_id, note into v_related, v_note from public.recipe_relationships where recipe_id = r.i_id;
+  perform pg_temp.assert(v_related = r.h_id and v_note = 'RLS_TEST original note', 'save_recipe: a failed save leaves the ORIGINAL relationship (base + note) completely unchanged - the base is still H, not J and not removed');
+
+  -- Successful save: renames I AND removes its relationship, together.
+  perform public.save_recipe(
+    r.i_id,
+    jsonb_build_object(
+      'name', 'RLS_TEST saverecipe I renamed',
+      'description', null, 'glass_id', f.glass_id, 'family_id', null,
+      'liquid_color', null, 'liquid_color_2', null, 'steps', '[]'::jsonb
+    ),
+    '[]'::jsonb,
+    '[]'::jsonb,
+    null
+  );
+  select name into v_name from public.recipes where id = r.i_id;
+  perform pg_temp.assert(v_name = 'RLS_TEST saverecipe I renamed', 'save_recipe: a successful save updates the recipe''s own fields');
+  select count(*) into n from public.recipe_relationships where recipe_id = r.i_id;
+  perform pg_temp.assert(n = 0, 'save_recipe: relationship removal (p_variation_of null) is part of the same successful save - the old base is gone');
+
+  -- Successful save that renames I again AND assigns a NEW (non-cyclic)
+  -- base at the same time - both land together.
+  perform public.save_recipe(
+    r.i_id,
+    jsonb_build_object(
+      'name', 'RLS_TEST saverecipe I renamed again',
+      'description', null, 'glass_id', f.glass_id, 'family_id', null,
+      'liquid_color', null, 'liquid_color_2', null, 'steps', '[]'::jsonb
+    ),
+    '[]'::jsonb,
+    '[]'::jsonb,
+    jsonb_build_object('base_recipe_id', r.h_id, 'note', 'RLS_TEST new note')
+  );
+  select name into v_name from public.recipes where id = r.i_id;
+  select related_recipe_id, note into v_related, v_note from public.recipe_relationships where recipe_id = r.i_id;
+  perform pg_temp.assert(
+    v_name = 'RLS_TEST saverecipe I renamed again' and v_related = r.h_id and v_note = 'RLS_TEST new note',
+    'save_recipe: a successful save changes the recipe''s fields AND assigns a new relationship together, in one call'
+  );
+
+  -- Create path (p_recipe_id null): inserts a brand-new private recipe
+  -- owned by the caller, components/tags/relationship all in the same call.
+  select public.save_recipe(
+    null,
+    jsonb_build_object(
+      'name', 'RLS_TEST saverecipe created',
+      'description', null, 'glass_id', f.glass_id, 'family_id', null,
+      'liquid_color', null, 'liquid_color_2', null, 'steps', '[]'::jsonb
+    ),
+    '[]'::jsonb,
+    '[]'::jsonb,
+    null
+  ) into v_created;
+  perform pg_temp.assert(v_created is not null, 'save_recipe: p_recipe_id null creates a new recipe and returns its id');
+  select owner_id into v_related from public.recipes where id = v_created;
+  perform pg_temp.assert(v_related = f.member_owner_id, 'save_recipe: a created recipe is owned by the caller (auth.uid(), via SECURITY INVOKER)');
+
+  -- A non-editor cannot call this on someone else's recipe, and a denied
+  -- call changes nothing.
   perform pg_temp.set_identity('authenticated', f.member_other_id);
   begin
-    perform public.set_recipe_variation_of(r.g_id, r.e_id, null);
-    perform pg_temp.assert(false, 'set_recipe_variation_of: a non-editor should not be able to set someone else''s recipe''s relationship');
+    perform public.save_recipe(
+      r.h_id,
+      jsonb_build_object('name', 'RLS_TEST hijacked', 'description', null, 'glass_id', f.glass_id, 'family_id', null, 'liquid_color', null, 'liquid_color_2', null, 'steps', '[]'::jsonb),
+      '[]'::jsonb, '[]'::jsonb, null
+    );
+    perform pg_temp.assert(false, 'save_recipe: a non-editor should not be able to save someone else''s recipe');
   exception when insufficient_privilege then
-    perform pg_temp.assert(true, 'set_recipe_variation_of: a non-editor is denied by the same RLS policies (SECURITY INVOKER, not DEFINER)');
+    perform pg_temp.assert(true, 'save_recipe: a non-editor is denied (the explicit v_touched = 0 check, matching save_ingredient_type''s own precedent)');
   end;
+  select name into v_name from public.recipes where id = r.h_id;
+  perform pg_temp.assert(v_name = 'RLS_TEST saverecipe H', 'save_recipe: a denied non-editor save leaves the recipe completely unchanged');
 
   perform pg_temp.set_identity('anon', null);
   begin
-    perform public.set_recipe_variation_of(r.g_id, r.e_id, null);
-    perform pg_temp.assert(false, 'set_recipe_variation_of: anon should not be able to call this function at all');
+    perform public.save_recipe(
+      r.h_id,
+      jsonb_build_object('name', 'RLS_TEST hijacked', 'description', null, 'glass_id', f.glass_id, 'family_id', null, 'liquid_color', null, 'liquid_color_2', null, 'steps', '[]'::jsonb),
+      '[]'::jsonb, '[]'::jsonb, null
+    );
+    perform pg_temp.assert(false, 'save_recipe: anon should not be able to call this function at all');
   exception when insufficient_privilege then
-    perform pg_temp.assert(true, 'set_recipe_variation_of: anon has no EXECUTE grant');
+    perform pg_temp.assert(true, 'save_recipe: anon has no EXECUTE grant');
   end;
 
   -- Restore a normal authenticated identity before the next section -
   -- set_config(..., true) persists for the rest of this transaction, not
-  -- just this do-block, and every later section here assumes a sensible
-  -- default identity rather than switching before its own first read.
+  -- just this do-block (see the same note in the block this replaced).
   perform pg_temp.set_identity('authenticated', f.member_owner_id);
 end;
 $$;

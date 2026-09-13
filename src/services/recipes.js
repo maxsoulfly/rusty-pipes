@@ -127,18 +127,43 @@ export async function fetchRecipeRelationships() {
   }))
 }
 
-// Linked Variations Stage V.2 - the one atomic "replace this recipe's
-// relationship row" RPC (20260913130000_set_recipe_variation_of.sql).
-// `baseRecipeId: null` removes the relationship. See createRecipe()/
-// updateRecipe() below for exactly when each calls this and why the
-// ordering matters.
-export async function setRecipeVariationOf(recipeId, baseRecipeId, note) {
-  const { error } = await supabase.rpc("set_recipe_variation_of", {
-    p_recipe_id: recipeId,
-    p_base_recipe_id: baseRecipeId,
-    p_note: note,
-  })
-  if (error) throw error
+// Shapes the editor's `components` (see EditorScreen.jsx's own
+// `components` array - `{ ingredientTypeId, amount, unitLabel, role,
+// alternatives: [{ ingredientTypeId, note }], excludedSubstituteTypeIds }`)
+// into save_recipe()'s expected snake_case JSONB shape. Shared by
+// createRecipe()/updateRecipe() below - both now go through save_recipe()
+// (Linked Variations atomicity fix, 20260913140000), not the older
+// per-table sequence createClassicRecipes() still uses (see
+// insertComponentsWithAlternatives() further down - unchanged, batch
+// import stays on its own established path, out of scope for this fix).
+function toComponentsPayload(components) {
+  return components.map((c) => ({
+    ingredient_type_id: c.ingredientTypeId,
+    amount: c.amount,
+    unit_label: c.unitLabel,
+    role: c.role,
+    excluded_substitute_type_ids: c.excludedSubstituteTypeIds ?? [],
+    alternatives: (
+      c.alternatives ??
+      (c.alternativeIds ?? []).map((altId) => ({
+        ingredientTypeId: altId,
+        note: null,
+      }))
+    ).map((a) => ({
+      ingredient_type_id: a.ingredientTypeId,
+      note: a.note?.trim() ? a.note.trim() : null,
+    })),
+  }))
+}
+
+// `variationOf` (Linked Variations) - `{ baseRecipeId, note } | undefined`.
+// `baseRecipeId: null`/undefined means "no base" - save_recipe() deletes
+// any existing relationship and inserts nothing.
+function toVariationOfPayload(variationOf) {
+  return {
+    base_recipe_id: variationOf?.baseRecipeId ?? null,
+    note: variationOf?.note ?? null,
+  }
 }
 
 export async function fetchRecipe(id) {
@@ -151,14 +176,17 @@ export async function fetchRecipe(id) {
   return mapRecipe(data)
 }
 
-// Shared by createRecipe(), createClassicRecipes(), and updateRecipe():
-// inserts recipe_components, then recipe_component_alternatives for
-// whichever components carry them ("gin OR vodka" - src/domain/
-// availability.js already treats any one owned alternative as satisfying
-// the slot; this is the write side of that). Alternatives reference the
-// component row's own id, which only exists after the components insert
-// returns - correlated back to the right component via sort_order (unique
-// per recipe) rather than trusting the returned rows' array order to match
+// Used only by insertRecipeWithRelations() (createClassicRecipes'/batch
+// import's own path) now - createRecipe()/updateRecipe() moved to
+// save_recipe() (Linked Variations atomicity fix, 20260913140000), which
+// does its own equivalent component/alternative insertion in SQL. Inserts
+// recipe_components, then recipe_component_alternatives for whichever
+// components carry them ("gin OR vodka" - src/domain/availability.js
+// already treats any one owned alternative as satisfying the slot; this
+// is the write side of that). Alternatives reference the component row's
+// own id, which only exists after the components insert returns -
+// correlated back to the right component via sort_order (unique per
+// recipe) rather than trusting the returned rows' array order to match
 // the input order.
 async function insertComponentsWithAlternatives(recipeId, components) {
   if (components.length === 0) return
@@ -212,11 +240,18 @@ async function insertComponentsWithAlternatives(recipeId, components) {
   }
 }
 
-// Shared by createRecipe() and createClassicRecipes(): inserts the recipe
-// row, then its components/alternatives/taste tags in separate calls (no
-// client-side multi-statement transaction available); best-effort cleanup
-// deletes the recipe again if a later step fails, so a partial write can't
-// leave an empty/broken recipe behind.
+// Used only by createClassicRecipes() (batch import) now - createRecipe()
+// moved to save_recipe() (Linked Variations atomicity fix, 20260913140000)
+// for a genuine single-transaction save. Batch import deliberately stays
+// on this older, per-table-calls-with-compensating-delete path: it's
+// already its own per-row-isolated flow (a DB failure on one row doesn't
+// abort the rest of the pasted batch), doesn't support a relationship
+// reference at all (see the plan doc's Import decision), and moving it to
+// save_recipe() isn't something this fix was asked for or needs - inserts
+// the recipe row, then its components/alternatives/taste tags in separate
+// calls (no client-side multi-statement transaction available for this
+// path); best-effort cleanup deletes the recipe again if a later step
+// fails, so a partial write can't leave an empty/broken recipe behind.
 async function insertRecipeWithRelations(
   recipeInsert,
   { components, tasteTagIds },
@@ -251,19 +286,13 @@ async function insertRecipeWithRelations(
 }
 
 // Always creates a private user recipe - publishing is a separate action
-// (publishRecipe(), below).
-//
-// `variationOf` (Linked Variations Stage V.2) - optional
-// `{ baseRecipeId, note }`. The relationship can only be written AFTER
-// this recipe exists (it needs a real recipe_id), so it's the last step,
-// not folded into insertRecipeWithRelations() (shared with
-// createClassicRecipes(), which never accepts this field at all - batch
-// import deliberately has no variation reference, see the plan doc's
-// Import section). A failure here (e.g. the chosen base would somehow
-// create a cycle) gets the exact same best-effort cleanup
-// insertRecipeWithRelations() already applies to a components/tags
-// failure - delete the just-created recipe rather than leave a
-// half-formed one behind.
+// (publishRecipe(), below). Goes through save_recipe() (Linked Variations
+// atomicity fix, 20260913140000) with p_recipe_id null: the recipe row,
+// its components/alternatives, its taste tags, AND its optional
+// relationship are all inserted in one transaction - a failure anywhere
+// (an invalid ingredient reference, a chosen base that would somehow
+// create a cycle) leaves nothing behind at all, not a half-created recipe
+// needing a compensating cleanup delete.
 export async function createRecipe({
   name,
   description,
@@ -276,28 +305,22 @@ export async function createRecipe({
   tasteTagIds,
   variationOf,
 }) {
-  const id = await insertRecipeWithRelations(
-    {
+  const { data: id, error } = await supabase.rpc("save_recipe", {
+    p_recipe_id: null,
+    p_fields: {
       name,
       description: description || null,
-      source_type: "user",
-      visibility: "private",
       glass_id: glassId,
       family_id: familyId || null,
       liquid_color: liquidColor || null,
       liquid_color_2: liquidColor2 || null,
       steps,
     },
-    { components, tasteTagIds },
-  )
-  if (variationOf?.baseRecipeId) {
-    try {
-      await setRecipeVariationOf(id, variationOf.baseRecipeId, variationOf.note)
-    } catch (err) {
-      await supabase.from("recipes").delete().eq("id", id)
-      throw err
-    }
-  }
+    p_components: toComponentsPayload(components),
+    p_taste_tag_ids: tasteTagIds ?? [],
+    p_variation_of: toVariationOfPayload(variationOf),
+  })
+  if (error) throw error
   return fetchRecipe(id)
 }
 
@@ -342,25 +365,26 @@ export async function createClassicRecipes(rows) {
 }
 
 // Spec §4: owners can edit their own recipe (private or published), and
-// admins can edit the classic catalog (owner_id null) - enforced server-side
-// by recipe_is_editable() and the recipes/recipe_components/
-// recipe_taste_tags RLS policies, not just this client check. No
-// client-side multi-statement transaction is available, so a failure partway
-// through leaves a partial update rather than rolling back - same
-// constraint createRecipe() already lives with.
+// admins can edit the classic catalog (owner_id null) - enforced
+// server-side by RLS on every table save_recipe() touches, not just this
+// client check.
 //
-// `variationOf` (Linked Variations Stage V.2) - optional
-// `{ baseRecipeId, note }` (`baseRecipeId: null` removes the
-// relationship). Deliberately the FIRST write in this whole function,
-// before name/components/tags below - it's the one step in this save
-// that can fail for a reason unrelated to the recipe's own content (the
-// chosen base would create a cycle, rejected by the DB trigger via
-// set_recipe_variation_of()'s own atomic delete-then-insert). Running it
-// first means a rejection stops the save immediately, before anything
-// else is touched - "a cyclic assignment rolls back the recipe's other
-// changes too" holds by construction (nothing else was ever attempted),
-// without needing this whole multi-step save to become one real DB
-// transaction, which this function still isn't (see the paragraph above).
+// Goes through save_recipe() (Linked Variations atomicity fix,
+// 20260913140000) - the recipe's own fields, its full component/
+// alternative set, its full taste-tag set, and its one relationship row
+// (`variationOf`: `{ baseRecipeId, note } | undefined` - `baseRecipeId:
+// null`/undefined removes it) are now all written in ONE transaction. A
+// failure anywhere - a bad ingredient reference, the caller not actually
+// owning the recipe, or a chosen base that would create a cycle - rolls
+// back everything this call would have changed, leaving the recipe
+// exactly as it was before Save. This replaces an earlier version of this
+// function that called a narrower set_recipe_variation_of() RPC first and
+// then ran the recipe/components/tags writes as separate sequential
+// Supabase calls - correct for "a cyclic rejection stops later writes"
+// (call order), but NOT correct for "the relationship write already
+// succeeded and committed before a LATER step failed" - a real gap this
+// single-transaction RPC closes for good, per the explicit instruction not
+// to simulate rollback via compensating client-side writes.
 export async function updateRecipe(
   id,
   {
@@ -376,17 +400,9 @@ export async function updateRecipe(
     variationOf,
   },
 ) {
-  if (variationOf !== undefined) {
-    await setRecipeVariationOf(
-      id,
-      variationOf?.baseRecipeId ?? null,
-      variationOf?.note ?? null,
-    )
-  }
-
-  const { error: recipeError } = await supabase
-    .from("recipes")
-    .update({
+  const { error } = await supabase.rpc("save_recipe", {
+    p_recipe_id: id,
+    p_fields: {
       name,
       description: description || null,
       glass_id: glassId,
@@ -394,34 +410,12 @@ export async function updateRecipe(
       liquid_color: liquidColor || null,
       liquid_color_2: liquidColor2 || null,
       steps,
-    })
-    .eq("id", id)
-  if (recipeError) throw recipeError
-
-  // recipe_component_alternatives.recipe_component_id is `on delete cascade`,
-  // so deleting the old components already cleans up their alternatives -
-  // no separate delete needed before re-inserting both fresh.
-  const { error: delCompError } = await supabase
-    .from("recipe_components")
-    .delete()
-    .eq("recipe_id", id)
-  if (delCompError) throw delCompError
-  await insertComponentsWithAlternatives(id, components)
-
-  const { error: delTagError } = await supabase
-    .from("recipe_taste_tags")
-    .delete()
-    .eq("recipe_id", id)
-  if (delTagError) throw delTagError
-  if (tasteTagIds.length > 0) {
-    const { error: tagError } = await supabase
-      .from("recipe_taste_tags")
-      .insert(
-        tasteTagIds.map((tagId) => ({ recipe_id: id, taste_tag_id: tagId })),
-      )
-    if (tagError) throw tagError
-  }
-
+    },
+    p_components: toComponentsPayload(components),
+    p_taste_tag_ids: tasteTagIds ?? [],
+    p_variation_of: toVariationOfPayload(variationOf),
+  })
+  if (error) throw error
   return fetchRecipe(id)
 }
 

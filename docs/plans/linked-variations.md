@@ -1,7 +1,8 @@
 # Linked Variations
 
 **Planning document — 2026-09-13, revised 2026-09-13 (cycle rule
-correction) and now Stages V.1 and V.2 DONE + pushed, 2026-09-13.**
+correction) and now Stages V.1 and V.2 DONE + pushed, 2026-09-13 (V.2
+itself revised the same day - see its own atomicity correction below).**
 Written after
 Ingredient Detail v1 (I.1–I.4, `docs/plans/ingredient-detail-page.md`)
 shipped and was manually verified. This is Stage C of `docs/plans/
@@ -488,19 +489,26 @@ mirroring `recipe_component_alternatives`' own note field's UX).
   gets (e.g. a duplicate name). Self-links are excluded from the picker's
   own list as before, so the picker itself can't produce one to begin
   with.
-- **Save/Cancel — upgraded during V.2, see the Staged implementation
-  plan's V.2 entry for what actually shipped:** the text originally here
-  said this would be "one more sequential Supabase call inside the
-  existing non-atomic save flow," matching `updateRecipe()`'s documented,
-  accepted lack of cross-table atomicity. The user's own V.2 request asked
-  for something stronger: the relationship write itself must be genuinely
-  atomic (no delete-succeeds/insert-fails half state), and a cyclic
-  rejection must not leave other recipe changes saved either. V.2 shipped
-  a small new SQL function (`set_recipe_variation_of()`) for the former,
-  and save-ordering (relationship write first, before any other change)
-  for the latter - see below. Changing or removing the field still never
-  touches `recipe_components`/`steps`/anything else on either recipe — it
-  is its own row in its own table. **Cancel** discards the local field
+- **Save/Cancel — upgraded twice during V.2, see the Staged implementation
+  plan's V.2 entry for the final, actually-shipped design:** the text
+  originally here said this would be "one more sequential Supabase call
+  inside the existing non-atomic save flow." The user's own V.2 request
+  asked for more: the relationship write itself must be genuinely atomic,
+  and a cyclic rejection must not leave other recipe changes saved
+  either. A first pass added a narrow `set_recipe_variation_of()` RPC
+  (atomic relationship replace) called first in the save sequence - which
+  correctly stopped a cyclic *rejection* from letting later writes
+  proceed, but did **not** stop an already-*succeeded* relationship write
+  from staying committed if a *later* step then failed (the recipe's
+  fields/components/tags were still separate, non-transactional calls).
+  The user caught this before approving V.2 and asked for a real fix. The
+  final design: one `save_recipe()` RPC owns the recipe's fields,
+  components, taste tags, AND the relationship together, in one
+  transaction - see below. Changing or removing the field still never
+  touches `recipe_components`/`steps`/anything else on either recipe
+  *when the save succeeds* — it is its own row in its own table; **the
+  actual guarantee now is that a Save either changes everything it asked
+  to change, or nothing at all.** **Cancel** discards the local field
   change with zero writes, same as every other field in this editor
   today.
 - **The base's own editor gets no new UI** — per the model above,
@@ -601,32 +609,47 @@ without a clean, reliable identity mechanism.
   matching the D4 model this plan already re-affirmed) - not additionally
   gated to staff, since the DB already correctly allows any recipe owner
   to declare their own recipe a variation.
-- **Atomicity upgraded beyond this doc's original text** (per the user's
-  explicit V.2 instruction): a new SQL function,
-  `set_recipe_variation_of(p_recipe_id, p_base_recipe_id, p_note)`
-  (migration `20260913130000`, `SECURITY INVOKER` - the existing
-  `recipe_relationships` RLS policies are the real gate, unchanged),
-  replaces the recipe's one relationship row (delete any existing, then
-  insert the new one if given) as a single atomic function call - closing
-  the exact gap V.1 itself flagged ("no UPDATE policy - change is delete +
-  insert" could otherwise delete the old row and then fail to insert the
-  new one, e.g. on a cyclic reassignment, leaving no base at all).
-  `updateRecipe()` calls this **first**, before any other write (name/
-  components/tags) - a rejection (cyclic base) stops the save immediately,
-  so nothing else is ever attempted, achieving "a cyclic assignment rolls
-  back the recipe's other changes too" without requiring the whole,
-  still-non-atomic multi-step save to become one real DB transaction.
-  `createRecipe()` calls it last (a relationship needs a real recipe id
-  first) and applies the same best-effort cleanup
-  `insertRecipeWithRelations()` already does for a components/tags
-  failure - delete the just-created recipe rather than leave a half-formed
-  one.
+- **Atomicity - first pass, then corrected the same day.** The first V.2
+  pass added `set_recipe_variation_of()` (migration `20260913130000`,
+  `SECURITY INVOKER`) making the relationship's own delete-then-insert
+  atomic, called **first** in `updateRecipe()` so a cyclic rejection
+  stopped the save before any other write. **This was still incomplete:**
+  it only protected against a rejection happening *before* other writes -
+  if the relationship write **succeeded** and a *later* step (the
+  `recipes` field update, or a component/tag write) then failed, the
+  relationship had already committed, half-updated relative to the rest
+  of the recipe. The user caught this before approving V.2 and asked for
+  a real fix, explicitly ruling out compensating client-side writes as an
+  answer.
+- **Final design: one new atomic RPC owns the whole editor Save.**
+  `set_recipe_variation_of()` is dropped; a new function, `save_recipe(
+  p_recipe_id, p_fields, p_components, p_taste_tag_ids, p_variation_of)`
+  (migration `20260913140000`, `SECURITY INVOKER` - RLS on every touched
+  table is still the real gate, unchanged) now owns the recipe's own
+  fields, its full component/alternative set, its full taste-tag set,
+  **and** its one relationship row, all in a single plpgsql function body
+  - one transaction. A failure anywhere (a bad ingredient reference, the
+  caller not owning the recipe, or the relationship's own cycle-check
+  trigger) rolls back everything the function already did in that same
+  call. Directly mirrors `save_ingredient_type()`'s own already-established
+  pattern (JSONB in, replace-the-whole-child-set-by-delete-then-insert per
+  child table, `search_path=''` with fully-qualified names).
+  `p_recipe_id: null` **creates** a new private recipe (`owner_id =
+  auth.uid()`, matching `createRecipe()`'s existing always-private
+  behavior exactly) instead of updating one - so the SAME transactional
+  guarantee now covers creation too ("apply the same principle to
+  creation where practical" - this extends the one function rather than
+  redesigning the create path). `createRecipe()`/`updateRecipe()`
+  (`src/services/recipes.js`) both now call this one RPC instead of a
+  sequence of separate Supabase calls. `createClassicRecipes()` (batch
+  import) is **unchanged** - a different, already-per-row-isolated flow
+  with no relationship support at all, out of scope for this fix.
 - New `fetchRecipeRelationships()` (flat table fetch, mirrors
   `catalog.formConversions`'s own pattern) wired into `useRecipes.js`
   (fetched alongside recipes, refetched by the same `refetchRecipes()`)
   and exposed via outlet context as `recipeRelationships` - the piece V.1
   explicitly deferred ("not yet wired to any fetch/service - that's
-  V.2/V.3's job").
+  V.2/V.3's job"). Unaffected by the atomicity correction.
 - New pure `resolveVariationCandidates()` (`src/domain/
   recipeRelationships.js`) - self-exclusion only, no client-side cycle
   filtering (per the plan's own instruction: the DB trigger stays the only
@@ -639,14 +662,15 @@ without a clean, reliable identity mechanism.
   mentioning clone integration; kept as an easy, small follow-up, not
   silently dropped.
 - *Acceptance:* linking, changing, and removing a variation's base never
-  alters that recipe's own ingredients/steps/anything else (verified at
-  the RLS-suite level - deleting/inserting `recipe_relationships` rows
-  around fixture recipes never touches their own `recipes` rows); Cancel
+  alters that recipe's own ingredients/steps/anything else; Cancel
   (navigating away without saving) makes no writes - structural, since no
-  save function is ever called; a cyclic reassignment through
-  `set_recipe_variation_of()` leaves the ORIGINAL relationship intact,
-  not half-deleted (RLS-suite verified). **Not yet browser-verified** -
-  see `current-context.md`'s chunk entry for the manual checks still
+  save function is ever called; **the actual regression this correction
+  exists for** - a `save_recipe()` call that renames a recipe AND
+  reassigns it to a base that would create a cycle is rejected wholesale,
+  and afterward the recipe's name is unchanged AND its original
+  relationship (base + note) is unchanged, not half-applied either way
+  (RLS-suite verified - see the Testing plan). **Not yet browser-verified**
+  - see `current-context.md`'s chunk entry for the manual checks still
   owed.
 
 **V.3 — Cocktail Detail relationship UI + navigation.**
@@ -696,21 +720,28 @@ far) plus what's still ahead for V.3-V.4.
 
 **V.2's specific additions (beyond what V.1 already covered):** 3 new
 domain tests for `resolveVariationCandidates()` (self-exclusion; a
-not-in-list or brand-new-recipe id excludes nothing; null-safety). A new
-RLS-suite block exercises `set_recipe_variation_of()` directly (not just
-raw table inserts): creates a relationship through the RPC; a valid
-chain through the RPC; **a cyclic reassignment is rejected AND the
-recipe's original relationship is asserted unchanged afterward** (the
-actual atomicity claim - the delete-then-insert inside the function
-either both happen or neither does); passing a null base removes the
-relationship without touching the recipe's own row; a non-editor is
-denied (SECURITY INVOKER means the same RLS policies apply to the
-caller); anon has no EXECUTE grant at all. The editor's own UI behavior
-(Cancel-makes-no-writes, error-without-losing-the-draft) is structural,
-matching this project's own honest testing limits (no jsdom/component
-rendering) - verified by reading the code path, not an automated
-component test: `handleSave`'s catch block only calls `setError()`, never
-resets any other field.
+not-in-list or brand-new-recipe id excludes nothing; null-safety).
+
+**V.2's atomicity correction (same day) replaced the RLS-suite block
+above** - `set_recipe_variation_of()` is dropped, so its own tests are
+gone with it; a new block exercises `save_recipe()` directly instead:
+creates a relationship together with a recipe field change, in one call;
+a valid chain through the RPC; **the actual regression test** - a call
+that renames a recipe AND reassigns it to a base that would create a
+cycle is rejected wholesale, and afterward BOTH the recipe's name AND its
+original relationship (base + note) are asserted unchanged (proving the
+whole function's atomicity, not just the relationship's own delete-then-
+insert); a successful call changes the recipe's fields AND its
+relationship together; passing a null base removes the relationship
+without touching the recipe's own row; the create path (`p_recipe_id:
+null`) returns a new recipe owned by the caller; a non-editor is denied
+(the explicit "0 rows touched" check, matching `save_ingredient_type()`'s
+own precedent) and changes nothing; anon has no EXECUTE grant at all. The
+editor's own UI behavior (Cancel-makes-no-writes, error-without-losing-
+the-draft) is structural, matching this project's own honest testing
+limits (no jsdom/component rendering) - verified by reading the code
+path, not an automated component test: `handleSave`'s catch block only
+calls `setError()`, never resets any other field.
 
 **Automated (domain, `src/domain/recipeRelationships.js`):**
 - Cannot link a recipe to itself (constraint-level, plus a pure-function
