@@ -6,8 +6,12 @@ correction) and now Stages V.1, V.2, V.3, and V.4 DONE + pushed,
 correction below). V.2 and V.3 are now manually verified by the user
 (2026-09-13) - see the Staged implementation plan's own V.2/V.3 entries,
 updated below to record it, and the real Bloody Mary/Zombie catalogue
-links V.4 adds now that the UI itself was confirmed working.** Written
-after
+links V.4 adds now that the UI itself was confirmed working. That same
+manual verification found a real V.3/V.4 presentation bug - the
+relationship note was rendered as if it described the BASE recipe's card
+on a variation's own page, when it actually always describes the
+variation relative to its base. Fixed same-day as Stage V.5 - see its own
+entry below.** Written after
 Ingredient Detail v1 (I.1–I.4, `docs/plans/ingredient-detail-page.md`)
 shipped and was manually verified. This is Stage C of `docs/plans/
 substitutes-and-variations.md`, which sketched an early version of this
@@ -802,6 +806,53 @@ DONE, 2026-09-13.**
   a sticky recipe-name header in the editor while scrolling - a separate,
   small UX follow-up, out of scope for V.4's own explicit instructions.
 
+**V.5 — Bugfix: directional note placement (manual-verification finding).
+DONE, 2026-09-13.**
+- **The bug.** The stored relationship `note` is directional - it always
+  means "how the variation differs from its base," never the reverse.
+  V.3/V.4's rendering on a variation's own page ("Variation of") showed
+  the note as a small caption directly under the BASE recipe's card -
+  the exact same treatment a variation's own note gets under ITS card on
+  a base's page. That treatment is correct in the base→variations
+  direction (the note there really does describe the card it sits under)
+  but wrong in the variation→base direction: the note describes the
+  CURRENT recipe (the variation), not the base card shown above it.
+  Concretely, opening **Bloody Mary (Practical Version)** showed "Uses
+  Soy sauce instead of Worcestershire Sauce..." directly under the
+  **Bloody Mary** card, visually implying the note was about Bloody Mary
+  itself - it isn't; Bloody Mary uses Worcestershire and Celery Salt, the
+  practical version is the one using Soy sauce and regular salt. Same
+  problem for the Zombie pair.
+- **The fix (presentation only - `src/components/detail/
+  VariationsSection.jsx`):** on a variation's own page, the base's
+  `CocktailCard` now renders alone in its grid, with `base.note` pulled
+  out into its own explicitly-labeled block below the grid - **"How this
+  version differs"** - so it can no longer be mistaken for a caption on
+  the base's card. On a base's own page, each variation's own note is
+  completely unchanged - still a small caption directly under that
+  variation's own card, which already reads correctly in that direction
+  (per the plan's own original design) and needed no new heading.
+  Deliberately does **not** attempt to rewrite, invert, or regenerate the
+  note text for either direction - the stored note may not be
+  mechanically invertible, so both sides always render the exact same
+  stored string, only the LAYOUT differs by direction.
+- **Not touched, confirmed by inspection:** the relationship schema, the
+  stored note itself, the relationship's direction/FK, `computeAvail()`/
+  `computeMakeability()`, the V.4 makeability-tier ordering, the V.4
+  "Can't make the original?" framing, `CocktailCard`, and the live Bloody
+  Mary/Zombie catalogue rows - all unchanged; the diff touches exactly one
+  component (layout) and its own tests.
+- *Acceptance:* opening a variation shows its base's card alone, with the
+  saved note in its own "How this version differs" block below the grid -
+  never as a caption on the base card; opening a base still shows each
+  variation's own note as a caption directly under that variation's own
+  card, unchanged from V.3; the exact same stored note string renders
+  unchanged from either direction (2 new domain tests: same note through
+  both `resolveRecipeVariationContext()` perspectives; a note-less
+  relationship resolves to `note: null` cleanly on both sides); the
+  existing V.4 makeability-tier ordering and framing tests all still pass
+  unchanged, since no domain logic used by either was touched.
+
 Each stage: `corepack pnpm@10.34.3` test + build, isolated-LF
 `oxfmt --check`, RLS suite re-run after V.1's migration, `db advisors
 --type security` after V.1, commit + push, then a short manual check —
@@ -844,11 +895,27 @@ confirmed that wording already works well.
 
 ## Testing plan
 
-**Status: V.1, V.2, V.3, and V.4's share of this plan are all DONE - see
-the exact tests/results recorded in the Staged implementation plan's
-V.1/V.2/V.3/V.4 entries above.** The sub-sections below are the original
-testing plan, kept as the checklist each stage was measured against (all
-satisfied).
+**Status: V.1, V.2, V.3, V.4, and V.5's share of this plan are all DONE -
+see the exact tests/results recorded in the Staged implementation plan's
+V.1/V.2/V.3/V.4/V.5 entries above.** The sub-sections below are the
+original testing plan, kept as the checklist each stage was measured
+against (all satisfied).
+
+**V.5's specific additions:** 2 new domain tests in
+`recipeRelationships.test.js` - the same stored note string resolves
+unchanged from both directions (`resolveRecipeVariationContext()` called
+once from the variation's own perspective, once from the base's); a
+note-less relationship resolves to `note: null` cleanly on both sides.
+The actual layout change (note moved out from under the base's card into
+its own labeled block) is a component-level, structural change - matching
+this project's own honest, established testing limits (no jsdom/component
+rendering available, confirmed again here) - verified by reading the code
+(the base's `CocktailCard` now renders alone in the grid; `base.note`, if
+present, renders in a separate `div` below it) rather than an automated
+render test; manual verification is what actually confirms the visual
+placement. No V.4 test needed to change - the makeability-tier ordering
+and framing logic were not touched, and the full existing suite (V.1-V.4)
+still passes unchanged, confirming that directly.
 
 **V.4's specific additions:** 13 new domain tests total -
 `recipeRelationships.test.js` gains: variations ordered by display tier
@@ -953,25 +1020,31 @@ recipe; base detail correctly shows its variation; navigation works both
 ways; the reused `CocktailCard` (own live availability/makeability status
 per card) reads well in this section.
 
-**Manual verification still owed for V.4 (real Bloody Mary/Zombie data,
-not yet browser-checked this stage):**
+**Manual verification of V.4 (real Bloody Mary/Zombie data) - done by the
+user, 2026-09-13, and it found the V.5 bug above.** Opening Bloody Mary
+(Practical Version) and Zombie (Home Bar Spiced & Dark Spec) confirmed the
+relationships, cards, and navigation all work - but also surfaced that the
+note rendered directly under the BASE card visually read as a description
+of the base, not of the variation being viewed. Fixed in V.5.
+
+**Manual verification still owed for V.5 (the corrected layout, not yet
+browser-checked this stage):**
 - Open **Bloody Mary (Practical Version)** → confirm "Variation of" shows
-  **Bloody Mary** with the existing note → tap it → lands on Bloody Mary's
-  own page.
-- Open **Bloody Mary** → confirm "Variations" shows **Bloody Mary
-  (Practical Version)**.
-- Open **Zombie (Home Bar Spiced & Dark Spec)** → confirm "Variation of"
-  shows **Zombie** with the new note above → tap it → lands on Zombie's
-  own page.
-- Open **Zombie** → confirm "Variations" shows **Zombie (Home Bar Spiced &
-  Dark Spec)**.
-- If My Bar ownership currently makes one side of either pair possible and
-  the other not, confirm the "Can't make the original? You can make one of
-  these instead." line appears only on the correct side, and only when
-  genuinely applicable (base not possible, variation possible) - toggle a
-  key ingredient in My Bar and re-check both directions.
-- Confirm both pairs' own ingredient lists/steps/badges are completely
-  unaffected by the relationship (unchanged from before linking).
+  the **Bloody Mary** card alone, with a separate **"How this version
+  differs"** block below it carrying the existing note - not a caption
+  under the Bloody Mary card.
+- Open **Bloody Mary** → confirm "Variations" still shows **Bloody Mary
+  (Practical Version)** with its note as a caption directly under that
+  card, exactly as before (this direction is unchanged).
+- Open **Zombie (Home Bar Spiced & Dark Spec)** → confirm the same
+  "Variation of" + separated "How this version differs" layout, with the
+  Zombie note.
+- Open **Zombie** → confirm "Variations" still shows **Zombie (Home Bar
+  Spiced & Dark Spec)** with its note as a caption, unchanged.
+- Confirm the V.4 "Can't make the original? You can make one of these
+  instead." framing still appears/disappears correctly (unaffected by this
+  layout change) and both pairs' own ingredient lists/steps/badges remain
+  completely unaffected.
 
 ---
 

@@ -32,6 +32,25 @@ import { SectionTitle } from "@/components/primitives"
 // itself. The framing belongs on the base -> variations side only, per
 // the plan - a variation's own "Variation of" block never gets an
 // equivalent line about the base's makeability.
+//
+// Stage V.5 (bugfix, manual-verification finding) - the stored
+// relationship `note` is DIRECTIONAL: it always means "how the variation
+// differs from its base," regardless of which recipe's own page is
+// currently rendering it. On a variation's own page, `base.note` is
+// still a fact about THIS recipe (the variation), not about the base
+// recipe shown in the card above it - rendering it as a caption directly
+// under that card (as every OTHER card/note pair in this app does)
+// visually implied it described the base. It doesn't, so it's no longer
+// rendered that way: the base's own card renders alone, with the note
+// pulled out into its own clearly-labeled "How this version differs"
+// block below the grid, so it can't be mistaken for a caption on that
+// card. On a base's own page, the exact same note correctly describes
+// each variation CARD relative to the base being viewed - that side is
+// completely unchanged, note still directly under its own card, no new
+// heading needed (the existing muted caption already reads unambiguously
+// in that direction). Never rewrites/inverts/regenerates the note text
+// either way - always the exact stored string, since it may not be
+// mechanically invertible.
 export function VariationsSection({ base, variations, showMakeableFraming }) {
   const navigate = useNavigate()
   const goTo = (id) => navigate(`/library/${id}`)
@@ -44,18 +63,18 @@ export function VariationsSection({ base, variations, showMakeableFraming }) {
         <div>
           <SectionTitle>Variation of</SectionTitle>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
-            <div className="flex flex-col gap-1">
-              <CocktailCard
-                c={base.recipe}
-                onClick={() => goTo(base.recipe.id)}
-              />
-              {base.note && (
-                <span className="text-[11px] text-tx3 text-center">
-                  {base.note}
-                </span>
-              )}
-            </div>
+            <CocktailCard c={base.recipe} onClick={() => goTo(base.recipe.id)} />
           </div>
+          {base.note && (
+            <div className="mt-2.5">
+              <span className="block text-[11px] font-bold text-tx2 uppercase tracking-[0.05em] mb-1">
+                How this version differs
+              </span>
+              <p className="text-[11px] text-tx3 leading-snug">
+                {base.note}
+              </p>
+            </div>
+          )}
         </div>
       )}
 

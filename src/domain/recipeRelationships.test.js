@@ -210,6 +210,55 @@ describe("resolveRecipeVariationContext", () => {
     expect(result.variations.map((v) => v.recipe.id)).toEqual(["m", "z"])
   })
 
+  it("Stage V.5 bugfix - the same stored relationship note comes back unchanged from BOTH directions (variation's own base.note, base's own variations[].note) - the resolver never rewrites, inverts, or regenerates it", () => {
+    const storedNote =
+      "Uses Soy sauce instead of Worcestershire Sauce and regular salt instead of Celery Salt. More common at home"
+    const relationships = [
+      { recipeId: "practical", relatedRecipeId: "bm", note: storedNote },
+    ]
+    const byId = new Map([
+      ["bm", { id: "bm", name: "Bloody Mary" }],
+      ["practical", { id: "practical", name: "Bloody Mary (Practical Version)" }],
+    ])
+
+    // Viewed from the variation's own page ("Variation of" - the base).
+    const fromVariation = resolveRecipeVariationContext(
+      "practical",
+      relationships,
+      byId,
+    )
+    expect(fromVariation.base.note).toBe(storedNote)
+
+    // Viewed from the base's own page ("Variations" - this one child).
+    const fromBase = resolveRecipeVariationContext("bm", relationships, byId)
+    expect(fromBase.variations[0].note).toBe(storedNote)
+
+    // Identical string either way - never mechanically inverted/rewritten
+    // per-direction (e.g. never "Uses Worcestershire instead of Soy Sauce"
+    // generated from the stored note).
+    expect(fromVariation.base.note).toBe(fromBase.variations[0].note)
+  })
+
+  it("Stage V.5 bugfix - a relationship with no note resolves to note: null cleanly on both sides, never a crash or a placeholder string", () => {
+    const relationships = [
+      { recipeId: "practical", relatedRecipeId: "bm", note: null },
+    ]
+    const byId = new Map([
+      ["bm", { id: "bm", name: "Bloody Mary" }],
+      ["practical", { id: "practical", name: "Bloody Mary (Practical Version)" }],
+    ])
+
+    const fromVariation = resolveRecipeVariationContext(
+      "practical",
+      relationships,
+      byId,
+    )
+    expect(fromVariation.base.note).toBeNull()
+
+    const fromBase = resolveRecipeVariationContext("bm", relationships, byId)
+    expect(fromBase.variations[0].note).toBeNull()
+  })
+
   it("a recipe with neither a base nor variations resolves to { base: null, variations: [] } cleanly", () => {
     const result = resolveRecipeVariationContext(
       "z",
