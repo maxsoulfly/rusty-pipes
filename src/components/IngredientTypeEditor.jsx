@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react"
 import { LinkedTypeListEditor } from "@/components/admin/LinkedTypeListEditor"
 import { PreparationEditor } from "@/components/admin/PreparationEditor"
 import { ShapePicker } from "@/components/admin/ShapePicker"
+import { TypeComboBox } from "@/components/admin/TypeComboBox"
 import {
   Btn,
   Card,
@@ -11,6 +12,10 @@ import {
   OwnedToggle,
   Select,
 } from "@/components/primitives"
+import {
+  resolveParentTypeCandidates,
+  resolveParentTypeIdForCategory,
+} from "@/domain/ingredientParentType"
 import { resolveIngredientType } from "@/domain/ingredientResolution"
 import {
   BAR_PRIORITIES,
@@ -378,12 +383,10 @@ export function IngredientTypeEditor({
       draftPreparation.inputs.length === 0 ||
       draftPreparation.inputs.some((i) => !i.ingredientTypeId))
 
-  const parentOptions = [
-    { value: "", label: "No parent type" },
-    ...otherTypes
-      .filter((t) => t.category_id === categoryId)
-      .map((t) => ({ value: t.id, label: t.name })),
-  ]
+  const parentTypeCandidates = resolveParentTypeCandidates(types, {
+    excludeTypeId: type.id,
+    categoryId,
+  })
 
   return (
     <Card className="p-4 flex flex-col gap-3 max-w-2xl w-full" style={style}>
@@ -396,7 +399,12 @@ export function IngredientTypeEditor({
           value={categoryId}
           onChange={(v) => {
             setCategoryId(v)
-            setParentTypeId("")
+            setParentTypeId(
+              resolveParentTypeIdForCategory(parentTypeId, {
+                types,
+                categoryId: v,
+              }),
+            )
           }}
         />
       </div>
@@ -404,10 +412,13 @@ export function IngredientTypeEditor({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <label className={LABEL}>Parent type</label>
-          <Select
-            value={parentTypeId}
-            onChange={setParentTypeId}
-            options={parentOptions}
+          <TypeComboBox
+            valueId={parentTypeId || null}
+            onPick={(id) => setParentTypeId(id ?? "")}
+            types={parentTypeCandidates}
+            aliasesByTypeId={aliasesByTypeId}
+            placeholder="Search parent type..."
+            nullOption={{ label: "No parent type" }}
           />
         </div>
         <div className="flex flex-col gap-1.5">

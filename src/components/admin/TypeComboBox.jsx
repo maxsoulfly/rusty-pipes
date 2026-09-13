@@ -12,8 +12,19 @@ import { Input } from "@/components/primitives"
 // "Can provide" section of the Ingredient Type editor can reuse it.
 //
 // `types` is expected pre-filtered by the caller (e.g. exclude the type
-// being edited and anything already linked). `label` is optional - omit it
-// when the surrounding section already has its own heading.
+// being edited and anything already linked, or restrict to one category -
+// see the Ingredient Type editor's own Parent Type field). `label` is
+// optional - omit it when the surrounding section already has its own
+// heading.
+//
+// `nullOption` (optional, `{ label }`) adds a pinned "no selection" row -
+// static, always shown above the search results regardless of query, never
+// filtered out - for a field where "none" is itself a deliberate, valid
+// choice (e.g. Parent Type's "No parent type"), not merely "nothing picked
+// yet." When provided, picking it calls `onPick(null)`, and the collapsed
+// trigger shows `nullOption.label` (styled as a real selection) whenever
+// `valueId` is falsy. Omit it entirely for every other existing caller -
+// their placeholder-vs-chosen behavior is unchanged.
 export function TypeComboBox({
   label,
   hint,
@@ -22,10 +33,12 @@ export function TypeComboBox({
   types,
   aliasesByTypeId,
   placeholder = "Search ingredients...",
+  nullOption,
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const chosen = valueId ? types.find((t) => t.id === valueId) : null
+  const showingNullOption = !chosen && nullOption
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -72,6 +85,22 @@ export function TypeComboBox({
               <IconX size={16} />
             </button>
           </div>
+          {nullOption && (
+            <button
+              type="button"
+              onClick={() => {
+                onPick(null)
+                setOpen(false)
+                setQuery("")
+              }}
+              className={clsx(
+                "w-full text-left py-2.5 px-2 min-h-11 rounded-sm bg-transparent border-none cursor-pointer text-sm italic shrink-0",
+                !valueId ? "text-cyan bg-cyan/10" : "text-tx2",
+              )}
+            >
+              {nullOption.label}
+            </button>
+          )}
           <div className="max-h-56 overflow-y-auto">
             {results.shown.length === 0 ? (
               <p className="text-[13px] text-tx3 px-1 py-2">
@@ -121,10 +150,16 @@ export function TypeComboBox({
           <span
             className={clsx(
               "text-sm truncate",
-              chosen ? "text-tx font-display font-semibold" : "text-tx3",
+              chosen || showingNullOption
+                ? "text-tx font-display font-semibold"
+                : "text-tx3",
             )}
           >
-            {chosen ? chosen.name : "Choose an ingredient"}
+            {chosen
+              ? chosen.name
+              : showingNullOption
+                ? nullOption.label
+                : "Choose an ingredient"}
           </span>
           <IconChevD size={14} className="text-tx3 shrink-0" />
         </button>
