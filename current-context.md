@@ -31,7 +31,7 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
 18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms (Concept 2) + Suggested Substitutes (Stage B) shipped via `docs/plans/substitutes-and-variations.md` (Stages A/B, DONE 2026-09-10). Homemade Preparations SUPERSEDED 2026-09-11 by a smaller design in that same doc ("Stage D — Adapted Availability & Minimal Homemade Preparations"), then that smaller design itself SHIPPED as Stage D.3 the same day. Stage D (D.1 adapted availability, D.2 discovery/grouping/ordering, D.3 tier-5 preparations, D.4 counts/breakdown + real Daiquiri catalogue rows, D.5 per-component exclusion + Buy Next ranking) is FULLY DONE + pushed 2026-09-11, **manually verified working correctly in the running app 2026-09-12, and the adapted category's user-facing name finalized as "Make With Adaptations"** (was "Make With Substitutions"). **Stage D is feature-complete and verified - nothing outstanding.** See item 0 and the chunk entries below. Linked cocktail variations (Stage C) remain NOT started, independent, on a separate go-ahead.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
 
-19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **I.1 through I.4 DONE + pushed, 2026-09-12/13 - v1 COMPLETE.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, "cocktails using this," and (for staff) an edit shortcut → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, the single shared `useInventory()` instance, `isPreparationSatisfiable()`, and the existing `IngredientTypeEditor`; no schema changes (every field/table this feature surfaces already existed, just unrendered to members). Staged **I.1 done** (tappable ingredient-name links + shared-tier grouping + basic identity) → **I.2 done** (My Bar Add/Remove action, household-basic-aware) → **I.3 done** (Can provide / Can be replaced by / Homemade preparation sections, each directional, reusing `IngredientLink`) → **I.4 done** (admin/moderator-only "Edit ingredient" shortcut, deep-linking straight into that ingredient type's existing editor - the plan's original "not a new deep-link" deferral was explicitly superseded by the user's own I.4 request; see item 0). **I.1-I.3 manually verified by the user; I.4 is not yet browser-verified** - see item 0 for the exact owed check. See the plan doc for the full audit/design.
+19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **I.1 through I.4 DONE + pushed, 2026-09-12/13 - v1 COMPLETE.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, "cocktails using this," and (for staff) an edit shortcut → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, the single shared `useInventory()` instance, `isPreparationSatisfiable()`, and the existing `IngredientTypeEditor`; no schema changes (every field/table this feature surfaces already existed, just unrendered to members). Staged **I.1 done** (tappable ingredient-name links + shared-tier grouping + basic identity) → **I.2 done** (My Bar Add/Remove action, household-basic-aware) → **I.3 done** (Can provide / Can be replaced by / Homemade preparation sections, each directional, reusing `IngredientLink`) → **I.4 done** (admin/moderator-only "Edit ingredient" shortcut, deep-linking straight into that ingredient type's existing editor - the plan's original "not a new deep-link" deferral was explicitly superseded by the user's own I.4 request; see item 0). **I.1-I.3 manually verified by the user; I.4 is not yet browser-verified** - see item 0 for the exact owed check. See the plan doc for the full audit/design. **UI polish, 2026-09-13 (found during Linked Variations manual testing, unrelated to that feature):** `IngredientLink`'s shared hover/active state was a filled background tint, which read as a separate "pill" floating above a row's own secondary text (e.g. "Substituting: X" underneath an ingredient name) - fixed by replacing the background with a color-agnostic `brightness-*` shift, so a row reads as one coherent block at rest/hover/press. Focus-visible ring, tap-target technique, and HeroCard's own separately-boxed "Missing: X" callout are all unchanged. See the chunk entry below.
 
 20. Linked Variations (new feature, `docs/plans/linked-variations.md`) — **V.1 + V.2 + V.3 + V.4 + V.5 DONE + pushed 2026-09-13, V.2 and V.3 manually verified (that verification found the V.5 bug).** Lets two otherwise-independent recipes declare "this is a variation of that" (e.g. Bloody Mary ↔ Bloody Mary (Practical Version)) as pure metadata/navigation - never ingredient/instruction inheritance, never affecting either recipe's own availability. One base → many variations (no general many-to-many), directional storage (variation points at its base) with bidirectional display (one hop only); **a relationship cycle is rejected at write time** (corrected 2026-09-13 from the original plan's "cycles are harmless, don't bother preventing them" stance - a `BEFORE INSERT/UPDATE` trigger walks the proposed base's chain, since `unique(recipe_id)` already guarantees the graph is a forest of trees, so this is a single linked-list walk, not a graph algorithm), a new standalone `recipe_relationships` table (not a `recipes` column - avoids widening its column-restricted update grant), reusing the existing `recipe_is_visible`/`recipe_is_editable` RLS helpers for authorization. Batch import explicitly does NOT gain a variation reference (no reliable identity mechanism at import time, per AGENTS.md's own no-fuzzy-matching rule) - admin-editor-only for v1. Staged **V.1 done** (schema + migration + cycle-prevention trigger + RLS + a pure one-hop `src/domain/recipeRelationships.js` resolver, 16 new tests) → **V.2 done** (recipe editor "Variation of" field + a new `RecipeComboBox`; **atomicity corrected same-day** - a first-pass `set_recipe_variation_of()` RPC only made the relationship's own write atomic and stopped a cyclic *rejection* from allowing later writes, but didn't stop an already-*succeeded* relationship write from staying committed if a later step then failed; replaced by one `save_recipe()` RPC that owns the recipe's fields, components, taste tags, AND the relationship in a single transaction, covering create too - 3 domain tests + a full RLS-suite block proving the actual rollback) → **V.3 done** (`DetailScreen.jsx` gains a "Variation of"/"Variations" block, new `VariationsSection.jsx` reusing `CocktailCard` in Ingredient Detail's own grid pattern, zero new data loading - `recipeRelationships` already fetched since V.2, resolved via V.1's `resolveRecipeVariationContext()` against a local `recipesById` built from already-loaded `computed`; deterministic alphabetical sort added for multi-variation ordering; 2 new domain tests) → **V.4 done** (makeability-tier-aware variation ordering reusing shared `DISPLAY_TIER_ORDER`; a new `shouldShowMakeableVariationFraming()` + extracted `isPossibleTier()` helper drive a compact "Can't make the original? You can make one of these instead." line, base → variations side only; small editor label/helper wording polish; the two real catalogue relationships now live - **Bloody Mary (Practical Version) → Bloody Mary** (pre-existing, note reviewed and kept) and **Zombie (Home Bar Spiced & Dark Spec) → Zombie** (newly linked after a real ingredient/prep comparison), both written through the app's own `save_recipe()` RPC under a simulated real admin identity, not raw SQL; 13 new domain tests) → **V.5 done** (bugfix - the relationship note is directional ("how the variation differs from its base"), but a variation's page rendered it as a caption under the BASE's card, implying it described the base; fixed to render the base's card alone with the note in its own "How this version differs" block, presentation-only, base → variations direction unchanged; 2 new domain tests - **plus a same-day layout-width follow-up**, found via manual screenshots: that new note block was still full container width, so a longer note (Zombie) stretched into one very long line disconnected from the card; fixed by moving the note inside the same per-card grid-column wrapper the "Variations" side already used, so it wraps naturally at column width instead of page width, no new hardcoded size). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer. Supersedes `docs/plans/substitutes-and-variations.md`'s earlier "Part 3"/"Stage C" sketch (kept there as historical record, now redirects here).
 
@@ -301,6 +301,71 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 needed). No migrations, no schema change - not needed to fix this.
 
 **Commit:** `7a22526`. `docs/project.md` untouched.
+
+---
+
+## Last completed chunk (UI polish - IngredientLink hover/active no longer a filled pill, 2026-09-13 — 1-file change to a shared component, no domain/data change)
+
+**Found during manual testing of Linked Variations** (unrelated to that
+feature - a pre-existing Ingredient Detail Stage I.1 component). Ingredient
+names on Cocktail Detail (and every other screen reusing the shared
+`IngredientLink`) are tappable links to Ingredient Detail. The shared
+hover/active state was a filled background tint
+(`hover:bg-tx3/10 active:bg-tx3/15`) - since `IngredientLink` only wraps
+the ingredient NAME itself (an inline-block with its own vertical
+tap-target padding), that tint rendered as a small filled "pill" around
+just the name. Harmless for a bare name, but wherever a caller renders a
+secondary line directly below it - e.g. `IngredientsSection.jsx`'s
+"Substituting: Soy Sauce" under "Worcestershire Sauce," or
+`IngredientDetailScreen.jsx`'s row guidance/flavor-note captions under
+"Can provide"/"Can be replaced by"/"Homemade preparation" rows - the pill
+visually separated the name from its own secondary text: two disconnected
+pieces instead of one coherent ingredient row.
+
+**Fix (`src/components/detail/IngredientLink.jsx` only - the shared
+component, not any individual caller):** removed the filled background
+entirely and replaced it with a color-agnostic brightness shift -
+`hover:brightness-125` (subtle emphasis on hover) and `active:brightness-90`
+(subtle dim as press feedback) - `transition-colors` widened to plain
+`transition` so the new `filter`-based brightness change actually
+animates. Both attach at the shared level, so all four call sites
+(`IngredientsSection.jsx`'s per-row names, `HeroCard.jsx`'s "Missing: X"
+callout, and `IngredientDetailScreen.jsx`'s "Can provide"/"Can be replaced
+by"/"Homemade preparation" rows) get the fix automatically - no caller
+edited.
+
+**Unchanged, confirmed by inspection:** the `focus-visible:ring-2
+ring-inset ring-cyan` keyboard focus indicator (still present, still the
+only strong visual affordance on focus); the `py-3 -my-3`/host-specific
+bleed-padding tap-target technique (unchanged, still ≥44px practical
+target everywhere it was before); navigation (`to={/bar/type/:id}`,
+untouched); ingredient status dots and secondary substitution/preparation
+text (both rendered by callers, not this component, untouched);
+`HeroCard.jsx`'s "Missing: Tomato Juice"-style callout, which gets its own
+boxed/prominent look from ITS OWN separate `bg-almost/10 border
+border-almost/30` panel div wrapping the whole line - `IngredientLink`
+never controlled that box, so removing its own hover/active tint changes
+nothing about Hero's intentional callout appearance. No availability
+logic, no domain/data change of any kind.
+
+**Verified:** `corepack pnpm@10.34.3 test` **377/377** (unchanged - no
+domain logic touched, no test needed). `corepack pnpm@10.34.3 build`
+clean (181 modules; CSS bundle grew slightly, 44.19kB → 45.16kB, from the
+new `brightness`/`transition` utility classes - expected, not a
+regression). Diff is exactly one file (`IngredientLink.jsx`), confirmed
+via `git status` before committing.
+
+**Not yet browser-verified:** open a recipe with a substitution/adapted/
+preparation-note row (e.g. any recipe using Worcestershire Sauce with an
+active substitution) and confirm hovering/tapping the ingredient name now
+reads as one coherent row with its secondary text, not a separate
+highlighted pill; tab to an ingredient link with the keyboard and confirm
+the cyan focus ring still appears clearly; open a recipe missing a
+required ingredient and confirm HeroCard's "Missing: X" panel still looks
+exactly as boxed/prominent as before.
+
+**Commit:** see the git log for the exact hash. `docs/project.md`
+untouched.
 
 ---
 
