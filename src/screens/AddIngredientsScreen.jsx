@@ -9,13 +9,7 @@ import { IngredientIcon } from "@/components/IngredientIcon"
 import { TopBar } from "@/components/Nav"
 import { AdminMenu } from "@/components/myBar/AdminMenu"
 import { TypeCard } from "@/components/myBar/TypeCard"
-
-// Same within-category order My ingredients uses (see MyBarScreen.jsx) -
-// "how likely is this on a real bar" first, name as tiebreaker.
-const PRIORITY_RANK = { essential: 0, common: 1, specialized: 2, niche: 3 }
-const byPriorityThenName = (a, b) =>
-  (PRIORITY_RANK[a.bar_priority] ?? 99) -
-    (PRIORITY_RANK[b.bar_priority] ?? 99) || a.name.localeCompare(b.name)
+import { byPriorityThenName } from "@/domain/ingredientPriority"
 
 const NOOP = () => {}
 

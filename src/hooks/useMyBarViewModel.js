@@ -1,5 +1,6 @@
 import { useMemo } from "react"
-import { buildFamilyClusters, byPriorityThenName } from "@/domain/myBarGrouping"
+import { byPriorityThenName } from "@/domain/ingredientPriority"
+import { buildFamilyClusters } from "@/domain/myBarGrouping"
 
 // My Bar's derived view-model: every lookup map, grouping transform, and
 // computed flag the screen renders from, given the current catalog/

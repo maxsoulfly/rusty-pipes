@@ -1,17 +1,3 @@
-// Within a category, order by real-world "how likely is this on a bar" -
-// bar_priority already exists on every type (currently only consumed by
-// src/domain/recommendations.js for purchase suggestions), name as
-// tiebreaker. Previously pure alphabetical, which put e.g. Absinthe ahead
-// of Gin purely on spelling - no relationship to which one an actual bar
-// would stock.
-const PRIORITY_RANK = { essential: 0, common: 1, specialized: 2, niche: 3 }
-export function byPriorityThenName(a, b) {
-  return (
-    (PRIORITY_RANK[a.bar_priority] ?? 99) -
-      (PRIORITY_RANK[b.bar_priority] ?? 99) || a.name.localeCompare(b.name)
-  )
-}
-
 // Renders parent types followed immediately by their (filtered) children,
 // indented - a child whose parent didn't pass the filter (e.g. searching
 // "dark" matches "Dark Rum" but not "Rum", or the parent simply isn't

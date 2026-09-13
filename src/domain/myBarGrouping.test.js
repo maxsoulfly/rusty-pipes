@@ -1,44 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { buildFamilyClusters, byPriorityThenName } from "./myBarGrouping"
+import { buildFamilyClusters } from "./myBarGrouping"
 
-describe("byPriorityThenName", () => {
-  it("orders essential before common before specialized before niche", () => {
-    const items = [
-      { name: "Z", bar_priority: "niche" },
-      { name: "Y", bar_priority: "specialized" },
-      { name: "X", bar_priority: "common" },
-      { name: "W", bar_priority: "essential" },
-    ]
-    expect([...items].sort(byPriorityThenName).map((i) => i.name)).toEqual([
-      "W",
-      "X",
-      "Y",
-      "Z",
-    ])
-  })
-
-  it("breaks a tie within the same priority alphabetically by name", () => {
-    const items = [
-      { name: "Vodka", bar_priority: "essential" },
-      { name: "Gin", bar_priority: "essential" },
-    ]
-    expect([...items].sort(byPriorityThenName).map((i) => i.name)).toEqual([
-      "Gin",
-      "Vodka",
-    ])
-  })
-
-  it("sorts an unrecognized/missing priority last, not first", () => {
-    const items = [
-      { name: "Absinthe", bar_priority: "weird-value" },
-      { name: "Gin", bar_priority: "essential" },
-    ]
-    expect([...items].sort(byPriorityThenName).map((i) => i.name)).toEqual([
-      "Gin",
-      "Absinthe",
-    ])
-  })
-})
+// byPriorityThenName moved to src/domain/ingredientPriority.js (generic
+// catalogue ordering, shared with AddIngredientsScreen.jsx) - see its own
+// test file for that comparator's coverage.
 
 describe("buildFamilyClusters", () => {
   it("gives every parentless item its own cluster with no children, in order", () => {
