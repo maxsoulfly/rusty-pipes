@@ -4,6 +4,7 @@ import {
   resolveDirectVariations,
   resolveRecipeVariationContext,
   resolveVariationCandidates,
+  shouldShowMakeableVariationFraming,
 } from "./recipeRelationships"
 
 // A ← B ← C: B is a variation of A, C is a variation of B. Cycle
@@ -159,6 +160,56 @@ describe("resolveRecipeVariationContext", () => {
     expect(result.variations.map((v) => v.recipe.id)).toEqual(["m", "z"])
   })
 
+  it("Stage V.4 - variations are ordered by display tier first (perfect > good > adapted > almost > unavail), regardless of input row order", () => {
+    const tieredRecipesById = new Map([
+      ["a", { id: "a", name: "Bloody Mary" }],
+      ["u", { id: "u", name: "Unavail Variation", display: { tier: "unavail" } }],
+      ["p", { id: "p", name: "Perfect Variation", display: { tier: "perfect" } }],
+      ["ad", { id: "ad", name: "Adapted Variation", display: { tier: "adapted" } }],
+      ["al", { id: "al", name: "Almost Variation", display: { tier: "almost" } }],
+      ["g", { id: "g", name: "Good Variation", display: { tier: "good" } }],
+    ])
+    // Deliberately worst-to-best input order - the resolver must re-sort,
+    // never just echo the relationship rows' own order.
+    const relationships = [
+      { recipeId: "u", relatedRecipeId: "a", note: null },
+      { recipeId: "al", relatedRecipeId: "a", note: null },
+      { recipeId: "ad", relatedRecipeId: "a", note: null },
+      { recipeId: "g", relatedRecipeId: "a", note: null },
+      { recipeId: "p", relatedRecipeId: "a", note: null },
+    ]
+    const result = resolveRecipeVariationContext(
+      "a",
+      relationships,
+      tieredRecipesById,
+    )
+    expect(result.variations.map((v) => v.recipe.id)).toEqual([
+      "p",
+      "g",
+      "ad",
+      "al",
+      "u",
+    ])
+  })
+
+  it("Stage V.4 - alphabetical order is still the tie-break for two variations in the same tier", () => {
+    const sameTierRecipesById = new Map([
+      ["a", { id: "a", name: "Bloody Mary" }],
+      ["z", { id: "z", name: "Zombie Variation", display: { tier: "adapted" } }],
+      ["m", { id: "m", name: "Mild Variation", display: { tier: "adapted" } }],
+    ])
+    const relationships = [
+      { recipeId: "z", relatedRecipeId: "a", note: null },
+      { recipeId: "m", relatedRecipeId: "a", note: null },
+    ]
+    const result = resolveRecipeVariationContext(
+      "a",
+      relationships,
+      sameTierRecipesById,
+    )
+    expect(result.variations.map((v) => v.recipe.id)).toEqual(["m", "z"])
+  })
+
   it("a recipe with neither a base nor variations resolves to { base: null, variations: [] } cleanly", () => {
     const result = resolveRecipeVariationContext(
       "z",
@@ -198,5 +249,60 @@ describe("resolveVariationCandidates", () => {
 
   it("is null-safe for a missing recipes array", () => {
     expect(resolveVariationCandidates(undefined, "a")).toEqual([])
+  })
+})
+
+describe("shouldShowMakeableVariationFraming", () => {
+  function withTier(id, name, tier) {
+    return { recipe: { id, name, display: { tier } }, note: null }
+  }
+
+  it("shows the framing when the base is not makeable and a direct variation is (unavail base, perfect variation)", () => {
+    const base = { id: "a", name: "Bloody Mary", display: { tier: "unavail" } }
+    const variations = [withTier("b", "Bloody Mary (Practical Version)", "perfect")]
+    expect(shouldShowMakeableVariationFraming(base, variations)).toBe(true)
+  })
+
+  it("shows the framing when the base is 'almost' and a variation is 'adapted' - adapted counts as makeable under the app's existing possible/makeable semantics", () => {
+    const base = { id: "a", name: "Bloody Mary", display: { tier: "almost" } }
+    const variations = [withTier("b", "Adapted Variation", "adapted")]
+    expect(shouldShowMakeableVariationFraming(base, variations)).toBe(true)
+  })
+
+  it("hides the framing when the base is already makeable (perfect), even if a variation is also makeable", () => {
+    const base = { id: "a", name: "Bloody Mary", display: { tier: "perfect" } }
+    const variations = [withTier("b", "Variation", "perfect")]
+    expect(shouldShowMakeableVariationFraming(base, variations)).toBe(false)
+  })
+
+  it("hides the framing when the base is already makeable via 'adapted' alone - strict vs adapted are both already 'possible', not a reason to show the line", () => {
+    const base = { id: "a", name: "Bloody Mary", display: { tier: "adapted" } }
+    const variations = [withTier("b", "Variation", "perfect")]
+    expect(shouldShowMakeableVariationFraming(base, variations)).toBe(false)
+  })
+
+  it("hides the framing when the base is not makeable but no variation is makeable either", () => {
+    const base = { id: "a", name: "Bloody Mary", display: { tier: "unavail" } }
+    const variations = [
+      withTier("b", "Variation One", "almost"),
+      withTier("c", "Variation Two", "unavail"),
+    ]
+    expect(shouldShowMakeableVariationFraming(base, variations)).toBe(false)
+  })
+
+  it("hides the framing when there are no variations at all", () => {
+    const base = { id: "a", name: "Bloody Mary", display: { tier: "unavail" } }
+    expect(shouldShowMakeableVariationFraming(base, [])).toBe(false)
+  })
+
+  it("is null-safe for a missing recipe", () => {
+    expect(shouldShowMakeableVariationFraming(null, [])).toBe(false)
+    expect(shouldShowMakeableVariationFraming(undefined, [])).toBe(false)
+  })
+
+  it("falls back to the bare avail string when display is absent, matching every other consumer of this tier rule", () => {
+    const base = { id: "a", name: "Bloody Mary", avail: "unavail" }
+    const variations = [{ recipe: { id: "b", name: "Variation", avail: "perfect" }, note: null }]
+    expect(shouldShowMakeableVariationFraming(base, variations)).toBe(true)
   })
 })

@@ -1,12 +1,31 @@
 import { describe, expect, it } from "vitest"
 import {
   formatMakeabilityBreakdown,
+  isPossibleTier,
   summarizeMakeability,
 } from "./makeabilityCounts"
 
 function recipe(tier) {
   return { display: { tier }, avail: tier }
 }
+
+describe("isPossibleTier", () => {
+  it("counts perfect, good, and adapted as possible", () => {
+    expect(isPossibleTier("perfect")).toBe(true)
+    expect(isPossibleTier("good")).toBe(true)
+    expect(isPossibleTier("adapted")).toBe(true)
+  })
+
+  it("does not count almost or unavail as possible", () => {
+    expect(isPossibleTier("almost")).toBe(false)
+    expect(isPossibleTier("unavail")).toBe(false)
+  })
+
+  it("is false for an unrecognized/missing tier", () => {
+    expect(isPossibleTier(undefined)).toBe(false)
+    expect(isPossibleTier("something-else")).toBe(false)
+  })
+})
 
 describe("summarizeMakeability", () => {
   it("counts perfect and good as ready, adapted separately, and sums both into possible", () => {

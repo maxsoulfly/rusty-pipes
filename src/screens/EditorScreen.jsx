@@ -870,13 +870,20 @@ export default function EditorScreen() {
                 createRecipe()/updateRecipe() as a genuinely atomic step
                 (see src/services/recipes.js). */}
             <div>
+              {/* Stage V.4 - wording polish from manual testing: the
+                  original "Variation of" label alone left the direction
+                  ambiguous (which recipe is "the variation" - this one, or
+                  the one being picked?). "Based on" makes the direction
+                  explicit: picking a recipe here means THIS recipe is a
+                  variation OF that one. */}
               <label className="text-xs font-bold text-tx2 font-display uppercase tracking-[0.06em] block mb-1.5">
-                Variation of
+                Based on / variation of (optional)
               </label>
               <p className="text-[11px] text-tx3 mb-2 leading-snug">
-                Optional - link this recipe as a variation of another. This
-                is metadata only: ingredients, steps, and availability stay
-                completely independent either way.
+                If this recipe is a variation of another cocktail, select the
+                original/base recipe. This is metadata only: ingredients,
+                steps, and availability stay completely independent either
+                way.
               </p>
               <RecipeComboBox
                 valueId={variationOfRecipeId}

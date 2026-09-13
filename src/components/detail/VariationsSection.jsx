@@ -21,7 +21,18 @@ import { SectionTitle } from "@/components/primitives"
 // anything about ONE recipe from the OTHER side of the relationship; the
 // optional `note` is shown as-is, exactly as saved, never a generated
 // "uses X instead" description.
-export function VariationsSection({ base, variations }) {
+//
+// Stage V.4 - `variations` arrives already sorted makeability-tier-first
+// (src/domain/recipeRelationships.js's own
+// `resolveRecipeVariationContext()`), so this component still just lays
+// them out in order - no ranking logic here. `showMakeableFraming` is a
+// single pre-computed boolean (via that module's own
+// `shouldShowMakeableVariationFraming()`) - this component only renders
+// the one line of copy when told to, never re-derives the condition
+// itself. The framing belongs on the base -> variations side only, per
+// the plan - a variation's own "Variation of" block never gets an
+// equivalent line about the base's makeability.
+export function VariationsSection({ base, variations, showMakeableFraming }) {
   const navigate = useNavigate()
   const goTo = (id) => navigate(`/library/${id}`)
 
@@ -51,6 +62,11 @@ export function VariationsSection({ base, variations }) {
       {variations.length > 0 && (
         <div>
           <SectionTitle>Variations</SectionTitle>
+          {showMakeableFraming && (
+            <p className="-mt-1 mb-2.5 text-xs text-cyan">
+              Can't make the original? You can make one of these instead.
+            </p>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
             {variations.map(({ recipe, note }) => (
               <div key={recipe.id} className="flex flex-col gap-1">

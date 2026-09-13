@@ -11,7 +11,10 @@ import { StepsSection } from "@/components/detail/StepsSection"
 import { VariationsSection } from "@/components/detail/VariationsSection"
 import { Btn, ConfirmPanel } from "@/components/primitives"
 import { buildSubstituteSuggester } from "@/domain/substituteSuggestions"
-import { resolveRecipeVariationContext } from "@/domain/recipeRelationships"
+import {
+  resolveRecipeVariationContext,
+  shouldShowMakeableVariationFraming,
+} from "@/domain/recipeRelationships"
 import {
   deleteRecipe,
   publishRecipe,
@@ -124,6 +127,11 @@ export default function DetailScreen() {
     recipeRelationships,
     recipesById,
   )
+  // Stage V.4 - still purely presentational: this only decides whether the
+  // "can't make the original?" line renders on the base -> variations side,
+  // reusing `c`'s own already-computed `display.tier` and each variation's
+  // own (also already-computed) tier - no new availability computation.
+  const showMakeableFraming = shouldShowMakeableVariationFraming(c, variations)
 
   const handlePublish = async () => {
     setPublishing(true)
@@ -249,7 +257,11 @@ export default function DetailScreen() {
 
         <StepsSection steps={c.steps} />
 
-        <VariationsSection base={variationBase} variations={variations} />
+        <VariationsSection
+          base={variationBase}
+          variations={variations}
+          showMakeableFraming={showMakeableFraming}
+        />
 
         <ActionButtons
           c={c}

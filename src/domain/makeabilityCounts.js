@@ -12,6 +12,23 @@
 // reads them directly, only `display.tier`.
 
 /**
+ * Whether a single `display.tier` value counts as "possible" under this
+ * app's existing makeability semantics - perfect/good (ready as-is) or
+ * adapted (resolvable via a configured, owned substitute or a satisfiable
+ * homemade preparation) all count; almost/unavail do not. Extracted so any
+ * other feature needing this exact boolean (e.g. Linked Variations Stage
+ * V.4's "can't make the original? try this variation" framing,
+ * src/domain/recipeRelationships.js) reads it from one place instead of
+ * re-deriving the tier list.
+ *
+ * @param {string} tier
+ * @returns {boolean}
+ */
+export function isPossibleTier(tier) {
+  return tier === "perfect" || tier === "good" || tier === "adapted"
+}
+
+/**
  * @param {{ display?: { tier: string }, avail: string }[]} computed
  * @returns {{ possible: number, ready: number, adapted: number }}
  */
