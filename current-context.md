@@ -406,8 +406,7 @@ Zombie (Home Bar Spiced & Dark Spec), confirm the heading now reads "How
 safely at mobile/desktop widths without overflow, and that the base pages
 ("Variations") are visually unchanged.
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `015e578`. `docs/project.md` untouched.
 
 ---
 
