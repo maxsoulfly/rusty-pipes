@@ -477,8 +477,7 @@ under a Linked Variations "Variation of"/"Variations" block shows its own
 independent adapted actions when applicable; the existing two-column
 mobile grid is unaffected (no card became full-width).
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `376d17f`. `docs/project.md` untouched.
 
 ---
 
