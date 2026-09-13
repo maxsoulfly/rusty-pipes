@@ -261,6 +261,7 @@ export default function DetailScreen() {
           base={variationBase}
           variations={variations}
           showMakeableFraming={showMakeableFraming}
+          currentRecipeName={c.name}
         />
 
         <ActionButtons

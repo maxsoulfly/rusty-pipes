@@ -14,7 +14,11 @@ variation relative to its base. Fixed same-day as Stage V.5; a follow-up
 round of manual screenshots then found the fixed note block itself was
 full container width (fine for a short note, but a long one spanned
 almost the whole page) - fixed same-day as a layout width polish, still
-within V.5. See its own entry below.** Written after
+within V.5. A final round of manual testing then found the "How this
+version differs" heading itself still read as ambiguous - easy to
+mistake for describing the base card above it - fixed same-day by naming
+the current recipe explicitly in the heading, also within V.5. See its
+own entry below.** Written after
 Ingredient Detail v1 (I.1–I.4, `docs/plans/ingredient-detail-page.md`)
 shipped and was manually verified. This is Stage C of `docs/plans/
 substitutes-and-variations.md`, which sketched an early version of this
@@ -809,8 +813,8 @@ DONE, 2026-09-13.**
   a sticky recipe-name header in the editor while scrolling - a separate,
   small UX follow-up, out of scope for V.4's own explicit instructions.
 
-**V.5 — Bugfix: directional note placement + layout width polish
-(manual-verification findings). DONE, 2026-09-13.**
+**V.5 — Bugfix: directional note placement + layout width polish + final
+wording clarity (manual-verification findings). DONE, 2026-09-13.**
 - **The bug.** The stored relationship `note` is directional - it always
   means "how the variation differs from its base," never the reverse.
   V.3/V.4's rendering on a variation's own page ("Variation of") showed
@@ -865,18 +869,43 @@ DONE, 2026-09-13.**
   wrapper, so it was never at risk of stretching full-width in the first
   place. Pure CSS/JSX-structure change - no domain logic, no new tests
   needed beyond confirming the existing suite still passes unchanged.
+- **Final wording clarity (third manual-verification finding, same day -
+  the user found this ambiguous themselves while testing).** Even with
+  the base card and the note visually separated (the fixes above), the
+  generic heading **"How this version differs"** was still easy to
+  misread as being about the BASE card shown directly above it, rather
+  than about the CURRENT recipe (the variation whose page it is). Fixed
+  by naming the current recipe explicitly in the heading: **"How Bloody
+  Mary (Practical Version) differs"**, **"How Zombie (Home Bar Spiced &
+  Dark Spec) differs"** - since the note always describes the variation
+  relative to its base, naming the variation removes the ambiguity
+  entirely. New pure `formatVariationDifferenceHeading(currentRecipeName)`
+  (`src/domain/recipeRelationships.js`) builds the string; `DetailScreen
+  .jsx` passes its own `c.name` (the current recipe's own name, already on
+  hand - no new lookup) into `VariationsSection.jsx`'s new
+  `currentRecipeName` prop. Deliberately does not truncate the name - an
+  exceptionally long one is allowed to wrap onto a second line (ordinary
+  page content, unlike the sticky editor header's fixed-height chrome),
+  and still sits inside the same single grid-column width the layout-width
+  polish above already established, so it wraps safely rather than
+  overflowing. The base→variations direction was reviewed and needed no
+  change - that note is already directly associated with the variation's
+  own card it describes, with no comparable ambiguity.
 - *Acceptance:* opening a variation shows its base's card alone, with the
-  saved note in its own "How this version differs" block, constrained to
-  the same width as the card's own grid column and wrapping naturally at
-  every breakpoint - never a full-page-width line, never a caption on the
-  base card; opening a base still shows each variation's own note as a
-  caption directly under that variation's own card, unchanged from V.3;
-  the exact same stored note string renders unchanged from either
-  direction (2 new domain tests: same note through both
+  saved note in its own "How <this recipe's own name> differs" block,
+  constrained to the same width as the card's own grid column and wrapping
+  naturally at every breakpoint - never a full-page-width line, never a
+  caption on the base card, and never nameable as the base's own note;
+  opening a base still shows each variation's own note as a caption
+  directly under that variation's own card, unchanged from V.3; the exact
+  same stored note string renders unchanged from either direction (2 new
+  domain tests for the note itself: same note through both
   `resolveRecipeVariationContext()` perspectives; a note-less relationship
-  resolves to `note: null` cleanly on both sides); the existing V.4
+  resolves to `note: null` cleanly on both sides - plus 3 new domain tests
+  for the heading itself: it names the current variation, never a base;
+  it does not truncate an exceptionally long name); the existing V.4
   makeability-tier ordering and framing tests all still pass unchanged,
-  since no domain logic used by either was touched at any point in V.5.
+  since no domain logic used by any of V.5's three fixes touched them.
 
 Each stage: `corepack pnpm@10.34.3` test + build, isolated-LF
 `oxfmt --check`, RLS suite re-run after V.1's migration, `db advisors
@@ -931,21 +960,27 @@ V.1/V.2/V.3/V.4/V.5 entries above.** The sub-sections below are the
 original testing plan, kept as the checklist each stage was measured
 against (all satisfied).
 
-**V.5's specific additions:** 2 new domain tests in
-`recipeRelationships.test.js` - the same stored note string resolves
+**V.5's specific additions:** 2 domain tests for the note-direction bugfix
+in `recipeRelationships.test.js` - the same stored note string resolves
 unchanged from both directions (`resolveRecipeVariationContext()` called
 once from the variation's own perspective, once from the base's); a
 note-less relationship resolves to `note: null` cleanly on both sides.
-The actual layout change (note moved out from under the base's card into
-its own labeled block) is a component-level, structural change - matching
-this project's own honest, established testing limits (no jsdom/component
-rendering available, confirmed again here) - verified by reading the code
-(the base's `CocktailCard` now renders alone in the grid; `base.note`, if
-present, renders in a separate `div` below it) rather than an automated
-render test; manual verification is what actually confirms the visual
-placement. No V.4 test needed to change - the makeability-tier ordering
-and framing logic were not touched, and the full existing suite (V.1-V.4)
-still passes unchanged, confirming that directly.
+The layout-width polish added no tests (pure CSS/JSX structure, no domain
+logic). The final wording-clarity fix adds 3 more: new
+`formatVariationDifferenceHeading()` names the current variation
+recipe (never a base - the function structurally has no "base name"
+parameter to substitute in by mistake, confirmed by asserting its arity);
+it does not truncate an exceptionally long recipe name. Every actual
+LAYOUT/placement change across all three V.5 fixes (note moved off the
+base card, note constrained to column width, heading text now dynamic) is
+component-level and structural - matching this project's own honest,
+established testing limits (no jsdom/component rendering available,
+confirmed again here) - verified by reading the code rather than an
+automated render test; manual verification is what actually confirms the
+visual placement. No V.4 test needed to change across any of V.5's three
+fixes - the makeability-tier ordering and framing logic were never
+touched, and the full existing suite (V.1-V.4) passes unchanged throughout,
+confirming that directly.
 
 **V.4's specific additions:** 13 new domain tests total -
 `recipeRelationships.test.js` gains: variations ordered by display tier
@@ -1065,22 +1100,30 @@ right - but that block was still full container width, and the longer
 Zombie note stretched into one very long line, visually disconnected from
 the card. Fixed by the layout width polish above (same day).
 
-**Manual verification still owed for the layout width polish (not yet
-browser-checked this stage):**
-- Open **Bloody Mary (Practical Version)** → confirm "Variation of" shows
-  the **Bloody Mary** card with its **"How this version differs"** note
-  directly below it, constrained to roughly the card's own column width
-  (not stretching across the page) and wrapping naturally.
-- Open **Zombie (Home Bar Spiced & Dark Spec)** → confirm the same, with
-  the longer Zombie note wrapping into multiple lines within that same
-  column width, still clearly attached to the card above it - no
-  overflow, no manual-looking line breaks.
-- Check narrow mobile, normal phone width, and desktop/wide screen - the
-  note column should track the same 2/3/4-column breakpoints the card
-  grid already uses, never becoming a single unreadably narrow sliver.
+**Manual verification of the layout width polish - done by the user,
+2026-09-13, during final manual testing, and it found the wording
+ambiguity above.** The note now correctly stayed within the base card's
+own column width and wrapped naturally - no layout complaint this round -
+but even separated and width-constrained, the generic "How this version
+differs" heading was still easy to misread as being about the base card
+shown directly above it. Fixed by the final wording-clarity polish above
+(same day).
+
+**Manual verification still owed for the final wording-clarity fix (not
+yet browser-checked this stage):**
+- Open **Bloody Mary (Practical Version)** → confirm the heading now
+  reads **"How Bloody Mary (Practical Version) differs"** (not "How this
+  version differs") directly above the existing note.
+- Open **Zombie (Home Bar Spiced & Dark Spec)** → confirm the heading
+  reads **"How Zombie (Home Bar Spiced & Dark Spec) differs"**.
+- Confirm both headings still wrap safely within the card's own column
+  width at narrow mobile, normal phone, and desktop widths, with no
+  horizontal overflow - a long recipe name is allowed to wrap onto a
+  second line here (unlike the sticky editor header).
 - Open **Bloody Mary** and **Zombie** (the base pages) → confirm
   "Variations" still shows each practical/home-bar variation's own note
-  as a caption directly under its own card, unchanged from V.3.
+  as a caption directly under its own card, unchanged from V.3 - no
+  heading added on this side.
 - Confirm the V.4 "Can't make the original?" framing still appears/
   disappears correctly and both pairs' own ingredient lists/steps/badges
   remain completely unaffected.

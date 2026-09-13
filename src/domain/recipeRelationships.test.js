@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  formatVariationDifferenceHeading,
   resolveBaseRelationship,
   resolveDirectVariations,
   resolveRecipeVariationContext,
@@ -353,5 +354,33 @@ describe("shouldShowMakeableVariationFraming", () => {
     const base = { id: "a", name: "Bloody Mary", avail: "unavail" }
     const variations = [{ recipe: { id: "b", name: "Variation", avail: "perfect" }, note: null }]
     expect(shouldShowMakeableVariationFraming(base, variations)).toBe(true)
+  })
+})
+
+describe("formatVariationDifferenceHeading", () => {
+  it("names the current variation recipe, not the base", () => {
+    expect(
+      formatVariationDifferenceHeading("Bloody Mary (Practical Version)"),
+    ).toBe("How Bloody Mary (Practical Version) differs")
+  })
+
+  it("uses whichever recipe name is passed in - it has no concept of 'base' at all, so it structurally cannot name the base recipe by mistake", () => {
+    expect(
+      formatVariationDifferenceHeading(
+        "Zombie (Home Bar Spiced & Dark Spec)",
+      ),
+    ).toBe("How Zombie (Home Bar Spiced & Dark Spec) differs")
+    // Confirms the function only ever has one recipe name to work with -
+    // there is no second "base name" parameter it could accidentally
+    // substitute in instead.
+    expect(formatVariationDifferenceHeading.length).toBe(1)
+  })
+
+  it("does not truncate or otherwise shorten an exceptionally long recipe name - wrapping is the caller's own layout concern", () => {
+    const longName =
+      "Bloody Mary (Practical Version, Extra Spicy, Home Bar Batch, Family Recipe)"
+    expect(formatVariationDifferenceHeading(longName)).toBe(
+      `How ${longName} differs`,
+    )
   })
 })

@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom"
 import { CocktailCard } from "@/components/CocktailCard"
 import { SectionTitle } from "@/components/primitives"
+import { formatVariationDifferenceHeading } from "@/domain/recipeRelationships"
 
 // Linked Variations Stage V.3 - a compact, secondary "recipe context"
 // block: this recipe's own base (if it's a variation, "Variation of")
@@ -68,7 +69,33 @@ import { SectionTitle } from "@/components/primitives"
 // against the same concern and needed no change - each variation's own
 // note already lives inside its own per-card column wrapper, so it was
 // never at risk of stretching full-width in the first place.
-export function VariationsSection({ base, variations, showMakeableFraming }) {
+//
+// Stage V.5 clarity polish (manual-testing finding, final pass) - even
+// with the base card and the note visually separated, a generic "How this
+// version differs" heading was still easy to misread as being about the
+// BASE card shown directly above it, rather than about the CURRENT
+// recipe (the one whose page this is) - the user found this ambiguous
+// themselves while testing. The heading now names the current recipe
+// explicitly: "How <current recipe name> differs" - e.g. "How Bloody
+// Mary (Practical Version) differs" - since the stored note always
+// describes the variation relative to its base, naming the variation in
+// the heading itself removes any doubt about which recipe it's talking
+// about. `currentRecipeName` is the plain display name (already available
+// to DetailScreen.jsx as `c.name` - no new lookup); deliberately NOT
+// truncated - unlike the sticky editor header (a fixed-height chrome
+// element), this is ordinary page content, so an exceptionally long name
+// is allowed to wrap onto a second line rather than hide which recipe the
+// note is about. Still constrained to the same single grid-column width
+// established by the V.5 layout-width polish above, so it wraps safely
+// rather than overflowing. The base -> variations direction below is
+// unaffected - that note is already directly associated with the
+// variation's own card it describes, with no comparable ambiguity to fix.
+export function VariationsSection({
+  base,
+  variations,
+  showMakeableFraming,
+  currentRecipeName,
+}) {
   const navigate = useNavigate()
   const goTo = (id) => navigate(`/library/${id}`)
 
@@ -88,7 +115,7 @@ export function VariationsSection({ base, variations, showMakeableFraming }) {
               {base.note && (
                 <div>
                   <span className="block text-[11px] font-bold text-tx2 uppercase tracking-[0.05em] mb-1">
-                    How this version differs
+                    {formatVariationDifferenceHeading(currentRecipeName)}
                   </span>
                   <p className="text-[11px] text-tx3 leading-snug">
                     {base.note}

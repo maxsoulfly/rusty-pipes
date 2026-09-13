@@ -185,3 +185,31 @@ export function shouldShowMakeableVariationFraming(recipe, variations) {
   if (isPossibleTier(tier(recipe))) return false
   return (variations ?? []).some((v) => isPossibleTier(tier(v.recipe)))
 }
+
+/**
+ * Stage V.5 clarity polish (manual-testing finding, final pass) - the
+ * heading above a variation's "how it differs" note. Even after the note
+ * moved off the base card and into its own labeled block (the earlier
+ * V.5 bugfix), a generic "How this version differs" heading was still
+ * easy to misread as being about the BASE card shown directly above it,
+ * rather than about the CURRENT recipe (the variation whose page this
+ * is) - the note always describes the variation relative to its base, so
+ * naming the variation explicitly in the heading removes the ambiguity.
+ * Extracted as its own pure function (rather than an inline template
+ * string in `VariationsSection.jsx`) purely so this exact contract - the
+ * heading names the CURRENT recipe, never the base - is unit-testable
+ * without a component-rendering harness (this project has none - no
+ * jsdom/testing-library, the same established limit every other
+ * component-adjacent decision in this feature has worked around the same
+ * way). Deliberately does not touch, truncate, or otherwise transform
+ * `currentRecipeName` - an exceptionally long name is expected to wrap
+ * naturally in the caller's own markup (ordinary page content, unlike the
+ * sticky editor header), not be shortened here.
+ *
+ * @param {string} currentRecipeName - the variation's own display name
+ *   (e.g. `c.name` in DetailScreen.jsx) - never the base's name.
+ * @returns {string}
+ */
+export function formatVariationDifferenceHeading(currentRecipeName) {
+  return `How ${currentRecipeName} differs`
+}
