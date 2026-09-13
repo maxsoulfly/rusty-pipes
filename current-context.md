@@ -369,8 +369,7 @@ and the other isn't, confirm the "Can't make the original?" line appears
 only on the correct side and only when genuinely applicable; confirm
 neither recipe's own ingredients/steps/badge changed from linking.
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `64fdd2e`. `docs/project.md` untouched.
 
 ---
 
