@@ -364,8 +364,7 @@ the cyan focus ring still appears clearly; open a recipe missing a
 required ingredient and confirm HeroCard's "Missing: X" panel still looks
 exactly as boxed/prominent as before.
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `cbcf716`. `docs/project.md` untouched.
 
 ---
 
