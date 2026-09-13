@@ -303,7 +303,7 @@ shows neither section.
 catalogue relationships (deferred to V.4, per explicit instruction); no
 makeability-aware variation ordering (V.4).
 
-**Commit:** see the git log for the exact hash. `docs/project.md` untouched.
+**Commit:** `6b87b55`. `docs/project.md` untouched.
 
 ---
 
