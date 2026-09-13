@@ -567,7 +567,7 @@ describe("isPreparationSatisfiable", () => {
 })
 
 describe("buildAdaptedCardActions", () => {
-  it("substitution-only adapted recipe -> 'Use <substitute>', reading the actually-selected substitute, not merely the first catalogue option", () => {
+  it("substitution-only adapted recipe -> bare '<replacement name>' text with kind: 'substitute' (a caller renders the shared adapted icon next to it), reading the actually-selected substitute, not merely the first catalogue option", () => {
     // Two candidates configured for the same component (White Rum -> Spiced
     // Rum, White Rum -> Gold Rum) - only Gold Rum is owned, so it must be
     // the one that appears, proving this reads the real resolution rather
@@ -590,11 +590,11 @@ describe("buildAdaptedCardActions", () => {
       rows,
     )
     expect(buildAdaptedCardActions(adapted.resolvedRequired)).toEqual([
-      { ingId: "white-rum", kind: "substitute", text: "Use Gold Rum" },
+      { ingId: "white-rum", kind: "substitute", text: "Gold Rum" },
     ])
   })
 
-  it("preparation-only adapted recipe -> 'Prepare <ingredient>'", () => {
+  it("preparation-only adapted recipe -> 'Prep <ingredient>'", () => {
     const cocktail = { ings: [component({ ingId: "simple-syrup" })] }
     const { adapted } = computeMakeability(
       cocktail,
@@ -606,11 +606,11 @@ describe("buildAdaptedCardActions", () => {
       SIMPLE_SYRUP_BY_PRODUCED,
     )
     expect(buildAdaptedCardActions(adapted.resolvedRequired)).toEqual([
-      { ingId: "simple-syrup", kind: "preparation", text: "Prepare Simple Syrup" },
+      { ingId: "simple-syrup", kind: "preparation", text: "Prep Simple Syrup" },
     ])
   })
 
-  it("substitution + preparation together -> two actions, in recipe-component order (the Daiquiri acceptance scenario)", () => {
+  it("substitution + preparation together -> two compact rows, in recipe-component order (the Daiquiri acceptance scenario)", () => {
     const cocktail = {
       ings: [
         component({ ingId: "white-rum" }),
@@ -629,13 +629,13 @@ describe("buildAdaptedCardActions", () => {
       SIMPLE_SYRUP_BY_PRODUCED,
     )
     expect(buildAdaptedCardActions(adapted.resolvedRequired)).toEqual([
-      { ingId: "white-rum", kind: "substitute", text: "Use Spiced Rum" },
-      { ingId: "lime-juice", kind: "substitute", text: "Use Lemon Juice" },
-      { ingId: "simple-syrup", kind: "preparation", text: "Prepare Simple Syrup" },
+      { ingId: "white-rum", kind: "substitute", text: "Spiced Rum" },
+      { ingId: "lime-juice", kind: "substitute", text: "Lemon Juice" },
+      { ingId: "simple-syrup", kind: "preparation", text: "Prep Simple Syrup" },
     ])
   })
 
-  it("multiple substitutions alone -> deterministic actions, one per component, in recipe order", () => {
+  it("multiple substitutions alone -> deterministic rows, one per component, in recipe order", () => {
     const cocktail = {
       ings: [
         component({ ingId: "white-rum" }),
@@ -652,8 +652,8 @@ describe("buildAdaptedCardActions", () => {
       [WHITE_RUM_TO_SPICED, LIME_JUICE_TO_LEMON],
     )
     expect(buildAdaptedCardActions(adapted.resolvedRequired)).toEqual([
-      { ingId: "white-rum", kind: "substitute", text: "Use Spiced Rum" },
-      { ingId: "lime-juice", kind: "substitute", text: "Use Lemon Juice" },
+      { ingId: "white-rum", kind: "substitute", text: "Spiced Rum" },
+      { ingId: "lime-juice", kind: "substitute", text: "Lemon Juice" },
     ])
   })
 
@@ -680,7 +680,7 @@ describe("buildAdaptedCardActions", () => {
     )
     expect(strict.missingRequiredIds).toEqual(["white-rum"])
     expect(buildAdaptedCardActions(adapted.resolvedRequired)).toEqual([
-      { ingId: "white-rum", kind: "substitute", text: "Use Spiced Rum" },
+      { ingId: "white-rum", kind: "substitute", text: "Spiced Rum" },
     ])
   })
 

@@ -72,19 +72,31 @@ export function CocktailCard({ c, onClick }) {
           </div>
           <div className="flex flex-col items-center gap-1 md:flex-row md:items-start md:justify-between md:w-full">
             {adaptedActions.length > 0 ? (
-              // One line per action, in the same deterministic
+              // One compact row per action, in the same deterministic
               // recipe-component order buildAdaptedCardActions() already
               // returns - a substitute gets the shared "adapted" tier icon
               // (reused, not a new one); a preparation gets no icon at all
               // (no existing preparation-specific icon to reuse, and the
               // instructions explicitly say not to invent a decorative one
-              // just for this). Long ingredient names wrap naturally - no
-              // truncation here, unlike the missing-chip below.
-              <div className="flex flex-col items-center md:items-start gap-0.5">
+              // just for this).
+              //
+              // UI polish (mobile follow-up) - left-aligned and
+              // `inline-flex` unconditionally (not the card's usual
+              // center-on-mobile/left-on-desktop split above) so the icon
+              // stays bound to its text as one compact unit rather than
+              // splitting across lines the way centered wrapped text did -
+              // these read as status/action rows, not prose, so they don't
+              // need the same centering treatment as the recipe name. Text
+              // itself is short enough now (bare "<name>"/"Prep <name>",
+              // no "Use"/"first") to fit one line at this card width in the
+              // overwhelming majority of cases; a genuinely long ingredient
+              // name still wraps naturally rather than overflowing - this
+              // only keeps the icon from detaching onto its own line.
+              <div className="flex flex-col items-start gap-0.5 w-full">
                 {adaptedActions.map((action) => (
                   <span
                     key={action.ingId}
-                    className="text-xs font-mono flex items-center gap-1 text-violet text-center md:text-left"
+                    className="inline-flex items-center gap-1 text-xs font-mono text-violet"
                   >
                     {action.kind === "substitute" && <span>{cfg.icon}</span>}
                     <span>{action.text}</span>
@@ -105,7 +117,7 @@ export function CocktailCard({ c, onClick }) {
                 primary-status surface reads), not the bare strict `avail`,
                 so this chip never contradicts an adapted card's own
                 actions above by re-showing the exact requirement those
-                actions already resolved (e.g. "−Lime Juice" next to "⇄ Use
+                actions already resolved (e.g. "−Lime Juice" next to "⇄
                 Lemon Juice"). Genuinely unresolved Almost/Unavailable
                 cards are completely unaffected - `display.tier` equals the
                 bare `avail` for both of those, same condition as before. */}

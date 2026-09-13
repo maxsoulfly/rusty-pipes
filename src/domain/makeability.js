@@ -213,17 +213,29 @@ function composeAdaptedLabel(resolvedRequired) {
  * no icon at all for a preparation action) without this pure function
  * needing to know anything about presentation.
  *
+ * UI polish (mobile manual-testing follow-up) - `text` was originally
+ * "Use <name>"/"Prepare <name>", which wrapped awkwardly on a narrow
+ * two-column mobile card. Shortened to just `<name>` for a substitute
+ * (the card already sits under the "Make With Adaptations" heading and
+ * carries the shared "adapted" icon via `kind` - a caller renders that
+ * icon right next to this bare name, so "Use" added no information the
+ * icon + section heading don't already carry) and "Prep <name>" for a
+ * preparation (kept short but still distinguishable from a substitute
+ * action at a glance, since a preparation gets no icon). `kind` is
+ * unchanged - still the one thing a caller needs to tell the two action
+ * types apart for icon purposes.
+ *
  * @param {ReturnType<typeof computeAdaptedResult>['resolvedRequired'] | null | undefined} resolvedRequired
  * @returns {{ ingId: string, kind: "substitute" | "preparation", text: string }[]}
  */
 export function buildAdaptedCardActions(resolvedRequired) {
   return (resolvedRequired ?? []).map((r) =>
     r.via === "substitute"
-      ? { ingId: r.ingId, kind: "substitute", text: `Use ${r.matchedName}` }
+      ? { ingId: r.ingId, kind: "substitute", text: r.matchedName }
       : {
           ingId: r.ingId,
           kind: "preparation",
-          text: `Prepare ${r.producedName}`,
+          text: `Prep ${r.producedName}`,
         },
   )
 }

@@ -32,10 +32,9 @@ Syrup first") - accurate, but redundant under the "Make With Adaptations"
 category heading, and too verbose for a narrow mobile card. Replaced with
 compact, concrete per-component actions built directly from
 `adapted.resolvedRequired` (new `buildAdaptedCardActions()`,
-`src/domain/makeability.js`) - "Use Lemon Juice" for a resolved
-substitute, "Prepare Simple Syrup" for a resolved preparation, one line
-each, reusing the existing shared "adapted" tier icon for a substitute
-action and no icon for a preparation action (none exists to reuse).
+`src/domain/makeability.js`) - one line per action, reusing the existing
+shared "adapted" tier icon for a substitute action and no icon for a
+preparation action (none exists to reuse).
 Also fixed a real contradiction this surfaced: the card's own yellow/
 orange missing-ingredient chip previously read `strict.avail` directly
 (`c.avail === "almost"`), so an adapted card could show its new action AND
@@ -48,8 +47,23 @@ already equals the bare `avail` for both). `display.label`/
 `composeAdaptedLabel()` themselves are unchanged - still used by
 `HeroCard`'s own richer Cocktail Detail explanation, which was
 deliberately left untouched (the detail page's job is "why/how," the
-card's job is now "what to do"). See `current-context.md`'s own chunk
-entry for the full detail, tests, and file list.
+card's job is now "what to do").
+
+**Wording shortened again the same day** - mobile testing found even the
+first compact pass ("Use Spiced Rum", "Prepare Simple Syrup") still
+wrapped awkwardly on the existing two-column mobile card width. Final
+card wording: a substitute action is now the bare replacement name alone
+("Spiced Rum" - the icon already signals "use a substitute," "Use " added
+nothing); a preparation action is `"Prep <name>"` (was "Prepare <name>
+first"). Still built from the same `resolvedRequired` data via the same
+`buildAdaptedCardActions()` - only its returned `text` strings changed,
+`kind` (substitute vs. preparation, for icon choice) is unchanged. The
+per-action row in `CocktailCard.jsx` also became `inline-flex` and
+unconditionally left-aligned (were previously the card's usual center-on-
+mobile convention) so a short icon+name pair can't split across lines.
+`display.label`/`composeAdaptedLabel()` remain untouched by this second
+pass too. See `current-context.md`'s own chunk entries for the full
+detail, tests, and file list.
 
 > **D1 is SUPERSEDED, 2026-09-11 — planning only, not yet implemented.** The
 > user has decided general catalogue substitutes should be able to affect
