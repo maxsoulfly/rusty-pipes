@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   useLocation,
   useNavigate,
@@ -27,18 +27,9 @@ import {
   resolveVariationCandidates,
 } from "@/domain/recipeRelationships"
 import { parseUnitLabel } from "@/domain/servings"
+import { useRecipeDraftAutosave } from "@/hooks/useRecipeDraftAutosave"
 import { useRecipePasteImport } from "@/hooks/useRecipePasteImport"
-import {
-  MAX_DRAFTS,
-  hasDraftContent,
-  isSelfAssignedDraft,
-  readDraftContent,
-  readDraftIndex,
-  removeDraftIndexEntry,
-  shouldAutosaveDraft,
-  upsertDraftIndexEntry,
-  writeDraftContent,
-} from "@/lib/recipeDrafts"
+import { MAX_DRAFTS } from "@/lib/recipeDrafts"
 import { createRecipe, updateRecipe } from "@/services/recipes"
 
 // Reverses createRecipe's amount/unitLabel encoding (see services/recipes.js)
@@ -141,75 +132,13 @@ export default function EditorScreen() {
   // new-recipe creation only, not editing or cloning - both of those already
   // have their own prefill source and a saved copy to fall back to.
   const isDraftable = !isEditing && !cloneSourceId
-  const draftId = isDraftable ? searchParams.get("draft") : null
-  const [draftBanner, setDraftBanner] = useState(null)
-  // Shown instead of draftBanner when landing on a genuinely blank New
-  // Recipe (no ?draft= yet) and other drafts already exist on this browser -
-  // picking one navigates to the same page with ?draft=<id>, which then
-  // shows draftBanner for that specific one on the next check below.
-  const [otherDrafts, setOtherDrafts] = useState([])
 
-  // Set by the autosave effect below when IT assigns a brand-new draft id
-  // (first keystroke on a genuinely blank New Recipe) - read here so this
-  // effect never mistakes "a draft id I just created for myself" for
-  // "returning to an existing draft" and pops a restore banner for content
-  // the user is actively typing right now. That's a real bug this exact
-  // shape used to have: assigning a fresh id changes draftId, which is
-  // this effect's own dependency, so it re-ran on the very next render -
-  // showed the banner mid-keystroke, and then permanently froze the
-  // autosave effect below (its own draftBanner guard) for the rest of that
-  // session, since nothing ever set draftBanner back to null except a
-  // Restore/Discard click the user never needed to make and might not have
-  // understood the point of.
-  const selfAssignedDraftIdRef = useRef(null)
-
-  useEffect(() => {
-    if (!isDraftable || !userId) return
-    if (!draftId) {
-      setOtherDrafts(readDraftIndex(userId))
-      return
-    }
-    if (isSelfAssignedDraft(draftId, selfAssignedDraftIdRef.current)) return
-    const draft = readDraftContent(userId, draftId)
-    if (draft && hasDraftContent(draft)) setDraftBanner(draft)
-    // Only ever check once, right after mount - restoring/discarding is a
-    // one-time user decision, not something to re-run as the form changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDraftable, userId, draftId])
-
-  // Deliberately never deletes a draft just because the form looks empty
-  // right now - that heuristic used to run against transient render state
-  // (e.g. a just-mounted, not-yet-restored form) and could delete a draft
-  // out from under its own restore banner. Deletion only ever happens from
-  // an explicit user action (discardDraft/discardOtherDraft below, or a
-  // successful save) - a stray empty entry is low-cost and self-heals the
-  // moment the user types something, or ages out via MAX_DRAFTS eviction.
-  useEffect(() => {
-    if (
-      !shouldAutosaveDraft({
-        isDraftable,
-        userId,
-        draftBanner,
-        formValues: { name, ings, steps },
-      })
-    )
-      return
-    const id =
-      draftId ??
-      (() => {
-        const newId = crypto.randomUUID()
-        selfAssignedDraftIdRef.current = newId
-        setSearchParams(
-          (prev) => {
-            const next = new URLSearchParams(prev)
-            next.set("draft", newId)
-            return next
-          },
-          { replace: true },
-        )
-        return newId
-      })()
-    writeDraftContent(userId, id, {
+  // The 9 fields a draft actually captures - memoized so its reference only
+  // changes when one of them does, exactly matching what the autosave
+  // effect depended on before it moved into useRecipeDraftAutosave (9
+  // separate primitive dependencies, not "re-run on every render").
+  const draftFormValues = useMemo(
+    () => ({
       name,
       desc,
       glassName,
@@ -219,40 +148,33 @@ export default function EditorScreen() {
       ings,
       steps,
       tasteTagIds,
-    })
-    upsertDraftIndexEntry(userId, {
-      id,
-      name: name.trim() || "Untitled draft",
-      updatedAt: Date.now(),
-    })
-  }, [
-    isDraftable,
-    userId,
-    draftBanner,
-    draftId,
-    name,
-    desc,
-    glassName,
-    familyId,
-    liquidColor,
-    liquidColor2,
-    ings,
-    steps,
-    tasteTagIds,
-    setSearchParams,
-  ])
-
-  const restoreDraft = () => {
-    setName(draftBanner.name ?? "")
-    setDesc(draftBanner.desc ?? "")
-    setGlassName(draftBanner.glassName ?? "")
-    setFamilyId(draftBanner.familyId ?? "")
-    if (draftBanner.liquidColor) setLiquidColor(draftBanner.liquidColor)
-    setHasSecondColor(Boolean(draftBanner.liquidColor2))
-    setLiquidColor2(draftBanner.liquidColor2 ?? "")
+    }),
+    [
+      name,
+      desc,
+      glassName,
+      familyId,
+      liquidColor,
+      liquidColor2,
+      ings,
+      steps,
+      tasteTagIds,
+    ],
+  )
+  // The other side of restoring a draft - loads its 9 fields into this
+  // form's own state. Kept here (not in the hook) since it's the one place
+  // that owns every one of those setters.
+  const applyDraftToForm = (draft) => {
+    setName(draft.name ?? "")
+    setDesc(draft.desc ?? "")
+    setGlassName(draft.glassName ?? "")
+    setFamilyId(draft.familyId ?? "")
+    if (draft.liquidColor) setLiquidColor(draft.liquidColor)
+    setHasSecondColor(Boolean(draft.liquidColor2))
+    setLiquidColor2(draft.liquidColor2 ?? "")
     setIngs(
       (
-        draftBanner.ings ?? [
+        draft.ings ?? [
           { ingredientName: "", amount: "", unit: "ml", role: "required" },
         ]
       ).map((ing) => ({
@@ -265,35 +187,25 @@ export default function EditorScreen() {
           (ing.alternativeNames ?? []).map((name) => ({ name, note: "" })),
       })),
     )
-    setSteps(draftBanner.steps ?? [""])
-    setTasteTagIds(draftBanner.tasteTagIds ?? [])
-    setDraftBanner(null)
+    setSteps(draft.steps ?? [""])
+    setTasteTagIds(draft.tasteTagIds ?? [])
   }
-  const discardDraft = () => {
-    if (userId && draftId) removeDraftIndexEntry(userId, draftId)
-    setDraftBanner(null)
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev)
-        next.delete("draft")
-        return next
-      },
-      { replace: true },
-    )
-  }
-  const continueOtherDraft = (id) =>
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev)
-        next.set("draft", id)
-        return next
-      },
-      { replace: true },
-    )
-  const discardOtherDraft = (id) => {
-    if (userId) removeDraftIndexEntry(userId, id)
-    setOtherDrafts((prev) => prev.filter((d) => d.id !== id))
-  }
+  const {
+    draftBanner,
+    otherDrafts,
+    restoreDraft,
+    discardDraft,
+    continueOtherDraft,
+    discardOtherDraft,
+    clearDraftOnSave,
+  } = useRecipeDraftAutosave({
+    isDraftable,
+    userId,
+    searchParams,
+    setSearchParams,
+    formValues: draftFormValues,
+    onApplyDraft: applyDraftToForm,
+  })
 
   useEffect(() => {
     const source = isEditing ? existing : cloneSource
@@ -601,7 +513,7 @@ export default function EditorScreen() {
       const recipe = isEditing
         ? await updateRecipe(id, payload)
         : await createRecipe(payload)
-      if (userId && draftId) removeDraftIndexEntry(userId, draftId)
+      clearDraftOnSave()
       await refetchRecipes() // so the change is in `computed` before DetailScreen looks for it
       navigate(`/library/${recipe.id}`)
     } catch (err) {
