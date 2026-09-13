@@ -1,18 +1,12 @@
 import { useMemo, useState } from "react"
 import clsx from "clsx"
 import { useNavigate, useOutletContext, useParams } from "react-router-dom"
-import { CocktailCard } from "@/components/CocktailCard"
-import { IngredientLink } from "@/components/detail/IngredientLink"
-import { IconBottle, IconEdit, IconGlass, IconStar } from "@/components/icons"
+import { OwnershipAction } from "@/components/ingredientDetail/OwnershipAction"
+import { RelatedCocktailsGrid, MAX_VISIBLE } from "@/components/ingredientDetail/RelatedCocktailsGrid"
+import { RelationshipsSection } from "@/components/ingredientDetail/RelationshipsSection"
+import { IconBottle, IconEdit, IconStar } from "@/components/icons"
 import { TopBar } from "@/components/Nav"
-import {
-  AVAIL_CFG,
-  AVAIL_TONE,
-  Btn,
-  SectionTitle,
-} from "@/components/primitives"
-import { AVAIL_GROUP_LABEL } from "@/data/constants"
-import { formatAmount } from "@/domain/availability"
+import { Btn } from "@/components/primitives"
 import {
   capGroupsByTotal,
   groupByDisplayTier,
@@ -28,7 +22,6 @@ import {
   resolveCanProvide,
   resolveHomemadePreparation,
 } from "@/domain/ingredientRelationships"
-import { isPreparationSatisfiable } from "@/domain/makeability"
 
 // Ingredient Detail Stage I.1: this screen used to group by raw `avail`
 // (it pre-dates Stage D's shared `display.tier` entirely - see
@@ -38,33 +31,6 @@ import { isPreparationSatisfiable } from "@/domain/makeability"
 // makeable. Now shares the exact same grouping (`groupByDisplayTier`) and
 // heading wording (`AVAIL_GROUP_LABEL`) as Library instead of keeping a
 // second, stale copy of both.
-
-// "Up to 10 matching recipes total" per the approved requirement - a
-// straight cap on the tier-ordered list (perfect, then good, then almost,
-// then unavailable), not a per-tier cap and not restricted to only
-// available ones. A recipe that only became visible by padding out to 10
-// with unavailable matches is still an honest, real match - it just isn't
-// makeable right now.
-const MAX_VISIBLE = 10
-
-// Minimal first version (per the approved decision) - shows the single
-// most relevant match detail per recipe (its first matching component),
-// not every match a recipe might have. Role is only called out when it
-// isn't the unremarkable default (a required, directly-matching
-// ingredient needs no extra label); a substitution is always called out,
-// phrased as a possibility ("Can replace Bourbon"), never as an active
-// substitution - see domain/ingredientRecipeMatches.js's own comment for
-// why that distinction matters.
-function matchAnnotation(match) {
-  const parts = []
-  if (match.role !== "required") {
-    parts.push(match.role === "garnish" ? "Garnish" : "Optional")
-  }
-  if (match.matchType === "substitution") {
-    parts.push(`Can replace ${match.ingName}`)
-  }
-  return parts.length > 0 ? parts.join(" · ") : null
-}
 
 // One screen, two routes (/bar/type/:id and /bar/product/:id in App.jsx),
 // distinguished by the `kind` prop each route passes explicitly - simpler
@@ -194,17 +160,17 @@ export default function IngredientDetailScreen({ kind }) {
       )
     : null
   // Reuses computeMakeability()'s exact input shape via
-  // isPreparationSatisfiable() below (per input), rather than inventing a
-  // new representation - `preparationRow.inputs` already has the shape it
-  // expects (ingredientTypeId/amount/unitLabel).
+  // isPreparationSatisfiable() (RelationshipsSection), rather than
+  // inventing a new representation - `preparationRow.inputs` already has
+  // the shape it expects (ingredientTypeId/amount/unitLabel).
   const preparationInputs = preparationRow?.inputs ?? []
 
   // Household-basic id set + camelCase form-conversion list - both needed
-  // by `isPreparationSatisfiable()` below, neither exposed via outlet
-  // context today (App.jsx keeps them as its own local variables feeding
-  // computeMakeability directly) - recomputed here the same one-line way
-  // App.jsx already does, rather than widening shared context for one
-  // screen's read of a per-input "do you have this" signal.
+  // by RelationshipsSection's isPreparationSatisfiable() call, neither
+  // exposed via outlet context today (App.jsx keeps them as its own local
+  // variables feeding computeMakeability directly) - recomputed here the
+  // same one-line way App.jsx already does, rather than widening shared
+  // context for one screen's read of a per-input "do you have this" signal.
   const householdBasicIds = useMemo(
     () =>
       new Set(catalog.types.filter((t) => t.assumed_available).map((t) => t.id)),
@@ -347,236 +313,32 @@ export default function IngredientDetailScreen({ kind }) {
             (fix ownership without leaving the page) needs to be reachable
             immediately, not buried under a long recipe list. */}
         <div className="mb-4">
-          {isHouseholdBasic ? (
-            <div className="flex items-center gap-2.5 rounded-sm border border-green/30 bg-green/10 py-2.5 px-3.5">
-              <span className="w-2 h-2 rounded-full bg-green shrink-0" />
-              <div>
-                <div className="text-[13px] font-body font-medium text-tx">
-                  Household basic
-                </div>
-                <div className="text-xs text-tx3 leading-snug">
-                  Always considered available - not tracked as an owned
-                  item.
-                </div>
-              </div>
-            </div>
-          ) : (
-            <>
-              <Btn
-                variant={owned ? "secondary" : "primary"}
-                full
-                disabled={ownershipPending}
-                onClick={handleToggleOwnership}
-              >
-                {owned
-                  ? ownershipPending
-                    ? "Removing..."
-                    : "Remove from My Bar"
-                  : ownershipPending
-                    ? "Adding..."
-                    : "Add to My Bar"}
-              </Btn>
-              {ownershipError && (
-                <p className="mt-1.5 text-xs text-coral">{ownershipError}</p>
-              )}
-            </>
-          )}
+          <OwnershipAction
+            isHouseholdBasic={isHouseholdBasic}
+            owned={owned}
+            ownershipPending={ownershipPending}
+            ownershipError={ownershipError}
+            onToggle={handleToggleOwnership}
+          />
         </div>
 
-        {/* Ingredient Detail Stage I.3 - relationships. Each section is
-            only rendered when data exists (no empty headings). Directional
-            by construction: "Can provide"/"Can be replaced by" only ever
-            look up this type's own from/raw side, never the reverse - the
-            plan's own explicit "do not add the reverse direction" scope
-            boundary means there is no code path here that could show one. */}
-        {canProvideRows.length > 0 && (
-          <div className="mb-4">
-            <SectionTitle>Can provide</SectionTitle>
-            <p className="text-xs text-tx3 mb-2 leading-snug">
-              One-way - doesn't mean the reverse is also true.
-            </p>
-            <div className="flex flex-col gap-2">
-              {canProvideRows.map((row) => (
-                <div
-                  key={row.preparedTypeId}
-                  className="rounded-sm border border-bdr bg-surface2 p-2.5"
-                >
-                  <div className="flex items-center gap-2">
-                    {/* Secondary availability signal only (per the plan's
-                        "keep this secondary" instruction) - reads the same
-                        resolved ownership Set every other screen already
-                        reads, no new availability system. */}
-                    {resolvedOwnedTypeIds.has(row.preparedTypeId) && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-green shrink-0" />
-                    )}
-                    <IngredientLink
-                      ingId={row.preparedTypeId}
-                      className="text-[13px] text-tx font-display font-semibold"
-                    >
-                      {row.preparedName}
-                    </IngredientLink>
-                  </div>
-                  {row.guidance && (
-                    <div className="text-xs text-tx2 mt-0.5">
-                      {row.guidance}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <RelationshipsSection
+          displayName={displayName}
+          canProvideRows={canProvideRows}
+          canBeReplacedByRows={canBeReplacedByRows}
+          preparationRow={preparationRow}
+          preparationInputs={preparationInputs}
+          resolvedOwnedTypeIds={resolvedOwnedTypeIds}
+          householdBasicIds={householdBasicIds}
+          formConversionsForSatisfiability={formConversionsForSatisfiability}
+          unit={unit}
+        />
 
-        {canBeReplacedByRows.length > 0 && (
-          <div className="mb-4">
-            <SectionTitle>Can be replaced by</SectionTitle>
-            <p className="text-xs text-tx3 mb-2 leading-snug">
-              One-way - doesn't mean these can replace {displayName} back.
-            </p>
-            <div className="flex flex-col gap-2">
-              {canBeReplacedByRows.map((row) => (
-                <div
-                  key={row.toTypeId}
-                  className="rounded-sm border border-bdr bg-surface2 p-2.5"
-                >
-                  <div className="flex items-center gap-2">
-                    {resolvedOwnedTypeIds.has(row.toTypeId) && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-green shrink-0" />
-                    )}
-                    <IngredientLink
-                      ingId={row.toTypeId}
-                      className="text-[13px] text-tx font-display font-semibold"
-                    >
-                      {row.toName}
-                    </IngredientLink>
-                  </div>
-                  {row.flavorNote && (
-                    <div className="text-xs text-tx2 mt-0.5">
-                      {row.flavorNote}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {preparationRow && (
-          <div className="mb-4">
-            <SectionTitle>Homemade preparation</SectionTitle>
-            {/* Only shown when it adds information beyond the page's own
-                title, same rule as the product/type name line above. */}
-            {preparationRow.name && preparationRow.name !== displayName && (
-              <p className="text-[13px] text-tx font-display font-semibold mb-1.5">
-                {preparationRow.name}
-              </p>
-            )}
-            <div className="flex flex-col gap-1.5 mb-2.5">
-              {preparationInputs.map((input) => (
-                <div
-                  key={input.ingredientTypeId}
-                  className="flex items-center gap-2"
-                >
-                  {/* Per-input satisfiability (Stage D.1's own helper, not
-                      a new check) - "you have 1 of 2," never implying the
-                      produced ingredient itself is owned just because its
-                      inputs are on hand. */}
-                  {isPreparationSatisfiable(
-                    [input],
-                    resolvedOwnedTypeIds,
-                    householdBasicIds,
-                    formConversionsForSatisfiability,
-                  ) && <span className="w-1.5 h-1.5 rounded-full bg-green shrink-0" />}
-                  <IngredientLink
-                    ingId={input.ingredientTypeId}
-                    className="text-[13px] text-tx font-body"
-                  >
-                    {input.name}
-                  </IngredientLink>
-                  <span className="text-[13px] font-mono text-tx2 ml-auto whitespace-nowrap">
-                    {formatAmount(
-                      { amount: input.amount, unitLabel: input.unitLabel },
-                      unit,
-                    )}
-                  </span>
-                </div>
-              ))}
-            </div>
-            {preparationRow.instructions?.length > 0 && (
-              <>
-                <div className="text-[11px] font-bold text-tx3 uppercase tracking-[0.06em] mb-1.5 font-display">
-                  Steps
-                </div>
-                <ol className="list-decimal list-inside text-[13px] text-tx2 flex flex-col gap-1">
-                  {preparationRow.instructions.map((step, i) => (
-                    <li key={i}>{step}</li>
-                  ))}
-                </ol>
-              </>
-            )}
-          </div>
-        )}
-
-        {totalCount === 0 ? (
-          <div className="flex flex-col items-center justify-center py-15 px-6 gap-3 text-tx3">
-            <IconGlass size={40} className="opacity-30" />
-            <p className="text-base font-display font-semibold">
-              No recipes use this yet
-            </p>
-            <p className="text-[13px] text-center">
-              Check back as more recipes are added.
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-6">
-            {visibleGroups.map(({ tier, items }) => (
-              <div key={tier}>
-                <div className="flex items-center justify-between mb-3">
-                  <SectionTitle>{AVAIL_GROUP_LABEL[tier]}</SectionTitle>
-                  <span
-                    className={clsx(
-                      "text-xs font-mono flex items-center gap-1",
-                      AVAIL_TONE[tier],
-                    )}
-                  >
-                    {AVAIL_CFG[tier].icon} {items.length}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
-                  {items.map((m) => {
-                    const annotation = matchAnnotation(m.matches[0])
-                    return (
-                      <div key={m.id} className="flex flex-col gap-1">
-                        <CocktailCard
-                          c={m}
-                          onClick={() => navigate(`/library/${m.id}`)}
-                        />
-                        {annotation && (
-                          <span className="text-[11px] text-tx3 text-center">
-                            {annotation}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-            {totalCount > MAX_VISIBLE && (
-              <Btn
-                variant="ghost"
-                full
-                onClick={() =>
-                  navigate(
-                    `/library?ingredient=${resolvedType.id}&sort=availability`,
-                  )
-                }
-              >
-                View all {totalCount}
-              </Btn>
-            )}
-          </div>
-        )}
+        <RelatedCocktailsGrid
+          visibleGroups={visibleGroups}
+          totalCount={totalCount}
+          viewAllTypeId={resolvedType.id}
+        />
       </div>
     </div>
   )
