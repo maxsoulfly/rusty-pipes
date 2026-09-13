@@ -425,8 +425,7 @@ a preparation-only card shows "Prep Simple Syrup" on one line; a card
 needing both shows two compact left-aligned rows; the two-column mobile
 grid is unaffected (no card widened).
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `131f3d7`. `docs/project.md` untouched.
 
 ---
 
