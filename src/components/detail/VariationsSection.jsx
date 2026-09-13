@@ -63,12 +63,38 @@ import { formatVariationDifferenceHeading } from "@/domain/recipeRelationships"
 // caption) - this is the one existing sizing convention already proven to
 // read correctly here, reused rather than a new hardcoded width: the note
 // now wraps naturally within one grid column's own width at every
-// breakpoint (`grid-cols-2 md:grid-cols-3 lg:grid-cols-4`, unchanged),
-// directly under the card it belongs to, with no manual line breaks and
-// no change to the card's own size. The "Variations" side was reviewed
-// against the same concern and needed no change - each variation's own
-// note already lives inside its own per-card column wrapper, so it was
-// never at risk of stretching full-width in the first place.
+// breakpoint, directly under the card it belongs to, with no manual line
+// breaks and no change to the card's own size. The "Variations" side was
+// reviewed against the same concern and needed no change - each
+// variation's own note already lives inside its own per-card column
+// wrapper, so it was never at risk of stretching full-width in the first
+// place.
+//
+// Stage V.5 responsive polish (mobile manual-testing finding, final
+// pass) - the grid itself was `grid-cols-2 md:grid-cols-3 lg:grid-cols-4`,
+// the same breakpoint sequence Library's/Ingredient Detail's own
+// multi-card grids use (deliberately unchanged there - this fix is scoped
+// to this component only, not those screens). That sequence is right for
+// a grid that's usually browsing MANY cards at once, but "Variation of"
+// always shows exactly ONE card - on a narrow phone, a 2-column grid gave
+// that one card (and its note, sharing the same column per the polish
+// above) only about half the usable width, which made the card look
+// unnecessarily skinny, made the dynamic "How <name> differs" heading
+// wrap excessively, and squeezed the note into a narrow vertical strip.
+// Fixed by adding a `grid-cols-1` mobile-first base tier (one card per
+// row - full relationship-section width, never full-bleed past the
+// page's own content padding) with the existing `md`/`lg` tiers kept
+// exactly as they were, plus one new `sm:grid-cols-2` step slotted
+// between them - reusing Tailwind's own standard breakpoint vocabulary
+// this app already uses elsewhere (`sm:grid-cols-2` already appears in
+// IngredientTypeEditor.jsx's own form-field grid) rather than inventing a
+// one-off breakpoint. Applies to BOTH grids below (`Variation of` and
+// `Variations`) - on a base's page with several variations, mobile now
+// shows them one full-width row at a time too, each with its own note at
+// full readable width, exactly like the variation side. `CocktailCard`
+// itself is untouched; it already lays out per the VIEWPORT breakpoint,
+// not its own container width, so a wider grid cell on mobile simply
+// gives it more (welcome) room, not a different code path.
 //
 // Stage V.5 clarity polish (manual-testing finding, final pass) - even
 // with the base card and the note visually separated, a generic "How this
@@ -106,7 +132,7 @@ export function VariationsSection({
       {base && (
         <div>
           <SectionTitle>Variation of</SectionTitle>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
             <div className="flex flex-col gap-1.5">
               <CocktailCard
                 c={base.recipe}
@@ -135,7 +161,7 @@ export function VariationsSection({
               Can't make the original? You can make one of these instead.
             </p>
           )}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
             {variations.map(({ recipe, note }) => (
               <div key={recipe.id} className="flex flex-col gap-1">
                 <CocktailCard c={recipe} onClick={() => goTo(recipe.id)} />

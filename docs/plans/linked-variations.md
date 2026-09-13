@@ -14,10 +14,13 @@ variation relative to its base. Fixed same-day as Stage V.5; a follow-up
 round of manual screenshots then found the fixed note block itself was
 full container width (fine for a short note, but a long one spanned
 almost the whole page) - fixed same-day as a layout width polish, still
-within V.5. A final round of manual testing then found the "How this
+within V.5. A further round of manual testing then found the "How this
 version differs" heading itself still read as ambiguous - easy to
 mistake for describing the base card above it - fixed same-day by naming
-the current recipe explicitly in the heading, also within V.5. See its
+the current recipe explicitly in the heading, also within V.5. Mobile
+testing after that found the relationship card + note landing in a narrow
+~half-width grid cell on a phone - fixed same-day with a mobile-first
+single-column layout for the relationship grid, still within V.5. See its
 own entry below.** Written after
 Ingredient Detail v1 (I.1–I.4, `docs/plans/ingredient-detail-page.md`)
 shipped and was manually verified. This is Stage C of `docs/plans/
@@ -814,7 +817,8 @@ DONE, 2026-09-13.**
   small UX follow-up, out of scope for V.4's own explicit instructions.
 
 **V.5 — Bugfix: directional note placement + layout width polish + final
-wording clarity (manual-verification findings). DONE, 2026-09-13.**
+wording clarity + mobile responsive layout (manual-verification
+findings). DONE, 2026-09-13.**
 - **The bug.** The stored relationship `note` is directional - it always
   means "how the variation differs from its base," never the reverse.
   V.3/V.4's rendering on a variation's own page ("Variation of") showed
@@ -891,6 +895,31 @@ wording clarity (manual-verification findings). DONE, 2026-09-13.**
   overflowing. The base→variations direction was reviewed and needed no
   change - that note is already directly associated with the variation's
   own card it describes, with no comparable ambiguity.
+- **Mobile responsive layout (fourth manual-verification finding, mobile
+  testing).** Both relationship grids used `grid-cols-2 md:grid-cols-3
+  lg:grid-cols-4` - the same sequence Library's/Ingredient Detail's own
+  multi-card grids use, deliberately left unchanged there since this fix
+  is scoped to this one component. That 2-column mobile tier is right for
+  a grid usually browsing MANY cards at once, but "Variation of" always
+  shows exactly ONE card - on a narrow phone, a 2-column grid gave that
+  one card (and its note, sharing the same column per the earlier layout-
+  width polish) only about half the usable width: the card looked
+  unnecessarily skinny, the dynamic "How <name> differs" heading wrapped
+  excessively, and the note squeezed into a narrow vertical strip. Fixed
+  by changing both grids to `grid-cols-1 sm:grid-cols-2 md:grid-cols-3
+  lg:grid-cols-4` - one card per row on the narrowest phones (full
+  relationship-section width, never full-bleed past the page's own
+  content padding), a new `sm:grid-cols-2` step reusing a breakpoint this
+  app already uses elsewhere (`IngredientTypeEditor.jsx`'s own form-field
+  grid), with the existing `md`/`lg` tiers kept exactly as they were. On a
+  base's page with multiple variations, mobile now shows them one
+  full-width row at a time too, each with its own note at full readable
+  width - the same fix applies to both directions. `CocktailCard` itself
+  is untouched - it lays out per the viewport breakpoint, not its own
+  container width, so a wider grid cell on mobile simply gives it more
+  room, not a different code path. Pure CSS/JSX-structure change (two
+  class-string edits) - no domain logic touched, so no new tests needed
+  beyond confirming the existing suite still passes.
 - *Acceptance:* opening a variation shows its base's card alone, with the
   saved note in its own "How <this recipe's own name> differs" block,
   constrained to the same width as the card's own grid column and wrapping
@@ -903,9 +932,13 @@ wording clarity (manual-verification findings). DONE, 2026-09-13.**
   `resolveRecipeVariationContext()` perspectives; a note-less relationship
   resolves to `note: null` cleanly on both sides - plus 3 new domain tests
   for the heading itself: it names the current variation, never a base;
-  it does not truncate an exceptionally long name); the existing V.4
+  it does not truncate an exceptionally long name); on a narrow phone
+  (~360-390px) the relationship card and its note now use the full
+  available content width instead of half of it, the heading and note
+  wrap into normal paragraph-sized lines, and the denser 2/3/4-column
+  grid still applies at tablet/desktop widths; the existing V.4
   makeability-tier ordering and framing tests all still pass unchanged,
-  since no domain logic used by any of V.5's three fixes touched them.
+  since no domain logic used by any of V.5's four fixes touched them.
 
 Each stage: `corepack pnpm@10.34.3` test + build, isolated-LF
 `oxfmt --check`, RLS suite re-run after V.1's migration, `db advisors
@@ -970,14 +1003,18 @@ logic). The final wording-clarity fix adds 3 more: new
 `formatVariationDifferenceHeading()` names the current variation
 recipe (never a base - the function structurally has no "base name"
 parameter to substitute in by mistake, confirmed by asserting its arity);
-it does not truncate an exceptionally long recipe name. Every actual
-LAYOUT/placement change across all three V.5 fixes (note moved off the
-base card, note constrained to column width, heading text now dynamic) is
+it does not truncate an exceptionally long recipe name. The mobile
+responsive-layout fix (two grid class strings changed from `grid-cols-2
+md:grid-cols-3 lg:grid-cols-4` to `grid-cols-1 sm:grid-cols-2
+md:grid-cols-3 lg:grid-cols-4`) added no tests either, same reasoning as
+the layout-width polish. Every actual LAYOUT/placement change across all
+four V.5 fixes (note moved off the base card, note constrained to column
+width, heading text now dynamic, mobile single-column grid) is
 component-level and structural - matching this project's own honest,
 established testing limits (no jsdom/component rendering available,
 confirmed again here) - verified by reading the code rather than an
 automated render test; manual verification is what actually confirms the
-visual placement. No V.4 test needed to change across any of V.5's three
+visual placement. No V.4 test needed to change across any of V.5's four
 fixes - the makeability-tier ordering and framing logic were never
 touched, and the full existing suite (V.1-V.4) passes unchanged throughout,
 confirming that directly.
@@ -1109,21 +1146,34 @@ differs" heading was still easy to misread as being about the base card
 shown directly above it. Fixed by the final wording-clarity polish above
 (same day).
 
-**Manual verification still owed for the final wording-clarity fix (not
-yet browser-checked this stage):**
-- Open **Bloody Mary (Practical Version)** → confirm the heading now
-  reads **"How Bloody Mary (Practical Version) differs"** (not "How this
-  version differs") directly above the existing note.
-- Open **Zombie (Home Bar Spiced & Dark Spec)** → confirm the heading
-  reads **"How Zombie (Home Bar Spiced & Dark Spec) differs"**.
-- Confirm both headings still wrap safely within the card's own column
-  width at narrow mobile, normal phone, and desktop widths, with no
-  horizontal overflow - a long recipe name is allowed to wrap onto a
-  second line here (unlike the sticky editor header).
-- Open **Bloody Mary** and **Zombie** (the base pages) → confirm
-  "Variations" still shows each practical/home-bar variation's own note
-  as a caption directly under its own card, unchanged from V.3 - no
-  heading added on this side.
+**Manual verification of the final wording-clarity fix - done by the
+user, 2026-09-13, during mobile testing, and it found the responsive-
+layout bug above.** The heading correctly named the current recipe - no
+wording complaint this round - but on a phone-width viewport the whole
+relationship block (card + note) was landing in a narrow ~half-width grid
+cell, making the card look skinny, the new dynamic heading wrap
+excessively, and the note read as an unnecessarily narrow vertical
+column. Fixed by the mobile responsive-layout polish above (same day).
+
+**Manual verification still owed for the mobile responsive-layout fix
+(not yet browser-checked this stage):**
+- At a narrow phone width (~360-390px), open **Bloody Mary (Practical
+  Version)** → confirm the Bloody Mary card now spans the full
+  relationship-section width (one card per row, not a skinny half-width
+  tile), and the "How Bloody Mary (Practical Version) differs" heading +
+  note wrap into normal paragraph-sized lines at that width.
+- At the same width, open **Zombie (Home Bar Spiced & Dark Spec)** →
+  confirm the same for its (longer) note.
+- Open **Bloody Mary** and **Zombie** (the base pages) at the same narrow
+  width → confirm each variation's own card + note also now takes a full
+  row, still directly associated with its own card, unchanged in every
+  other respect from V.3.
+- Widen to tablet, then desktop width → confirm the denser multi-column
+  grid returns (2 columns at `sm`, 3 at `md`, 4 at `lg`), matching the
+  app's existing card-grid convention at those wider sizes.
+- Confirm the sticky top bar/header and bottom navigation are unaffected
+  by this change (this fix only touches the relationship grid's own
+  column count).
 - Confirm the V.4 "Can't make the original?" framing still appears/
   disappears correctly and both pairs' own ingredient lists/steps/badges
   remain completely unaffected.
