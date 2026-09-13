@@ -290,8 +290,7 @@ Diff reviewed for scope creep before committing - exactly 1 migration +
 1 RLS suite update + 2 new domain files changed; `docs/project.md`
 untouched. **No user-facing UI in this stage - nothing to browser-verify.**
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `f7302f0`. `docs/project.md` untouched.
 
 ---
 
