@@ -78,7 +78,7 @@ See `AGENTS.md` for the authoritative repository map (directory ownership, the s
 ## Known outstanding items (not yet resolved)
 
 - Duplicate-ingredient-type merge tool (Admin → Ingredient Types → "Merge") is built and RLS-covered but has never been browser-verified end-to-end.
-- Ingredient Detail I.4 (admin/moderator "Edit ingredient" shortcut) has automated verification only, not yet a manual/browser check.
+- Ingredient Detail I.4 (admin/moderator "Edit ingredient" shortcut): its first-ever manual/browser check (2026-09-14) found the deep-link mechanism itself intact end-to-end, but the target row's editor - while genuinely opening - had no scroll-into-view, so it read as "nothing happened" on a long list. Fixed in `TypesTab.jsx` (scrolls the deep-linked row into view once, on mount); re-verification still owed.
 - Linked Variations: the real Bloody Mary (Practical Version) → Bloody Mary and Zombie (Home Bar Spiced & Dark Spec) → Zombie relationships, and the adapted-card compact-action wording, are implemented and unit-tested but not yet manually verified on a real phone.
 - A separate Ingredient Detail visual/design polish pass is planned but not started (see `docs/project.md`).
 - Improve mood/taste discovery — long-standing open backlog item, not started.
