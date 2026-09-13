@@ -310,6 +310,11 @@ function AppShell({ profile, session }) {
   const outletContext = {
     computed,
     refetchRecipes,
+    // Linked Variations Stage V.2 - the flat recipe_relationships rows
+    // (src/domain/recipeRelationships.js resolves per-recipe from these).
+    // Refetched by the same refetchRecipes() every recipe mutation already
+    // triggers, since it's fetched alongside recipes in useRecipes.js.
+    recipeRelationships: recipesQuery.relationships,
     owned: resolvedOwned,
     ingredientTypesById,
     catalog,

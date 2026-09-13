@@ -54,6 +54,27 @@ export function resolveDirectVariations(recipeId, relationships) {
 }
 
 /**
+ * Linked Variations Stage V.2 - candidate bases for the recipe editor's
+ * "Variation of" picker: every given recipe except the one currently
+ * being edited. Self-selection should not even be choosable in the UI,
+ * not just rejected by the DB's own check constraint (the same
+ * convenience-vs-authority split I.4's admin edit shortcut already
+ * established). Deliberately does NOT also exclude this recipe's own
+ * direct variations (the most obvious one-hop reverse case, which would
+ * also be a cycle) - the plan explicitly keeps client-side filtering to
+ * plain self-exclusion and leaves every other cycle case to the DB
+ * trigger, rather than re-deriving any part of the cycle check here.
+ *
+ * @param {{ id: string }[]} recipes
+ * @param {string | undefined} excludeRecipeId - undefined for a
+ *   not-yet-saved new recipe (nothing to exclude yet)
+ * @returns {object[]}
+ */
+export function resolveVariationCandidates(recipes, excludeRecipeId) {
+  return (recipes ?? []).filter((r) => r.id !== excludeRecipeId)
+}
+
+/**
  * The screen-ready shape: resolves the one base (if any) and every direct
  * variation for `recipeId`, then looks each target up in `recipesById` -
  * tolerant of a stale/invisible relationship whose target recipe is

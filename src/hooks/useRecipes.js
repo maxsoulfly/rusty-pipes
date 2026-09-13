@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useState } from "react"
 import { retryOnClockSkew } from "@/lib/retryOnClockSkew"
-import { fetchRecipes } from "@/services/recipes"
+import { fetchRecipeRelationships, fetchRecipes } from "@/services/recipes"
 
 export function useRecipes() {
   const [recipes, setRecipes] = useState([])
+  // Linked Variations Stage V.2 - the whole recipe_relationships table,
+  // flat (src/domain/recipeRelationships.js resolves it per-recipe).
+  // Fetched alongside recipes, not via useCatalog() - this is recipe-level
+  // data, not ingredient-catalog data, and needs the exact same refetch
+  // trigger (refetchRecipes(), already called after every recipe
+  // create/edit/publish/etc.) to stay in sync.
+  const [relationships, setRelationships] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   // See useCatalog.js's `loaded` comment - true once the first successful
@@ -25,13 +32,19 @@ export function useRecipes() {
   const load = useCallback(() => {
     // retryOnClockSkew: absorbs the brief "JWT issued at future" window on the
     // first read after a startup token refresh (see retryOnClockSkew.js).
-    return retryOnClockSkew(() => fetchRecipes())
-      .then((data) => {
-        setRecipes(data)
+    // Both fetches wrapped together - a relationship-table hiccup shouldn't
+    // succeed halfway and leave `loaded` claiming a consistent snapshot
+    // that isn't one.
+    return retryOnClockSkew(() =>
+      Promise.all([fetchRecipes(), fetchRecipeRelationships()]),
+    )
+      .then(([recipesData, relationshipsData]) => {
+        setRecipes(recipesData)
+        setRelationships(relationshipsData)
         setLoading(false)
         setError(null)
         setLoaded(true)
-        return data
+        return recipesData
       })
       .catch((err) => {
         setLoading(false)
@@ -44,5 +57,5 @@ export function useRecipes() {
     load()
   }, [load])
 
-  return { recipes, loading, error, loaded, refetch: load }
+  return { recipes, relationships, loading, error, loaded, refetch: load }
 }

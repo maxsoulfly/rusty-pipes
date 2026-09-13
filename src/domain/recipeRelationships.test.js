@@ -3,6 +3,7 @@ import {
   resolveBaseRelationship,
   resolveDirectVariations,
   resolveRecipeVariationContext,
+  resolveVariationCandidates,
 } from "./recipeRelationships"
 
 // A ← B ← C: B is a variation of A, C is a variation of B. Cycle
@@ -140,5 +141,27 @@ describe("resolveRecipeVariationContext", () => {
     // unlinking is purely a relationship-table concern, never a recipe
     // content mutation.
     expect(recipesById.get("a")).toBe(before)
+  })
+})
+
+describe("resolveVariationCandidates", () => {
+  const recipes = [
+    { id: "a", name: "Bloody Mary" },
+    { id: "b", name: "Bloody Mary (Practical Version)" },
+    { id: "c", name: "Zombie" },
+  ]
+
+  it("excludes the recipe currently being edited - self-selection should not even be choosable", () => {
+    const result = resolveVariationCandidates(recipes, "b")
+    expect(result.map((r) => r.id)).toEqual(["a", "c"])
+  })
+
+  it("excludes nothing when editing a recipe not in the list (defensive) or a brand-new recipe (excludeRecipeId undefined)", () => {
+    expect(resolveVariationCandidates(recipes, "not-in-list").map((r) => r.id)).toEqual(["a", "b", "c"])
+    expect(resolveVariationCandidates(recipes, undefined).map((r) => r.id)).toEqual(["a", "b", "c"])
+  })
+
+  it("is null-safe for a missing recipes array", () => {
+    expect(resolveVariationCandidates(undefined, "a")).toEqual([])
   })
 })

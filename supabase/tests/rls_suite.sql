@@ -1939,6 +1939,101 @@ begin
 end;
 $$;
 
+-- ── set_recipe_variation_of() (Linked Variations Stage V.2) ─────────────
+-- The atomic "replace this recipe's one relationship row" RPC the recipe
+-- editor calls on Save. Fresh fixture recipes (E/F/G) - A/B/C/D above were
+-- consumed (A deleted) by the block just above.
+
+create temporary table rls_setvar_recipe_ids (e_id uuid, f_id uuid, g_id uuid) on commit drop;
+insert into rls_setvar_recipe_ids values (null, null, null);
+grant all on rls_setvar_recipe_ids to authenticated, anon;
+
+do $$
+declare f record; v_e uuid; v_f uuid; v_g uuid;
+begin
+  select * into f from rls_fixture_ids;
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+  insert into public.recipes (name, source_type, owner_id, visibility, glass_id)
+  values ('RLS_TEST setvar E', 'user', f.member_owner_id, 'private', f.glass_id) returning id into v_e;
+  insert into public.recipes (name, source_type, owner_id, visibility, glass_id)
+  values ('RLS_TEST setvar F', 'user', f.member_owner_id, 'private', f.glass_id) returning id into v_f;
+  insert into public.recipes (name, source_type, owner_id, visibility, glass_id)
+  values ('RLS_TEST setvar G', 'user', f.member_owner_id, 'private', f.glass_id) returning id into v_g;
+  update rls_setvar_recipe_ids set e_id = v_e, f_id = v_f, g_id = v_g;
+  perform pg_temp.assert(true, 'set_recipe_variation_of: fixture recipes created (E/F/G, owned by member_owner)');
+end;
+$$;
+
+do $$
+declare f record; r record; n int; v_note text; v_related uuid;
+begin
+  select * into f from rls_fixture_ids;
+  select * into r from rls_setvar_recipe_ids;
+
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+
+  -- F becomes a variation of E, via the RPC (not a bare insert).
+  perform public.set_recipe_variation_of(r.f_id, r.e_id, 'RLS_TEST practical');
+  select related_recipe_id, note into v_related, v_note from public.recipe_relationships where recipe_id = r.f_id;
+  perform pg_temp.assert(v_related = r.e_id and v_note = 'RLS_TEST practical', 'set_recipe_variation_of: creates the relationship row with its note');
+
+  -- G becomes a variation of F - a valid chain (E <- F <- G).
+  perform public.set_recipe_variation_of(r.g_id, r.f_id, null);
+  perform pg_temp.assert(true, 'set_recipe_variation_of: a valid non-cyclic chain (E <- F <- G) is allowed through the RPC too');
+
+  -- Reassigning F's base to G would close E<-F<-G into a cycle (G's base
+  -- is F, so F -> G -> F). The RPC's own DELETE (of F's real F->E row)
+  -- must roll back together with the rejected INSERT - F must still point
+  -- at E afterward, not at nothing.
+  begin
+    perform public.set_recipe_variation_of(r.f_id, r.g_id, null);
+    perform pg_temp.assert(false, 'set_recipe_variation_of: reassigning to a base that would create a cycle should be rejected');
+  exception when raise_exception then
+    perform pg_temp.assert(true, 'set_recipe_variation_of: a cyclic reassignment is rejected');
+  end;
+  select related_recipe_id into v_related from public.recipe_relationships where recipe_id = r.f_id;
+  perform pg_temp.assert(v_related = r.e_id, 'set_recipe_variation_of: a rejected reassignment leaves the ORIGINAL relationship intact - the delete-then-insert did not partially apply (genuine atomicity, the whole point of this function)');
+
+  -- Removing a relationship (p_base_recipe_id null) deletes it and nothing
+  -- else - G's own recipe row is completely unaffected.
+  perform public.set_recipe_variation_of(r.g_id, null, null);
+  select count(*) into n from public.recipe_relationships where recipe_id = r.g_id;
+  perform pg_temp.assert(n = 0, 'set_recipe_variation_of: passing a null base removes the relationship');
+  select count(*) into n from public.recipes where id = r.g_id;
+  perform pg_temp.assert(n = 1, 'set_recipe_variation_of: removing a relationship never touches the recipe''s own row');
+
+  -- A non-editor cannot call this on someone else's recipe - SECURITY
+  -- INVOKER means the same recipe_is_editable()-gated RLS policies apply
+  -- to the caller, not a bypassed/elevated check. (g_id, e_id) deliberately
+  -- - a pair that would NOT form a cycle (E has no base at all), so a
+  -- denial here is unambiguously RLS, not a coincidental cycle rejection
+  -- (the BEFORE trigger fires before RLS regardless of role, so a
+  -- cycle-forming pair would mask this test the same way it did earlier
+  -- in the recipe_relationships block above).
+  perform pg_temp.set_identity('authenticated', f.member_other_id);
+  begin
+    perform public.set_recipe_variation_of(r.g_id, r.e_id, null);
+    perform pg_temp.assert(false, 'set_recipe_variation_of: a non-editor should not be able to set someone else''s recipe''s relationship');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'set_recipe_variation_of: a non-editor is denied by the same RLS policies (SECURITY INVOKER, not DEFINER)');
+  end;
+
+  perform pg_temp.set_identity('anon', null);
+  begin
+    perform public.set_recipe_variation_of(r.g_id, r.e_id, null);
+    perform pg_temp.assert(false, 'set_recipe_variation_of: anon should not be able to call this function at all');
+  exception when insufficient_privilege then
+    perform pg_temp.assert(true, 'set_recipe_variation_of: anon has no EXECUTE grant');
+  end;
+
+  -- Restore a normal authenticated identity before the next section -
+  -- set_config(..., true) persists for the rest of this transaction, not
+  -- just this do-block, and every later section here assumes a sensible
+  -- default identity rather than switching before its own first read.
+  perform pg_temp.set_identity('authenticated', f.member_owner_id);
+end;
+$$;
+
 -- ── recipe_taste_tags ─────────────────────────────────────────────────────
 -- Same shape as recipe_components/recipe_component_alternatives above: no
 -- owner column of its own, gates entirely through

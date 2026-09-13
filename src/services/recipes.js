@@ -106,6 +106,41 @@ export async function fetchRecipes() {
   return data.map(mapRecipe)
 }
 
+// Linked Variations Stage V.2 - the whole `recipe_relationships` table,
+// flat (mirrors catalog.formConversions/ingredientSubstitutions' own
+// "fetch once, resolve client-side" pattern rather than a doubly-self-
+// referencing PostgREST embed in RECIPE_SELECT - simpler, lower-risk, and
+// this table is small/rarely-changing like those). Never joined into
+// RECIPE_SELECT and never read by the availability engine - only by
+// src/domain/recipeRelationships.js's pure resolvers. RLS already limits
+// this to rows where both sides are visible to the caller, so no further
+// client-side filtering is needed.
+export async function fetchRecipeRelationships() {
+  const { data, error } = await supabase
+    .from("recipe_relationships")
+    .select("recipe_id, related_recipe_id, note")
+  if (error) throw error
+  return data.map((row) => ({
+    recipeId: row.recipe_id,
+    relatedRecipeId: row.related_recipe_id,
+    note: row.note,
+  }))
+}
+
+// Linked Variations Stage V.2 - the one atomic "replace this recipe's
+// relationship row" RPC (20260913130000_set_recipe_variation_of.sql).
+// `baseRecipeId: null` removes the relationship. See createRecipe()/
+// updateRecipe() below for exactly when each calls this and why the
+// ordering matters.
+export async function setRecipeVariationOf(recipeId, baseRecipeId, note) {
+  const { error } = await supabase.rpc("set_recipe_variation_of", {
+    p_recipe_id: recipeId,
+    p_base_recipe_id: baseRecipeId,
+    p_note: note,
+  })
+  if (error) throw error
+}
+
 export async function fetchRecipe(id) {
   const { data, error } = await supabase
     .from("recipes")
@@ -217,6 +252,18 @@ async function insertRecipeWithRelations(
 
 // Always creates a private user recipe - publishing is a separate action
 // (publishRecipe(), below).
+//
+// `variationOf` (Linked Variations Stage V.2) - optional
+// `{ baseRecipeId, note }`. The relationship can only be written AFTER
+// this recipe exists (it needs a real recipe_id), so it's the last step,
+// not folded into insertRecipeWithRelations() (shared with
+// createClassicRecipes(), which never accepts this field at all - batch
+// import deliberately has no variation reference, see the plan doc's
+// Import section). A failure here (e.g. the chosen base would somehow
+// create a cycle) gets the exact same best-effort cleanup
+// insertRecipeWithRelations() already applies to a components/tags
+// failure - delete the just-created recipe rather than leave a
+// half-formed one behind.
 export async function createRecipe({
   name,
   description,
@@ -227,6 +274,7 @@ export async function createRecipe({
   steps,
   components,
   tasteTagIds,
+  variationOf,
 }) {
   const id = await insertRecipeWithRelations(
     {
@@ -242,6 +290,14 @@ export async function createRecipe({
     },
     { components, tasteTagIds },
   )
+  if (variationOf?.baseRecipeId) {
+    try {
+      await setRecipeVariationOf(id, variationOf.baseRecipeId, variationOf.note)
+    } catch (err) {
+      await supabase.from("recipes").delete().eq("id", id)
+      throw err
+    }
+  }
   return fetchRecipe(id)
 }
 
@@ -292,6 +348,19 @@ export async function createClassicRecipes(rows) {
 // client-side multi-statement transaction is available, so a failure partway
 // through leaves a partial update rather than rolling back - same
 // constraint createRecipe() already lives with.
+//
+// `variationOf` (Linked Variations Stage V.2) - optional
+// `{ baseRecipeId, note }` (`baseRecipeId: null` removes the
+// relationship). Deliberately the FIRST write in this whole function,
+// before name/components/tags below - it's the one step in this save
+// that can fail for a reason unrelated to the recipe's own content (the
+// chosen base would create a cycle, rejected by the DB trigger via
+// set_recipe_variation_of()'s own atomic delete-then-insert). Running it
+// first means a rejection stops the save immediately, before anything
+// else is touched - "a cyclic assignment rolls back the recipe's other
+// changes too" holds by construction (nothing else was ever attempted),
+// without needing this whole multi-step save to become one real DB
+// transaction, which this function still isn't (see the paragraph above).
 export async function updateRecipe(
   id,
   {
@@ -304,8 +373,17 @@ export async function updateRecipe(
     steps,
     components,
     tasteTagIds,
+    variationOf,
   },
 ) {
+  if (variationOf !== undefined) {
+    await setRecipeVariationOf(
+      id,
+      variationOf?.baseRecipeId ?? null,
+      variationOf?.note ?? null,
+    )
+  }
+
   const { error: recipeError } = await supabase
     .from("recipes")
     .update({

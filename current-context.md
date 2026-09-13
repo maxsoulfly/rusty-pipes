@@ -33,71 +33,83 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
 19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **I.1 through I.4 DONE + pushed, 2026-09-12/13 - v1 COMPLETE.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, "cocktails using this," and (for staff) an edit shortcut → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, the single shared `useInventory()` instance, `isPreparationSatisfiable()`, and the existing `IngredientTypeEditor`; no schema changes (every field/table this feature surfaces already existed, just unrendered to members). Staged **I.1 done** (tappable ingredient-name links + shared-tier grouping + basic identity) → **I.2 done** (My Bar Add/Remove action, household-basic-aware) → **I.3 done** (Can provide / Can be replaced by / Homemade preparation sections, each directional, reusing `IngredientLink`) → **I.4 done** (admin/moderator-only "Edit ingredient" shortcut, deep-linking straight into that ingredient type's existing editor - the plan's original "not a new deep-link" deferral was explicitly superseded by the user's own I.4 request; see item 0). **I.1-I.3 manually verified by the user; I.4 is not yet browser-verified** - see item 0 for the exact owed check. See the plan doc for the full audit/design.
 
-20. Linked Variations (new feature, `docs/plans/linked-variations.md`) — **V.1 DONE + pushed 2026-09-13.** Lets two otherwise-independent recipes declare "this is a variation of that" (e.g. Bloody Mary ↔ Bloody Mary (Practical Version)) as pure metadata/navigation - never ingredient/instruction inheritance, never affecting either recipe's own availability. One base → many variations (no general many-to-many), directional storage (variation points at its base) with bidirectional display (one hop only); **a relationship cycle is rejected at write time** (corrected 2026-09-13 from the original plan's "cycles are harmless, don't bother preventing them" stance - a `BEFORE INSERT/UPDATE` trigger walks the proposed base's chain, since `unique(recipe_id)` already guarantees the graph is a forest of trees, so this is a single linked-list walk, not a graph algorithm), a new standalone `recipe_relationships` table (not a `recipes` column - avoids widening its column-restricted update grant), reusing the existing `recipe_is_visible`/`recipe_is_editable` RLS helpers for authorization. Batch import explicitly does NOT gain a variation reference (no reliable identity mechanism at import time, per AGENTS.md's own no-fuzzy-matching rule) - admin-editor-only for v1. Staged **V.1 done** (schema + migration + cycle-prevention trigger + RLS + a pure one-hop `src/domain/recipeRelationships.js` resolver, 16 new tests) → **V.2 NOT started** (recipe editor "Variation of" field + picker) → **V.3 NOT started** (Cocktail Detail "Variations"/"Variation of" UI) → **V.4 NOT started** (makeability-aware sort/framing + the first two real catalogue links: Bloody Mary/Bloody Mary (Practical Version) and Zombie/Zombie (Home Bar Spiced & Dark Spec), both already live and unmodified). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer. Supersedes `docs/plans/substitutes-and-variations.md`'s earlier "Part 3"/"Stage C" sketch (kept there as historical record, now redirects here).
+20. Linked Variations (new feature, `docs/plans/linked-variations.md`) — **V.1 + V.2 DONE + pushed 2026-09-13.** Lets two otherwise-independent recipes declare "this is a variation of that" (e.g. Bloody Mary ↔ Bloody Mary (Practical Version)) as pure metadata/navigation - never ingredient/instruction inheritance, never affecting either recipe's own availability. One base → many variations (no general many-to-many), directional storage (variation points at its base) with bidirectional display (one hop only); **a relationship cycle is rejected at write time** (corrected 2026-09-13 from the original plan's "cycles are harmless, don't bother preventing them" stance - a `BEFORE INSERT/UPDATE` trigger walks the proposed base's chain, since `unique(recipe_id)` already guarantees the graph is a forest of trees, so this is a single linked-list walk, not a graph algorithm), a new standalone `recipe_relationships` table (not a `recipes` column - avoids widening its column-restricted update grant), reusing the existing `recipe_is_visible`/`recipe_is_editable` RLS helpers for authorization. Batch import explicitly does NOT gain a variation reference (no reliable identity mechanism at import time, per AGENTS.md's own no-fuzzy-matching rule) - admin-editor-only for v1. Staged **V.1 done** (schema + migration + cycle-prevention trigger + RLS + a pure one-hop `src/domain/recipeRelationships.js` resolver, 16 new tests) → **V.2 done** (recipe editor "Variation of" field + a new `RecipeComboBox`, a genuinely atomic `set_recipe_variation_of()` RPC replacing the old "one more non-atomic step" plan, save-ordering so a cyclic rejection stops the whole save before any other change, 3 more domain tests + a new RLS-suite block) → **V.3 NOT started** (Cocktail Detail "Variations"/"Variation of" UI) → **V.4 NOT started** (makeability-aware sort/framing + the first two real catalogue links: Bloody Mary/Bloody Mary (Practical Version) and Zombie/Zombie (Home Bar Spiced & Dark Spec), both already live and unmodified). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer. Supersedes `docs/plans/substitutes-and-variations.md`'s earlier "Part 3"/"Stage C" sketch (kept there as historical record, now redirects here).
 
 Each numbered step is a development chunk boundary for this file.
 
 ## Exact next action (2026-09-13)
 
-0. **`docs/plans/linked-variations.md` — Stage V.1 DONE + pushed 2026-09-13.** Next feature after Ingredient Detail v1: let two otherwise-independent recipes declare "this is a variation of that" (e.g. Bloody Mary / Bloody Mary (Practical Version)) as pure metadata + navigation - never ingredient/instruction inheritance, never affecting either recipe's own availability. **Read that file before starting the next stage** - it's the source of truth for this item.
+0. **`docs/plans/linked-variations.md` — Stages V.1 + V.2 DONE + pushed 2026-09-13.** Next feature after Ingredient Detail v1: let two otherwise-independent recipes declare "this is a variation of that" (e.g. Bloody Mary / Bloody Mary (Practical Version)) as pure metadata + navigation - never ingredient/instruction inheritance, never affecting either recipe's own availability. **Read that file before starting the next stage** - it's the source of truth for this item.
 
    **Cycle-rule correction applied before/during V.1:** the original plan
-   treated a relationship cycle as harmless ("the one-hop UI can't be
-   confused by it, so don't bother preventing it"). The user corrected
-   this: a linked variation is a semantic parent/base fact, so a cycle
-   (A→B→A, or a longer A→B→C→A) is invalid catalogue data even though
-   member-facing resolution stays one hop only - self-links must be
-   rejected, assigning a base must be rejected if it would create a
-   cycle, chains may otherwise exist. The plan doc's "Relationship model"
-   section keeps the original (superseded) reasoning struck through as
-   historical record, with the corrected rule immediately below it.
+   treated a relationship cycle as harmless. The user corrected this: a
+   cycle (A→B→A, or a longer A→B→C→A) is invalid catalogue data even
+   though member-facing resolution stays one hop only - self-links and
+   any cycle must be rejected, chains may otherwise exist. The plan doc's
+   "Relationship model" section keeps the original (superseded) reasoning
+   struck through as historical record, with the corrected rule
+   immediately below it.
 
    **V.1 shipped:** migration `20260913120000_recipe_relationships.sql` -
    the `recipe_relationships` table (`recipe_id` = variation,
-   `related_recipe_id` = its base, optional `note`, `unique(recipe_id)` so
-   a variation has at most one base, `check` self-link guard, both FKs
-   `on delete cascade`), RLS reusing the existing `recipe_is_visible()`/
-   `recipe_is_editable()` helpers as-is (read requires both sides visible;
-   insert/delete gated on editing the *variation*, matching the approved
-   "the base's owner does not control other members' variations"
-   decision; no update policy - change = delete + re-insert, matching
-   `recipe_component_alternatives`'s own precedent), plus a new
-   `BEFORE INSERT OR UPDATE` trigger (`forbid_recipe_relationship_cycle()`,
-   `SECURITY DEFINER`, revoked from public/anon/authenticated) that
-   rejects any cycle. Cheap specifically because `unique(recipe_id)`
-   already guarantees the relationship graph is a forest of trees (at
-   most one outgoing edge per node) - checking a proposed new edge is one
-   linked-list walk upward from the proposed base, not a general graph
-   traversal or a recursive CTE. A self-link is caught by the same
-   trigger as a degenerate zero-length cycle; the original `check`
-   constraint stays as a structural backstop.
+   `related_recipe_id` = its base, optional `note`, `unique(recipe_id)`,
+   self-link `check`, both FKs `on delete cascade`), RLS reusing
+   `recipe_is_visible()`/`recipe_is_editable()` as-is, plus a
+   `BEFORE INSERT OR UPDATE` trigger (`forbid_recipe_relationship_cycle()`)
+   that rejects any cycle - cheap specifically because `unique(recipe_id)`
+   already guarantees the graph is a forest of trees, so checking a
+   proposed edge is one linked-list walk, not a general graph traversal.
+   New pure `src/domain/recipeRelationships.js` (one-hop resolvers, 16
+   tests), not yet wired to any fetch/UI at that point.
 
-   New pure `src/domain/recipeRelationships.js`
-   (`resolveBaseRelationship()`/`resolveDirectVariations()`/
-   `resolveRecipeVariationContext()`) - one-hop only, tolerant of a
-   missing/stale related recipe (drops it, never throws), not yet wired to
-   any fetch/UI (that's V.2/V.3). 16 new unit tests.
+   **V.2 shipped (recipe editor assignment):** `EditorScreen.jsx` gains a
+   "Variation of" field (new `RecipeComboBox`, visible recipes minus
+   self) + an optional note, draft-only until Save, prefilled on edit from
+   the existing relationship. **Atomicity upgraded beyond the original
+   plan** (per this turn's explicit instruction): a new SQL function,
+   `set_recipe_variation_of()` (migration `20260913130000`, `SECURITY
+   INVOKER` - the existing RLS policies are the real gate), replaces the
+   recipe's one relationship row (delete any existing, then insert the
+   new one) as a single atomic call - closing the exact "delete succeeds,
+   insert fails on a cycle, recipe ends up with no base at all" gap V.1
+   itself had flagged. `updateRecipe()` calls this **first**, before any
+   other write, so a cyclic rejection stops the whole save before
+   anything else is touched (rather than requiring the entire, still
+   non-transactional recipe save to become one real DB transaction).
+   `createRecipe()` calls it last and reuses the existing "delete the
+   just-created recipe on a later failure" cleanup pattern. New
+   `fetchRecipeRelationships()` wired into `useRecipes.js`/outlet context
+   (the fetch V.1 deferred); new pure `resolveVariationCandidates()`
+   (self-exclusion only, no client-side cycle filtering - the DB trigger
+   stays the sole cycle authority, matching the explicit instruction not
+   to duplicate that algorithm client-side). **Deferred, not built:** the
+   clone-flow "this is a variation of the clone source" opt-in checkbox
+   (not part of this turn's explicit V.2 scope).
 
-   **Verified:** migration pushed clean via `supabase db push --linked`;
-   `db advisors --type security` shows no new finding (the cycle-check
-   function is properly revoked, matching every other SECURITY DEFINER
-   function's discipline in this codebase); `supabase/tests/rls_suite.sql`
-   gained a full new block (self-link rejected, direct cycle rejected,
-   longer 3-hop cycle rejected, a valid non-cyclic chain allowed, one base
-   with multiple variations, a non-editor denied, cross-visibility denied,
-   anon denied, unlinking leaves both recipes' own rows untouched, cascade
-   on base deletion) - **full suite passes**. `corepack pnpm@10.34.3 test`
-   **357/357** (+16 new). `corepack pnpm@10.34.3 build` clean (178
-   modules - the new domain files aren't imported by app code yet).
+   **Verified:** both migrations pushed clean via `supabase db push
+   --linked`; `db advisors --type security` shows no new finding for
+   either new function. `supabase/tests/rls_suite.sql` gained two new
+   blocks (V.1's: self-link/direct/longer-cycle rejection, valid chain,
+   multi-variation base, cross-visibility/non-editor/anon denial, cascade,
+   unlink-untouched; V.2's: `set_recipe_variation_of()` creates/removes
+   the relationship correctly, **a cyclic reassignment through the RPC
+   leaves the ORIGINAL relationship intact - not half-deleted, the actual
+   atomicity proof** - a non-editor/anon denied) - **full suite passes**.
+   `corepack pnpm@10.34.3 test` **360/360** (+19 total this feature).
+   `corepack pnpm@10.34.3 build` clean (180 modules).
 
-   **Not touched (later stages):** no recipe editor field, no Cocktail
-   Detail UI, no catalogue links (Bloody Mary/Zombie pairs), no import
-   support. `docs/project.md` untouched.
+   **Not touched (later stages):** no Cocktail Detail UI (V.3), no
+   catalogue links (Bloody Mary/Zombie pairs, V.4), no import support.
+   `docs/project.md` untouched.
 
-   **Exact next action:** the user reviews V.1 and decides whether/when
-   to proceed to V.2 (recipe editor "Variation of" field + a new
-   searchable recipe picker). No user-facing UI exists yet from this
-   stage, so there is nothing to browser-verify.
+   **Exact next action:** the user reviews V.2 and decides whether/when
+   to proceed to V.3 (Cocktail Detail "Variations"/"Variation of" UI).
+   **Not yet browser-verified** - two manual checks owed: (1) open an
+   existing private recipe's editor, set "Variation of" to another
+   visible recipe, add a note, Save, reopen the editor and confirm it
+   reloads correctly; (2) attempt to assign a base that would create a
+   cycle and confirm a clear error appears with the draft intact, not a
+   blank/reset form.
 
 **Ingredient Detail v1 (I.1 through I.4, `docs/plans/ingredient-detail-page.md`) is feature-complete, 2026-09-12/13.** Tappable ingredient links + shared-tier grouping + basic identity (I.1); My Bar Add/Remove action, household-basic-aware (I.2); Can provide / Can be replaced by / Homemade preparation sections (I.3); admin/moderator "Edit ingredient" shortcut deep-linking straight into the existing `IngredientTypeEditor` (I.4 - a deliberate expansion beyond that stage's original "not a new deep-link" text, per the user's own explicit I.4 request). **I.1-I.3 manually verified by the user** (ingredient navigation, Add/Remove My Bar, Homemade Preparation, and the directional relationships all confirmed working); **I.4 has only this session's automated verification (tests + build), not yet a manual/browser check** - as a non-admin, confirm no edit action appears on any `/bar/type/:id`/`/bar/product/:id` page; as admin/moderator, confirm it lands directly on that ingredient's editor, already expanded, in Admin → Ingredient Types. A separate design/visual polish pass on this screen is planned next, on its own go-ahead - not started here. See the chunk-history entries below for the full stage-by-stage detail.
 
@@ -191,6 +203,121 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 needed). No migrations, no schema change - not needed to fix this.
 
 **Commit:** `7a22526`. `docs/project.md` untouched.
+
+---
+
+## Last completed chunk (Linked Variations Stage V.2 implemented - recipe editor assignment, atomic set_recipe_variation_of() RPC, 2026-09-13 — 1 migration + 6 app files + RLS suite, no catalogue changes)
+
+**Scope: exactly V.2** - the recipe editor's "Variation of" field and the
+save/atomicity mechanism it needs. Explicitly not this turn: V.3
+(Cocktail Detail UI), V.4 (makeability-aware presentation + the real
+Bloody Mary/Zombie links), import support, card-level variation badges,
+recipe inheritance, any availability/makeability change, the clone-flow
+opt-in checkbox (part of the original plan's V.2 text but not part of
+this turn's explicit instructions - deferred, not silently dropped).
+
+**Editor UX:** `EditorScreen.jsx` gains a "Variation of" field, placed
+after taste tags and before the Save button - a new `RecipeComboBox`
+(`src/components/editor/RecipeComboBox.jsx`, same collapsed-trigger →
+inline-search-and-list interaction pattern as `TypeComboBox.jsx`, each
+result row showing a small muted source/author line so similarly-named
+recipes stay distinguishable) plus an optional one-line "how it differs"
+note, both draft-only until Save (matching every other field in this
+editor). Visible whenever the viewer can already edit the recipe (owner
+or admin, `recipe_is_editable`'s own existing rule) - not additionally
+gated to staff-only, since the DB/RLS model already correctly lets any
+recipe owner declare their own recipe a variation, matching D4. A plain
+"Remove - not a variation" button clears the draft back to null.
+Reopening the editor on an existing recipe prefills the field correctly
+from its real relationship (via V.1's `resolveBaseRelationship()`).
+
+**Atomicity - the core of this stage, upgraded beyond the original plan's
+"just one more non-atomic step" text per this turn's explicit
+instruction:** new migration `20260913130000_set_recipe_variation_of.sql`
+- a `SECURITY INVOKER` SQL function that replaces a recipe's one
+relationship row (delete any existing, then insert the new one if given)
+as a single atomic function call. This closes the exact gap V.1's own
+plan had flagged: a bare client-side delete-then-insert could delete the
+old relationship and then fail to insert the new one (e.g. the chosen
+base would create a cycle, rejected by V.1's trigger), leaving the
+recipe with NO base at all - neither the old one nor the intended new
+one. Wrapping both statements in one plpgsql function body makes them one
+implicit transaction: an uncaught exception from the INSERT (or its
+cycle-check trigger) rolls back the DELETE that already ran earlier in
+the same call. **`SECURITY INVOKER`, not `DEFINER`** - deliberately: the
+existing `recipe_relationships` RLS policies (`recipe_is_editable`)
+already correctly gate exactly this operation, so running as the calling
+user's own role means those policies apply completely unchanged, with
+zero authorization logic duplicated inside the function - the smaller,
+safer choice specifically because RLS was already correct and
+sufficient.
+
+`updateRecipe()` (`src/services/recipes.js`) calls this function
+**first**, before the recipe's own field/component/tag writes - a cyclic
+rejection stops the save immediately, so nothing else is ever attempted.
+This achieves "a cyclic assignment rolls back the recipe's other changes
+too" **without** requiring the whole multi-step recipe save to become
+one real DB transaction (it still isn't one, exactly as documented
+before this stage - this is honest save-ordering, not faked atomicity).
+`createRecipe()` calls it **last** (a relationship needs a real recipe id
+first) and applies the exact same best-effort cleanup
+`insertRecipeWithRelations()` already uses for a components/tags failure
+- delete the just-created recipe rather than leave a half-formed one.
+
+**Data loading:** new `fetchRecipeRelationships()` (a flat table fetch,
+mirroring `catalog.formConversions`'s own "fetch once, resolve
+client-side" pattern) wired into `useRecipes.js` (fetched alongside
+recipes in the same `Promise.all`, refetched by the same
+`refetchRecipes()` every recipe mutation already triggers) and exposed
+via outlet context as `recipeRelationships` - the piece V.1 explicitly
+deferred ("not yet wired to any fetch/service - that's V.2/V.3's job").
+
+**New pure `resolveVariationCandidates()`** (`src/domain/
+recipeRelationships.js`) - self-exclusion only for the picker's candidate
+list; deliberately does **not** also filter out this recipe's own direct
+variations (the most obvious one-hop-reverse cycle case) - the plan's own
+instruction keeps ALL cycle logic, even the trivially cheap one-hop case,
+as the DB trigger's sole responsibility, not re-derived client-side. 3
+new unit tests.
+
+**RLS suite (`supabase/tests/rls_suite.sql`) new block:** exercises
+`set_recipe_variation_of()` directly (not just raw table inserts) -
+creates a relationship through the RPC with its note; a valid chain
+through the RPC; **a cyclic reassignment is rejected AND the recipe's
+original relationship is asserted unchanged afterward** (the actual
+atomicity proof); a null base removes the relationship without touching
+the recipe's own row; a non-editor is denied (proving SECURITY INVOKER
+correctly defers to the same RLS, not an elevated bypass); anon has no
+EXECUTE grant at all. **Bug found and fixed while writing these tests
+(twice):** two separate test pairs each accidentally reused a
+cycle-forming recipe pair for what was meant to be a plain RLS-denial
+check - the BEFORE trigger fires before RLS is ever evaluated regardless
+of role, so the cycle error masked the RLS test entirely both times;
+fixed by picking genuinely non-cycle-forming pairs for those specific
+assertions. Also found: `pg_temp.set_identity()`'s role switch is
+transaction-scoped, not block-scoped - the new block's own last identity
+switch (to `anon`) was leaking into the next, unrelated section
+(`recipe_taste_tags`) and breaking one of ITS fixture assertions;
+fixed by restoring an authenticated identity at the end of the new
+block, matching every other block's own implicit convention.
+
+**Verified:** both migrations pushed clean via `supabase db push
+--linked`. `supabase db advisors --type security` - no new finding for
+`set_recipe_variation_of()` (not `SECURITY DEFINER`, so the linter's
+generic warning class doesn't apply; explicitly revoked/re-granted
+anyway for consistency with every other function in this codebase).
+`corepack pnpm@10.34.3 test` **360/360** (+3 new). `corepack
+pnpm@10.34.3 build` clean (180 modules, up from 178 - the new domain/
+component files are now actually imported by app code). Diff reviewed
+for scope creep before committing - exactly 1 new migration, 1 new
+component, 6 modified app files, and the RLS suite changed;
+`docs/project.md` untouched. **Not browser-verified** (no browser
+tooling in this sandbox) - two manual checks still owed (see item 0
+above for the exact steps: prefill-on-reopen, and a cyclic-assignment
+error leaving the draft intact).
+
+**Commit:** see the git log for the exact hash. `docs/project.md`
+untouched.
 
 ---
 

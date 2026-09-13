@@ -14,12 +14,17 @@ import { GlassPicker } from "@/components/editor/GlassPicker"
 import { IngredientRowsEditor } from "@/components/editor/IngredientRowsEditor"
 import { OtherDraftsPicker } from "@/components/editor/OtherDraftsPicker"
 import { PasteRecipeMode } from "@/components/editor/PasteRecipeMode"
+import { RecipeComboBox } from "@/components/editor/RecipeComboBox"
 import { StepsEditor } from "@/components/editor/StepsEditor"
 import { TasteTagChips } from "@/components/editor/TasteTagChips"
 import { Btn, ColorSwatchPicker, Input } from "@/components/primitives"
 import { NON_VOLUME_UNITS } from "@/data/constants"
 import { ozToMl } from "@/domain/availability"
 import { resolveIngredientType } from "@/domain/ingredientResolution"
+import {
+  resolveBaseRelationship,
+  resolveVariationCandidates,
+} from "@/domain/recipeRelationships"
 import { parseUnitLabel } from "@/domain/servings"
 import { buildRecipeImportPrompt } from "@/schemas/recipeImport"
 import { parseRecipePaste } from "@/schemas/recipePaste"
@@ -101,8 +106,14 @@ export default function EditorScreen() {
   // their own variant, but saving still goes through createRecipe() and
   // makes an ordinary private recipe they own outright.
   const cloneSourceId = !isEditing ? searchParams.get("clone") : null
-  const { catalog, computed, userId, isAdmin, refetchRecipes } =
-    useOutletContext()
+  const {
+    catalog,
+    computed,
+    userId,
+    isAdmin,
+    refetchRecipes,
+    recipeRelationships,
+  } = useOutletContext()
   const {
     types,
     glasses,
@@ -148,6 +159,13 @@ export default function EditorScreen() {
   ])
   const [steps, setSteps] = useState([""])
   const [tasteTagIds, setTasteTagIds] = useState([])
+  // Linked Variations Stage V.2 - "Variation of." Draft-only, like every
+  // other field here: nothing is written until Save (createRecipe()/
+  // updateRecipe() below), and Cancel (navigating away without saving)
+  // discards it with zero writes, same as the rest of this form.
+  // `variationOfRecipeId: null` means "no base / not a variation."
+  const [variationOfRecipeId, setVariationOfRecipeId] = useState(null)
+  const [variationNote, setVariationNote] = useState("")
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [prefilled, setPrefilled] = useState(!isEditing && !cloneSourceId)
@@ -359,6 +377,18 @@ export default function EditorScreen() {
         .map((name) => tasteTags.find((t) => t.name === name)?.id)
         .filter(Boolean),
     )
+    // Linked Variations Stage V.2 - only on a genuine edit, never on a
+    // clone (a clone is a brand-new, unlinked recipe by default; the
+    // plan's own opt-in "this is a variation of the clone source"
+    // checkbox is a separate, deferred follow-up, not built here).
+    if (isEditing) {
+      const relationship = resolveBaseRelationship(
+        source.id,
+        recipeRelationships,
+      )
+      setVariationOfRecipeId(relationship?.baseRecipeId ?? null)
+      setVariationNote(relationship?.note ?? "")
+    }
     setPrefilled(true)
   }, [
     isEditing,
@@ -369,6 +399,7 @@ export default function EditorScreen() {
     families,
     tasteTags,
     types,
+    recipeRelationships,
   ])
 
   // Member-facing "paste a recipe, app fills in the form" - only offered
@@ -437,6 +468,16 @@ export default function EditorScreen() {
   }
 
   const effectiveGlassName = glassName || glasses[0]?.name || ""
+
+  // Linked Variations Stage V.2 - candidate bases for "Variation of":
+  // every recipe this viewer can already see (`computed` is already
+  // RLS-filtered), excluding the recipe being edited itself. `id` is
+  // undefined for a brand-new recipe, so nothing is excluded yet -
+  // correct, since there's no "self" to exclude before it's saved once.
+  // No client-side cycle filtering - the plan deliberately leaves cycle
+  // rejection to the DB trigger alone (see docs/plans/linked-variations.md's
+  // Admin/editor UX section).
+  const variationCandidates = resolveVariationCandidates(computed, id)
 
   const addIng = () =>
     setIngs([
@@ -619,6 +660,13 @@ export default function EditorScreen() {
         steps: steps.map((s) => s.trim()).filter(Boolean),
         components,
         tasteTagIds,
+        // Linked Variations Stage V.2 - see updateRecipe()/createRecipe()
+        // (src/services/recipes.js) for exactly how/when this is written;
+        // it never touches the fields above.
+        variationOf: {
+          baseRecipeId: variationOfRecipeId,
+          note: variationNote.trim() || null,
+        },
       }
       const recipe = isEditing
         ? await updateRecipe(id, payload)
@@ -812,6 +860,50 @@ export default function EditorScreen() {
               selectedIds={tasteTagIds}
               onToggle={toggleTaste}
             />
+
+            {/* Linked Variations Stage V.2 - metadata/navigation only.
+                Never copies, inherits, or modifies this recipe's own
+                ingredients/instructions/availability/tags/images -
+                changing or removing this field never touches anything
+                above; it's its own row in its own table
+                (recipe_relationships), written by
+                createRecipe()/updateRecipe() as a genuinely atomic step
+                (see src/services/recipes.js). */}
+            <div>
+              <label className="text-xs font-bold text-tx2 font-display uppercase tracking-[0.06em] block mb-1.5">
+                Variation of
+              </label>
+              <p className="text-[11px] text-tx3 mb-2 leading-snug">
+                Optional - link this recipe as a variation of another. This
+                is metadata only: ingredients, steps, and availability stay
+                completely independent either way.
+              </p>
+              <RecipeComboBox
+                valueId={variationOfRecipeId}
+                onPick={setVariationOfRecipeId}
+                recipes={variationCandidates}
+              />
+              {variationOfRecipeId && (
+                <div className="mt-2 flex flex-col gap-2">
+                  <Input
+                    label="How it differs (optional)"
+                    placeholder="e.g. Uses canned tomato juice, no fresh horseradish"
+                    value={variationNote}
+                    onChange={setVariationNote}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVariationOfRecipeId(null)
+                      setVariationNote("")
+                    }}
+                    className="self-start min-h-11 px-3 text-xs text-tx2 font-display font-semibold bg-transparent border border-bdr rounded-sm cursor-pointer"
+                  >
+                    Remove - not a variation
+                  </button>
+                </div>
+              )}
+            </div>
 
             {!isEditing && (
               <p className="text-xs text-tx3 leading-normal">
