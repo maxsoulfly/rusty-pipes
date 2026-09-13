@@ -20,6 +20,7 @@ import { TasteTagChips } from "@/components/editor/TasteTagChips"
 import { Btn, ColorSwatchPicker, Input } from "@/components/primitives"
 import { NON_VOLUME_UNITS } from "@/data/constants"
 import { ozToMl } from "@/domain/availability"
+import { resolveEditorHeaderTitle } from "@/domain/editorHeader"
 import { resolveIngredientType } from "@/domain/ingredientResolution"
 import {
   resolveBaseRelationship,
@@ -718,14 +719,24 @@ export default function EditorScreen() {
 
   return (
     <div className="pb-[calc(96px_+_env(safe-area-inset-bottom,0px))]">
+      {/* Editor sticky-header improvement (manual-testing finding, Linked
+          Variations) - scrolling deep into a long recipe's edit form (past
+          Ingredients/Steps/Taste Tags/Variation Of) left only a generic
+          "Edit Recipe" visible up top, so it was easy to lose track of
+          WHICH recipe was being edited. `resolveEditorHeaderTitle()`
+          (src/domain/editorHeader.js) picks the title/subtitle from
+          `existing?.name` - the PERSISTED name from `computed`, never the
+          live `name` draft state below - so an unsaved Recipe Name edit
+          does NOT retitle the header until Save succeeds and `computed`
+          refetches; the header keeps answering "which existing recipe am
+          I editing," while the form is where the in-progress draft shows.
+          Same sticky TopBar, same tap target, no new component. */}
       <TopBar
-        title={
-          isEditing
-            ? "Edit Recipe"
-            : cloneSourceId
-              ? "Clone Recipe"
-              : "New Recipe"
-        }
+        {...resolveEditorHeaderTitle({
+          isEditing,
+          existingName: existing?.name,
+          cloneSourceId,
+        })}
         onBack={() => navigate(-1)}
       />
       <div className="p-5 flex flex-col gap-5">

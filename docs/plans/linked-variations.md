@@ -905,10 +905,15 @@ V.4 diff (presentation + two catalogue rows only).
 **Editor: keep the recipe name visible while scrolling.** Discovered
 during manual testing - when scrolled deep into a long Edit Recipe form,
 the sticky top bar/header no longer shows which recipe is being edited.
-Small, separate UX follow-up: keep the currently-edited recipe's name
-visible in the sticky header regardless of scroll position. **Not built in
-V.4** - out of scope per the explicit V.4 instruction not to restructure
-the editor; a future small, isolated polish item.
+**Not built in V.4** - out of scope per the explicit V.4 instruction not
+to restructure the editor. **Built as a separate, general Recipe Editor
+UX chunk, 2026-09-13** (not a Linked Variations stage - this doc records
+it only because Linked Variations manual testing is what found it): the
+existing (already-sticky) `TopBar` gained an optional `subtitle` slot;
+`EditorScreen.jsx` now shows the recipe's own persisted name as the
+title, with "Edit Recipe" demoted to that subtitle - see
+`current-context.md`'s own chunk entry for the full detail (shared
+component, persisted-vs-draft handling, tests).
 
 **Editor: "Variation of" direction wording - built in V.4** (small and
 isolated enough to include, per the user's own explicit allowance - see

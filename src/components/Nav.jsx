@@ -103,7 +103,20 @@ export function SideNav({ isStaff }) {
   )
 }
 
-export function TopBar({ title, onBack, right }) {
+// `subtitle` (optional) - a small, muted caption ABOVE `title`, for a
+// screen that needs a bit more context than one line (e.g. EditorScreen's
+// "Edit Recipe" while `title` carries the recipe's own identity - see
+// current-context.md's "Editor sticky-header" polish). Every existing
+// caller that only ever passed `title` renders byte-for-byte the same as
+// before - `subtitle` is opt-in, additive, no layout change when absent.
+// `truncate` on both lines (plus `min-w-0` on the flex-1 wrapper, required
+// for `truncate` to actually clip inside a flex row instead of just
+// forcing the row wider) is new here too - previously an unusually long
+// title had no overflow handling at all; this is a small, broadly-safe
+// robustness fix for every TopBar caller, not just the one that motivated
+// it, since a short title (every existing caller today) renders
+// identically either way.
+export function TopBar({ title, subtitle, onBack, right }) {
   return (
     <div className="flex items-center py-3.5 px-5 gap-3 border-b border-bdr bg-bg2 sticky top-0 z-10 backdrop-blur-md">
       {onBack && (
@@ -115,7 +128,16 @@ export function TopBar({ title, onBack, right }) {
           <IconBack size={20} />
         </button>
       )}
-      <h1 className="text-lg font-bold font-display text-tx flex-1">{title}</h1>
+      <div className="flex-1 min-w-0">
+        {subtitle && (
+          <div className="text-[11px] font-semibold text-tx3 uppercase tracking-[0.05em] leading-tight truncate">
+            {subtitle}
+          </div>
+        )}
+        <h1 className="text-lg font-bold font-display text-tx truncate">
+          {title}
+        </h1>
+      </div>
       {right}
     </div>
   )

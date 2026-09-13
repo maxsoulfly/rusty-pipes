@@ -35,6 +35,8 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
 20. Linked Variations (new feature, `docs/plans/linked-variations.md`) — **V.1 + V.2 + V.3 + V.4 + V.5 DONE + pushed 2026-09-13, V.2 and V.3 manually verified (that verification found the V.5 bug).** Lets two otherwise-independent recipes declare "this is a variation of that" (e.g. Bloody Mary ↔ Bloody Mary (Practical Version)) as pure metadata/navigation - never ingredient/instruction inheritance, never affecting either recipe's own availability. One base → many variations (no general many-to-many), directional storage (variation points at its base) with bidirectional display (one hop only); **a relationship cycle is rejected at write time** (corrected 2026-09-13 from the original plan's "cycles are harmless, don't bother preventing them" stance - a `BEFORE INSERT/UPDATE` trigger walks the proposed base's chain, since `unique(recipe_id)` already guarantees the graph is a forest of trees, so this is a single linked-list walk, not a graph algorithm), a new standalone `recipe_relationships` table (not a `recipes` column - avoids widening its column-restricted update grant), reusing the existing `recipe_is_visible`/`recipe_is_editable` RLS helpers for authorization. Batch import explicitly does NOT gain a variation reference (no reliable identity mechanism at import time, per AGENTS.md's own no-fuzzy-matching rule) - admin-editor-only for v1. Staged **V.1 done** (schema + migration + cycle-prevention trigger + RLS + a pure one-hop `src/domain/recipeRelationships.js` resolver, 16 new tests) → **V.2 done** (recipe editor "Variation of" field + a new `RecipeComboBox`; **atomicity corrected same-day** - a first-pass `set_recipe_variation_of()` RPC only made the relationship's own write atomic and stopped a cyclic *rejection* from allowing later writes, but didn't stop an already-*succeeded* relationship write from staying committed if a later step then failed; replaced by one `save_recipe()` RPC that owns the recipe's fields, components, taste tags, AND the relationship in a single transaction, covering create too - 3 domain tests + a full RLS-suite block proving the actual rollback) → **V.3 done** (`DetailScreen.jsx` gains a "Variation of"/"Variations" block, new `VariationsSection.jsx` reusing `CocktailCard` in Ingredient Detail's own grid pattern, zero new data loading - `recipeRelationships` already fetched since V.2, resolved via V.1's `resolveRecipeVariationContext()` against a local `recipesById` built from already-loaded `computed`; deterministic alphabetical sort added for multi-variation ordering; 2 new domain tests) → **V.4 done** (makeability-tier-aware variation ordering reusing shared `DISPLAY_TIER_ORDER`; a new `shouldShowMakeableVariationFraming()` + extracted `isPossibleTier()` helper drive a compact "Can't make the original? You can make one of these instead." line, base → variations side only; small editor label/helper wording polish; the two real catalogue relationships now live - **Bloody Mary (Practical Version) → Bloody Mary** (pre-existing, note reviewed and kept) and **Zombie (Home Bar Spiced & Dark Spec) → Zombie** (newly linked after a real ingredient/prep comparison), both written through the app's own `save_recipe()` RPC under a simulated real admin identity, not raw SQL; 13 new domain tests) → **V.5 done** (bugfix - the relationship note is directional ("how the variation differs from its base"), but a variation's page rendered it as a caption under the BASE's card, implying it described the base; fixed to render the base's card alone with the note in its own "How this version differs" block, presentation-only, base → variations direction unchanged; 2 new domain tests - **plus a same-day layout-width follow-up**, found via manual screenshots: that new note block was still full container width, so a longer note (Zombie) stretched into one very long line disconnected from the card; fixed by moving the note inside the same per-card grid-column wrapper the "Variations" side already used, so it wraps naturally at column width instead of page width, no new hardcoded size). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer. Supersedes `docs/plans/substitutes-and-variations.md`'s earlier "Part 3"/"Stage C" sketch (kept there as historical record, now redirects here).
 
+21. Editor sticky header - recipe identity while scrolling (small general Recipe Editor UX polish, found during Linked Variations manual testing but not part of that feature) — **done + pushed, 2026-09-13.** Scrolling deep into a long recipe's edit form (past Ingredients/Steps/Taste Tags/Variation Of) left only a generic "Edit Recipe" visible in the sticky top bar, making it easy to lose track of which recipe was being edited. `src/components/Nav.jsx`'s `TopBar` (already sticky - no new sticky implementation needed) gained an optional `subtitle` slot, additive/backward-compatible for every other caller (`DetailScreen`, `AdminScreen`, `AddProductScreen`, `IngredientDetailScreen`, `RequestIngredientScreen`, `AddIngredientsScreen` - none pass `subtitle`, all render byte-for-byte unchanged); both `title`/`subtitle` gained `truncate` (+ `min-w-0` on the wrapping flex item, required for `truncate` to actually clip inside a flex row) so an unusually long title can no longer break the header's height on any caller. New pure `resolveEditorHeaderTitle({ isEditing, existingName, cloneSourceId })` (`src/domain/editorHeader.js`) picks `EditorScreen.jsx`'s title/subtitle: editing an existing recipe shows that recipe's own **persisted** name (`existing?.name`, from the already-loaded `computed` array - never the live, unsaved `name` draft state) as the title, with "Edit Recipe" demoted to the small subtitle above it; creating/cloning keeps the prior generic "New Recipe"/"Clone Recipe" title unchanged, with no subtitle and no live-keystroke mirroring. 6 new domain tests. No change to `save_recipe()`, editor field behavior, Linked Variations logic, recipe permissions/navigation, the ingredient editor, or Cocktail Detail. See the chunk entry below.
+
 Each numbered step is a development chunk boundary for this file.
 
 ## Exact next action (2026-09-13)
@@ -190,9 +192,11 @@ Each numbered step is a development chunk boundary for this file.
 
    **Not touched (out of scope, confirmed by inspection):** `computeAvail()`;
    `computeMakeability()`; adaptation tiers; Buy Next; Home/Library
-   grouping; recipe counts; the relationship schema/stored notes/direction;
-   the sticky editor header (recorded follow-up, not built). `docs/project.md`
-   untouched.
+   grouping; recipe counts; the relationship schema/stored notes/direction.
+   `docs/project.md` untouched. (The sticky editor-header follow-up
+   recorded here was later built as its own general Recipe Editor UX
+   chunk, 2026-09-13 - see the "Editor sticky header" item and its own
+   chunk entry below; not part of the Linked Variations feature itself.)
 
    **Exact next action:** the user reviews V.4 + V.5 (including the layout
    width polish). **Not yet browser-verified this stage** - manual checks
@@ -206,8 +210,9 @@ Each numbered step is a development chunk boundary for this file.
    confirm the V.4 "Can't make the original?" framing still appears/
    disappears correctly; confirm neither recipe's own ingredients/steps/
    badge changed. Do not start another feature until the user reviews
-   this - the sticky editor-header follow-up is explicitly not started
-   yet either.
+   this. (The sticky editor-header follow-up itself has since been built
+   separately - see the "Editor sticky header" item below - unrelated to
+   this Linked Variations review.)
 
 **Ingredient Detail v1 (I.1 through I.4, `docs/plans/ingredient-detail-page.md`) is feature-complete, 2026-09-12/13.** Tappable ingredient links + shared-tier grouping + basic identity (I.1); My Bar Add/Remove action, household-basic-aware (I.2); Can provide / Can be replaced by / Homemade preparation sections (I.3); admin/moderator "Edit ingredient" shortcut deep-linking straight into the existing `IngredientTypeEditor` (I.4 - a deliberate expansion beyond that stage's original "not a new deep-link" text, per the user's own explicit I.4 request). **I.1-I.3 manually verified by the user** (ingredient navigation, Add/Remove My Bar, Homemade Preparation, and the directional relationships all confirmed working); **I.4 has only this session's automated verification (tests + build), not yet a manual/browser check** - as a non-admin, confirm no edit action appears on any `/bar/type/:id`/`/bar/product/:id` page; as admin/moderator, confirm it lands directly on that ingredient's editor, already expanded, in Admin → Ingredient Types. A separate design/visual polish pass on this screen is planned next, on its own go-ahead - not started here. See the chunk-history entries below for the full stage-by-stage detail.
 
@@ -301,6 +306,102 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 needed). No migrations, no schema change - not needed to fix this.
 
 **Commit:** `7a22526`. `docs/project.md` untouched.
+
+---
+
+## Last completed chunk (Editor sticky header - recipe identity while scrolling, 2026-09-13 — shared TopBar gains an optional subtitle, new pure src/domain/editorHeader.js + 6 tests, 2 app files touched)
+
+**Found during Linked Variations manual testing, not part of that feature
+(general Recipe Editor UX).** After scrolling deep into a long recipe's
+edit form (past Ingredients, Steps, Taste Tags, Variation Of), the sticky
+top bar only ever showed a generic "Edit Recipe" - it was easy to lose
+track of which recipe was actually being edited, especially confusing
+right around "Variation of," where the base and the variation are two
+different, easily-confused recipes.
+
+**First checked whether the header was already sticky - it was.**
+`src/components/Nav.jsx`'s `TopBar` was already `sticky top-0 z-10
+backdrop-blur-md` with its own `bg-bg2`/`border-b` background treatment -
+no new sticky implementation was needed or built; per the user's own
+explicit instruction ("if it is: only improve its content"), this chunk
+touches content/layout only.
+
+**Shared change (`src/components/Nav.jsx`):** `TopBar` gained one new
+optional prop, `subtitle` - a small, muted, uppercase caption rendered
+ABOVE `title` inside the same header row, only when a caller passes one.
+Every other existing caller (`DetailScreen.jsx`, `AdminScreen.jsx`,
+`AddProductScreen.jsx`, `IngredientDetailScreen.jsx`,
+`RequestIngredientScreen.jsx`, `AddIngredientsScreen.jsx`) never passes
+`subtitle` and renders byte-for-byte identically to before - purely
+additive, zero regression risk to any other screen. Both `title` and the
+new `subtitle` line also gained `truncate` (plus `min-w-0` on their
+shared flex-1 wrapper - required for `truncate` to actually clip inside a
+flex row instead of just forcing the row wider), so an unusually long
+recipe name can no longer wrap/overflow and break the header's fixed
+height on ANY TopBar caller, not just the editor - a small, broadly-safe
+robustness improvement, since every existing caller's title text already
+fits on one line in practice and therefore renders identically either
+way. No new component, no change to the header's overall height for the
+common (no-subtitle) case, no sticky Save button, no new shadows/
+animations - matches the explicit "keep it subtle" instruction.
+
+**New pure `src/domain/editorHeader.js`
+(`resolveEditorHeaderTitle({ isEditing, existingName, cloneSourceId })`):**
+extracted the title/subtitle decision out of `EditorScreen.jsx`'s JSX so
+it's unit-testable without a component-rendering harness (this project
+has none - no jsdom/testing-library, confirmed again here, matching this
+session's own established testing limits). Editing an existing recipe:
+`title` = that recipe's own name, `subtitle` = "Edit Recipe". Creating or
+cloning: `title` = "New Recipe"/"Clone Recipe" (unchanged from before),
+`subtitle` = `undefined` - deliberately no persisted identity to show yet,
+and deliberately does NOT mirror the live, unsaved Recipe Name field's
+every keystroke either, per the explicit instruction not to do that
+unless clearly desirable.
+
+**Persisted-vs-draft identity - the user's own explicitly stated
+preference, confirmed supported by the existing data flow with zero new
+plumbing:** `EditorScreen.jsx` passes `existingName: existing?.name` -
+`existing` is `computed.find((item) => item.id === id)`, the already-
+loaded, server-synced recipe record - NOT the separate local `name`
+`useState`, which is what the Recipe Name `<Input>` field reads/writes as
+an in-progress, unsaved draft. These are already two entirely separate
+variables in this codebase; wiring the header to `existing.name` instead
+of `name` was the whole fix for "show persisted, not draft" - no new
+state, no new sync logic. Confirmed structurally: opening an existing
+recipe and typing into Recipe Name changes local `name`, which
+`resolveEditorHeaderTitle()` never receives at all - the header keeps
+showing the recipe's last-saved name until Save succeeds and
+`refetchRecipes()` updates `computed`, exactly the user's stated
+preference ("the header answers 'which existing recipe am I editing?'
+while the form shows the unsaved draft").
+
+**Verified:** `corepack pnpm@10.34.3 test` **383/383** (+6 - editing shows
+the persisted name + "Edit Recipe" subtitle; a persisted name is returned
+unchanged, confirming no draft leakage is even possible through this
+function's own signature; a defensive fallback to "Edit Recipe" if
+`existingName` is somehow null/undefined; new-recipe mode; clone mode;
+a long recipe name is returned exactly as-is, unshortened - truncation
+itself is `TopBar`'s own CSS, not something this function does).
+`corepack pnpm@10.34.3 build` clean (182 modules, +1 for the new
+`editorHeader.js`). Diff: `src/components/Nav.jsx` (shared component),
+`src/screens/EditorScreen.jsx` (wiring only - the render call still reads
+`<TopBar {...resolveEditorHeaderTitle(...)} onBack={...} />`, no other
+JSX/logic touched), `src/domain/editorHeader.js` + its test file. No
+change to `save_recipe()`, editor field behavior, Linked Variations logic,
+recipe permissions/navigation, the ingredient editor, or Cocktail Detail -
+confirmed by `git status` showing exactly these 4 files.
+
+**Not yet browser-verified:** open a long recipe (e.g. Bloody Mary
+(Practical Version)), scroll to Preparation/Taste Tags/Variation Of,
+confirm the recipe name stays visible at the top without the header
+growing noticeably taller; change the Recipe Name field WITHOUT saving
+and confirm the sticky header keeps showing the original persisted name,
+not the in-progress edit; check narrow/mobile width for safe truncation
+on both the name and the "Edit Recipe" caption; open New Recipe and
+confirm it still just says "New Recipe" with no subtitle.
+
+**Commit:** see the git log for the exact hash. `docs/project.md`
+untouched.
 
 ---
 
