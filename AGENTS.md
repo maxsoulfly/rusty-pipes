@@ -69,6 +69,10 @@ This repo may contain work from other sessions or tools. Don't delete, rewrite, 
 
 Don't materially expand product scope, change the required stack, or introduce a custom backend server without stopping to ask — see the dev spec's "Required stack" and this file's language rule. Ordinary implementation details (file layout inside an owned directory, naming a helper, choosing a small library within the agreed stack) are fine to decide unilaterally — record the decision and reason in `current-context.md`.
 
+## Session pacing
+
+When the product decision and desired behavior are already established, the next steps are technically clear, the work stays inside the agreed scope, and it's reversible through Git, keep going through multiple related implementation steps in one session rather than stopping after every small stage (inspect → implement → focused tests → continue related steps → full tests/build → relevant DB/RLS checks → update docs → commit/push → stop for manual verification). Still stop when a product/UX decision is needed, requirements are ambiguous, the next action would expand scope, a destructive/risky action needs approval, or manual UI verification is required before the next implementation decision. Don't start unrelated work just because the user is away.
+
 ## Commits
 
 Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, ...). This repo has an established git history on `main` - commit and push a completed, tested stage before handing it to the user for manual verification, without needing to ask each time once that pattern is set for a session. Still ask before an unusually disruptive git operation (force-push, history rewrite, re-running `git init`, etc.). On this Windows/Git-Bash sandbox, author a multi-line or backtick-containing commit message via a heredoc file (`cat > /tmp/msg.txt <<'EOF' ... EOF` then `git commit -F /tmp/msg.txt`) rather than a plain `-m` string - a real shell-quoting bug here mangles backtick-quoted code identifiers otherwise.
