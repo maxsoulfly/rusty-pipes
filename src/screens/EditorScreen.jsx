@@ -27,6 +27,7 @@ import {
   resolveVariationCandidates,
 } from "@/domain/recipeRelationships"
 import { parseUnitLabel } from "@/domain/servings"
+import { useRecipePasteImport } from "@/hooks/useRecipePasteImport"
 import {
   MAX_DRAFTS,
   hasDraftContent,
@@ -38,8 +39,6 @@ import {
   upsertDraftIndexEntry,
   writeDraftContent,
 } from "@/lib/recipeDrafts"
-import { buildRecipeImportPrompt } from "@/schemas/recipeImport"
-import { parseRecipePaste } from "@/schemas/recipePaste"
 import { createRecipe, updateRecipe } from "@/services/recipes"
 
 // Reverses createRecipe's amount/unitLabel encoding (see services/recipes.js)
@@ -366,48 +365,7 @@ export default function EditorScreen() {
   // lands in this same form for the member to review before saving, not a
   // direct commit.
   const showPasteOption = !isEditing && !cloneSourceId
-  const [entryMode, setEntryMode] = useState("scratch")
-  const [pasteJson, setPasteJson] = useState("")
-  const [pasteError, setPasteError] = useState(null)
-  const [promptCopied, setPromptCopied] = useState(false)
-
-  const pastePrompt = buildRecipeImportPrompt({
-    types,
-    glasses,
-    families,
-    tasteTags,
-    aliases: catalog.aliases,
-  })
-
-  const copyPastePrompt = () => {
-    navigator.clipboard.writeText(pastePrompt).catch(() => {})
-    setPromptCopied(true)
-    setTimeout(() => setPromptCopied(false), 2000)
-  }
-
-  const handleFillFromPaste = () => {
-    setPasteError(null)
-    let parsed
-    try {
-      parsed = JSON.parse(pasteJson)
-    } catch (err) {
-      setPasteError(`Couldn't parse that as JSON: ${err.message}`)
-      return
-    }
-    const result = parseRecipePaste(parsed, {
-      types,
-      glasses,
-      families,
-      tasteTags,
-      aliases: catalog.aliases,
-      glassAliases: catalog.glassAliases,
-    })
-    if (!result) {
-      setPasteError(
-        "That doesn't look like a recipe - expected an object with a name, glass, steps, and components.",
-      )
-      return
-    }
+  const applyPastedRecipe = (result) => {
     setName(result.name)
     setDesc(result.description)
     setGlassName(result.glassName)
@@ -418,8 +376,26 @@ export default function EditorScreen() {
     setTasteTagIds(result.tasteTagIds)
     setSteps(result.steps)
     setIngs(result.ings)
-    setEntryMode("scratch")
   }
+  const {
+    entryMode,
+    setEntryMode,
+    pasteJson,
+    setPasteJson,
+    pasteError,
+    promptCopied,
+    pastePrompt,
+    copyPastePrompt,
+    handleFillFromPaste,
+  } = useRecipePasteImport({
+    types,
+    glasses,
+    families,
+    tasteTags,
+    aliases: catalog.aliases,
+    glassAliases: catalog.glassAliases,
+    onFill: applyPastedRecipe,
+  })
 
   const effectiveGlassName = glassName || glasses[0]?.name || ""
 
