@@ -356,8 +356,7 @@ long line) at narrow mobile, normal phone, and desktop widths; confirm
 the "Variations" side (each base's own page) is visually unchanged from
 before.
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `5e325fa`. `docs/project.md` untouched.
 
 ---
 
