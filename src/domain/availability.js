@@ -1,6 +1,6 @@
 // Pure, framework-free availability matching. No React, no Supabase — takes plain
 // data in, returns plain data out, so it can be unit tested in isolation and reused
-// once recipe/ingredient data comes from Supabase instead of src/data/mockData.js.
+// across every screen that matches recipe/ingredient data loaded from Supabase.
 
 /**
  * @param {{ ings: { ingId: string, role: 'required'|'optional'|'garnish', alternativeIds?: string[], alternativeNotes?: Record<string,string> }[] }} cocktail
