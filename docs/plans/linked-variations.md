@@ -1,9 +1,9 @@
 # Linked Variations
 
 **Planning document — 2026-09-13, revised 2026-09-13 (cycle rule
-correction) and now Stages V.1 and V.2 DONE + pushed, 2026-09-13 (V.2
-itself revised the same day - see its own atomicity correction below).**
-Written after
+correction) and now Stages V.1, V.2, and V.3 DONE + pushed, 2026-09-13
+(V.2 itself revised the same day - see its own atomicity correction
+below).** Written after
 Ingredient Detail v1 (I.1–I.4, `docs/plans/ingredient-detail-page.md`)
 shipped and was manually verified. This is Stage C of `docs/plans/
 substitutes-and-variations.md`, which sketched an early version of this
@@ -387,10 +387,15 @@ just keyed by `related_recipe_id` again, excluding the current recipe).
 **Placement:** a compact block near the bottom of `DetailScreen.jsx`,
 after `StepsSection` — the same "supplementary, not primary" position
 "cocktails using this ingredient" already occupies on Ingredient Detail.
-Each row is a real cocktail card/row using the **existing** navigation
-pattern (`onClick={() => navigate(\`/library/${id}\`)}`), not a new
-component — the same tap-to-open-a-recipe behavior every other list in
-this app already has. No new interaction pattern to learn.
+Each card is the **existing** `CocktailCard`, using the same existing
+navigation pattern (`onClick={() => navigate(\`/library/${id}\`)}`) - the
+same tap-to-open-a-recipe behavior every other list in this app already
+has, no new interaction pattern to learn. **Shipped as one new thin
+section component** (`VariationsSection.jsx`, V.3) that only lays out
+existing `CocktailCard`s in the existing grid - not a new card/row kind,
+matching `HeroCard.jsx`/`StepsSection.jsx`/etc.'s own established
+one-file-per-detail-section convention rather than inlining this much
+markup directly into `DetailScreen.jsx`.
 
 **Sort, when there's more than one variation:** makeable first
 (`display.tier`, reusing `groupByDisplayTier`'s own tier order — no new
@@ -673,15 +678,40 @@ without a clean, reliable identity mechanism.
   - see `current-context.md`'s chunk entry for the manual checks still
   owed.
 
-**V.3 — Cocktail Detail relationship UI + navigation.**
-- `DetailScreen.jsx` "Variations" / "Variation of" blocks (read-only,
-  reusing `CocktailCard`/existing navigate-to-recipe pattern), sourced
-  from V.1's domain resolver + the already-loaded `computed` array for
-  each linked recipe's name/badge/availability.
-- *Acceptance:* Bloody Mary shows "Variations: Bloody Mary (Practical
-  Version)"; the practical version shows "Variation of: Bloody Mary";
-  tapping either navigates to the other's own detail page; each shows its
-  own real availability badge, independent of the other.
+**V.3 — Cocktail Detail relationship UI + navigation. DONE, 2026-09-13.**
+- New `src/components/detail/VariationsSection.jsx` - "Variation of" (the
+  one base, if any) and/or "Variations" (direct children, if any), both
+  can show together for a recipe in the middle of a chain. Reuses
+  `CocktailCard` in the exact same grid Ingredient Detail's own "cocktails
+  using this" section already established
+  (`grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5`, a small muted
+  caption under each card for its `note`) - one consistent "related
+  recipes" visual language app-wide, not a new row component. Renders
+  `null` (no section at all) when there's neither a base nor variations -
+  no empty heading. Placed in `DetailScreen.jsx` right after
+  `StepsSection`, before `ActionButtons` - the same "supplementary, not
+  primary" position originally planned.
+- **Zero new data loading** - `recipeRelationships` (the flat table) has
+  been fetched once alongside recipes since V.2; `DetailScreen.jsx` only
+  builds a local `recipesById` map from the already-loaded `computed`
+  array (a plain `useMemo`, no request) and calls V.1's own
+  `resolveRecipeVariationContext()` - no per-card/N+1 fetch, no new
+  Supabase call of any kind for this whole stage.
+- **Deterministic ordering added to `resolveRecipeVariationContext()`**
+  (`src/domain/recipeRelationships.js`) - `variations` is now sorted by
+  name before returning, since the flat fetch has no `ORDER BY` and
+  Postgres never promises row order without one; plain alphabetical
+  sorting, not makeability-aware ranking (that's V.4).
+- *Acceptance:* a recipe with a base shows "Variation of" with that
+  recipe's own card + the saved note (verbatim, never a generated "uses X
+  instead" description - the relationship carries no ingredient-delta
+  data to generate one from); a recipe with direct variations shows
+  "Variations" with all of them; a recipe in the middle of a chain (A←B←C)
+  shows both on B, never C's own grandparent/sibling; tapping any card
+  navigates to `/library/:id`, its own independent detail page with its
+  own real availability badge; a missing/hidden related recipe is dropped
+  silently, never a broken card or a crash; neither block ever appears
+  when there's nothing to show.
 
 **V.4 — Makeability-aware presentation + first real catalogue links.**
 - The "makeable variations first" sort + the conditional "can't make the
@@ -712,11 +742,27 @@ page; collapsing/grouping near-duplicate variations in discovery; any
 
 ## Testing plan
 
-**Status: V.1 and V.2's share of this plan are both DONE - see the exact
-tests/results recorded in the Staged implementation plan's V.1/V.2
-entries above.** The sub-sections below are the original testing plan,
-kept as the checklist each stage was measured against (all satisfied so
-far) plus what's still ahead for V.3-V.4.
+**Status: V.1, V.2, and V.3's share of this plan are all DONE - see the
+exact tests/results recorded in the Staged implementation plan's V.1/V.2/
+V.3 entries above.** The sub-sections below are the original testing
+plan, kept as the checklist each stage was measured against (all
+satisfied so far) plus what's still ahead for V.4.
+
+**V.3's specific additions:** 2 new domain tests for
+`resolveRecipeVariationContext()` - a recipe in the middle of a chain
+resolves BOTH its base and its direct variations at once (proving a
+recipe can legitimately show both blocks); a base with multiple direct
+variations returns all of them sorted deterministically by name
+regardless of the input rows' own order. No RLS-suite change (V.3 reads
+already-fetched, already-RLS-filtered data - no new query, no new
+migration). The new `VariationsSection.jsx` component's own rendering/
+navigation behavior (clicking a card, the section disappearing when
+there's nothing to show) is untested by an automated component test,
+matching this project's own honest, established testing limits (no
+jsdom/component rendering) - `if (!base && variations.length === 0)
+return null` and each card's `onClick={() => navigate(...)}` are both
+one-line, directly-readable guarantees, not something a test framework
+is needed to prove; manual verification is what actually confirms the UI.
 
 **V.2's specific additions (beyond what V.1 already covered):** 3 new
 domain tests for `resolveVariationCandidates()` (self-exclusion; a
@@ -780,17 +826,29 @@ would be — a plain filter, testable as a pure function if it's factored
 out that way (recommended, mirroring `TypeComboBox`'s own precedent of
 taking a pre-filtered list from its caller).
 
-**Manual verification (short, using real recipes):**
-- Open Bloody Mary → confirm "Variations: Bloody Mary (Practical
-  Version)" (once V.4 links it) → tap it → lands on the practical
-  version's own page, own badge, own ingredients.
-- Open the practical version → confirm "Variation of: Bloody Mary" → tap
-  it → back to the original, unaffected.
-- Remove My Bar ownership of an ingredient the original needs but the
-  variation doesn't (or vice versa) → confirm each recipe's own
-  availability badge updates independently, never the other one.
+**Manual verification (short, using real recipes):** originally written
+assuming V.4 had already created the real Bloody Mary link - since V.3
+ships the UI *before* any live catalogue link exists (per the explicit
+instruction not to create one yet), verifying V.3 needs a **test/fixture
+relationship** (any two existing recipes the tester owns/can edit, linked
+through the editor's own "Variation of" field from V.2 - not a database
+edit) rather than the specific Bloody Mary pair:
+- Using the recipe editor (V.2), set some recipe B's "Variation of" to
+  some recipe A, with a note → open A → confirm "Variations" shows B →
+  tap it → lands on B's own page, own badge, own ingredients.
+- Open B → confirm "Variation of" shows A with the saved note → tap it →
+  back to A, unaffected.
+- Remove My Bar ownership of an ingredient A needs but B doesn't (or vice
+  versa) → confirm each recipe's own availability badge updates
+  independently, never the other one.
 - Confirm neither recipe's ingredient list, steps, or badge changed
   merely from linking/unlinking them.
+- Link a third recipe C as a variation of B (A←B←C) → confirm B now shows
+  BOTH "Variation of: A" and "Variations: C" → confirm A does **not**
+  show C anywhere, and C does **not** show A anywhere (one hop only).
+- Unlink the test relationship(s) afterward so no leftover test data is
+  mistaken for a real catalogue link - see V.4 for the actual Bloody
+  Mary/Zombie links, on a separate go-ahead.
 
 ---
 

@@ -124,6 +124,41 @@ describe("resolveRecipeVariationContext", () => {
     expect(result.variations).toEqual([])
   })
 
+  it("a recipe in the middle of a chain resolves BOTH its base and its direct variations at once (Stage V.3 - A<-B<-C: B shows base=A and variations=[C])", () => {
+    const fullRecipesById = new Map([
+      ...recipesById,
+      ["c", { id: "c", name: "Bloody Mary (Extra Spicy)" }],
+    ])
+    const result = resolveRecipeVariationContext("b", chain, fullRecipesById)
+    expect(result.base).toEqual({
+      recipe: { id: "a", name: "Bloody Mary" },
+      note: "Simpler home version",
+    })
+    expect(result.variations).toEqual([
+      { recipe: { id: "c", name: "Bloody Mary (Extra Spicy)" }, note: null },
+    ])
+  })
+
+  it("a base with multiple direct variations returns all of them, sorted deterministically by name regardless of input order (Stage V.3)", () => {
+    const multiRecipesById = new Map([
+      ["a", { id: "a", name: "Bloody Mary" }],
+      ["z", { id: "z", name: "Zombie Variation" }],
+      ["m", { id: "m", name: "Mild Variation" }],
+    ])
+    // Deliberately out-of-alphabetical-order input rows - the output must
+    // not just echo whatever order the rows happened to arrive in.
+    const relationships = [
+      { recipeId: "z", relatedRecipeId: "a", note: null },
+      { recipeId: "m", relatedRecipeId: "a", note: null },
+    ]
+    const result = resolveRecipeVariationContext(
+      "a",
+      relationships,
+      multiRecipesById,
+    )
+    expect(result.variations.map((v) => v.recipe.id)).toEqual(["m", "z"])
+  })
+
   it("a recipe with neither a base nor variations resolves to { base: null, variations: [] } cleanly", () => {
     const result = resolveRecipeVariationContext(
       "z",

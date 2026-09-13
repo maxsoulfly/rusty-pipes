@@ -85,6 +85,15 @@ export function resolveVariationCandidates(recipes, excludeRecipeId) {
  * broken half-populated entry - a screen can render this result directly
  * with no further null-checking of its own.
  *
+ * Stage V.3 - `variations` is sorted by name (locale-aware, deterministic)
+ * before returning. The underlying `relationships` array has no
+ * guaranteed row order (no `ORDER BY` on the flat fetch, and Postgres
+ * itself never promises one without one), so relying on fetch/insertion
+ * order would make "Variations" render in a different order from one
+ * reload to the next. This is plain alphabetical determinism only - not
+ * makeability-aware ranking (that's a V.4 concern, deliberately not built
+ * here).
+ *
  * @param {string} recipeId
  * @param {RecipeRelationshipRow[]} relationships
  * @param {Map<string, object>} recipesById - e.g. built from `computed`
@@ -112,6 +121,7 @@ export function resolveRecipeVariationContext(
       return recipe ? { recipe, note: v.note } : null
     })
     .filter(Boolean)
+    .sort((a, b) => a.recipe.name.localeCompare(b.recipe.name))
 
   return { base, variations }
 }

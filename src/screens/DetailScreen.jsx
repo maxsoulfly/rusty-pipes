@@ -8,8 +8,10 @@ import { HeroCard } from "@/components/detail/HeroCard"
 import { IngredientsSection } from "@/components/detail/IngredientsSection"
 import { ServingsSelector } from "@/components/detail/ServingsSelector"
 import { StepsSection } from "@/components/detail/StepsSection"
+import { VariationsSection } from "@/components/detail/VariationsSection"
 import { Btn, ConfirmPanel } from "@/components/primitives"
 import { buildSubstituteSuggester } from "@/domain/substituteSuggestions"
+import { resolveRecipeVariationContext } from "@/domain/recipeRelationships"
 import {
   deleteRecipe,
   publishRecipe,
@@ -34,6 +36,7 @@ export default function DetailScreen() {
     refetchRecipes,
     catalog,
     ingredientTypesById,
+    recipeRelationships,
   } = useOutletContext()
 
   // Catalogue "Suggested substitutes" (Stage B) - display-only hints on
@@ -47,6 +50,16 @@ export default function DetailScreen() {
         (tid) => ingredientTypesById.get(tid)?.name ?? tid,
       ),
     [catalog.ingredientSubstitutions, owned, ingredientTypesById],
+  )
+
+  // Linked Variations Stage V.3 - `recipeRelationships` (the flat table,
+  // already fetched once alongside recipes since V.2 - no new fetch, no
+  // per-card/N+1 request here) resolved against the already-loaded
+  // `computed` array via V.1's own domain resolver. `recipesById` only
+  // needs building once per `computed` change, not per render.
+  const recipesById = useMemo(
+    () => new Map(computed.map((r) => [r.id, r])),
+    [computed],
   )
   const [showConfirmShare, setShowConfirmShare] = useState(false)
   const [showConfirmUnpublish, setShowConfirmUnpublish] = useState(false)
@@ -98,6 +111,19 @@ export default function DetailScreen() {
   // Deliberately isAdmin, not isStaff/isModerator - classic-recipe editing
   // is out of moderator's scope.
   const canEdit = isOwner || (isAdmin && c.source === "classic")
+
+  // Linked Variations Stage V.3 - one hop in each direction only (never a
+  // grandparent/sibling/recursive tree - see resolveRecipeVariationContext's
+  // own doc comment). Purely presentational: `base`/`variations` are read
+  // here for display and navigation only, never fed into computeAvail()/
+  // computeMakeability()/recommendations.js - `c`'s own `display`/`avail`
+  // above is completely unaffected by whatever this resolves to, and a
+  // makeable variation never makes `c` itself read as makeable.
+  const { base: variationBase, variations } = resolveRecipeVariationContext(
+    c.id,
+    recipeRelationships,
+    recipesById,
+  )
 
   const handlePublish = async () => {
     setPublishing(true)
@@ -222,6 +248,8 @@ export default function DetailScreen() {
         />
 
         <StepsSection steps={c.steps} />
+
+        <VariationsSection base={variationBase} variations={variations} />
 
         <ActionButtons
           c={c}

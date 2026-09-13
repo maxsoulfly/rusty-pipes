@@ -33,22 +33,19 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
 19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **I.1 through I.4 DONE + pushed, 2026-09-12/13 - v1 COMPLETE.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, "cocktails using this," and (for staff) an edit shortcut → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, the single shared `useInventory()` instance, `isPreparationSatisfiable()`, and the existing `IngredientTypeEditor`; no schema changes (every field/table this feature surfaces already existed, just unrendered to members). Staged **I.1 done** (tappable ingredient-name links + shared-tier grouping + basic identity) → **I.2 done** (My Bar Add/Remove action, household-basic-aware) → **I.3 done** (Can provide / Can be replaced by / Homemade preparation sections, each directional, reusing `IngredientLink`) → **I.4 done** (admin/moderator-only "Edit ingredient" shortcut, deep-linking straight into that ingredient type's existing editor - the plan's original "not a new deep-link" deferral was explicitly superseded by the user's own I.4 request; see item 0). **I.1-I.3 manually verified by the user; I.4 is not yet browser-verified** - see item 0 for the exact owed check. See the plan doc for the full audit/design.
 
-20. Linked Variations (new feature, `docs/plans/linked-variations.md`) — **V.1 + V.2 DONE + pushed 2026-09-13.** Lets two otherwise-independent recipes declare "this is a variation of that" (e.g. Bloody Mary ↔ Bloody Mary (Practical Version)) as pure metadata/navigation - never ingredient/instruction inheritance, never affecting either recipe's own availability. One base → many variations (no general many-to-many), directional storage (variation points at its base) with bidirectional display (one hop only); **a relationship cycle is rejected at write time** (corrected 2026-09-13 from the original plan's "cycles are harmless, don't bother preventing them" stance - a `BEFORE INSERT/UPDATE` trigger walks the proposed base's chain, since `unique(recipe_id)` already guarantees the graph is a forest of trees, so this is a single linked-list walk, not a graph algorithm), a new standalone `recipe_relationships` table (not a `recipes` column - avoids widening its column-restricted update grant), reusing the existing `recipe_is_visible`/`recipe_is_editable` RLS helpers for authorization. Batch import explicitly does NOT gain a variation reference (no reliable identity mechanism at import time, per AGENTS.md's own no-fuzzy-matching rule) - admin-editor-only for v1. Staged **V.1 done** (schema + migration + cycle-prevention trigger + RLS + a pure one-hop `src/domain/recipeRelationships.js` resolver, 16 new tests) → **V.2 done** (recipe editor "Variation of" field + a new `RecipeComboBox`; **atomicity corrected same-day** - a first-pass `set_recipe_variation_of()` RPC only made the relationship's own write atomic and stopped a cyclic *rejection* from allowing later writes, but didn't stop an already-*succeeded* relationship write from staying committed if a later step then failed; replaced by one `save_recipe()` RPC that owns the recipe's fields, components, taste tags, AND the relationship in a single transaction, covering create too - 3 domain tests + a full RLS-suite block proving the actual rollback) → **V.3 NOT started** (Cocktail Detail "Variations"/"Variation of" UI) → **V.4 NOT started** (makeability-aware sort/framing + the first two real catalogue links: Bloody Mary/Bloody Mary (Practical Version) and Zombie/Zombie (Home Bar Spiced & Dark Spec), both already live and unmodified). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer. Supersedes `docs/plans/substitutes-and-variations.md`'s earlier "Part 3"/"Stage C" sketch (kept there as historical record, now redirects here).
+20. Linked Variations (new feature, `docs/plans/linked-variations.md`) — **V.1 + V.2 + V.3 DONE + pushed 2026-09-13.** Lets two otherwise-independent recipes declare "this is a variation of that" (e.g. Bloody Mary ↔ Bloody Mary (Practical Version)) as pure metadata/navigation - never ingredient/instruction inheritance, never affecting either recipe's own availability. One base → many variations (no general many-to-many), directional storage (variation points at its base) with bidirectional display (one hop only); **a relationship cycle is rejected at write time** (corrected 2026-09-13 from the original plan's "cycles are harmless, don't bother preventing them" stance - a `BEFORE INSERT/UPDATE` trigger walks the proposed base's chain, since `unique(recipe_id)` already guarantees the graph is a forest of trees, so this is a single linked-list walk, not a graph algorithm), a new standalone `recipe_relationships` table (not a `recipes` column - avoids widening its column-restricted update grant), reusing the existing `recipe_is_visible`/`recipe_is_editable` RLS helpers for authorization. Batch import explicitly does NOT gain a variation reference (no reliable identity mechanism at import time, per AGENTS.md's own no-fuzzy-matching rule) - admin-editor-only for v1. Staged **V.1 done** (schema + migration + cycle-prevention trigger + RLS + a pure one-hop `src/domain/recipeRelationships.js` resolver, 16 new tests) → **V.2 done** (recipe editor "Variation of" field + a new `RecipeComboBox`; **atomicity corrected same-day** - a first-pass `set_recipe_variation_of()` RPC only made the relationship's own write atomic and stopped a cyclic *rejection* from allowing later writes, but didn't stop an already-*succeeded* relationship write from staying committed if a later step then failed; replaced by one `save_recipe()` RPC that owns the recipe's fields, components, taste tags, AND the relationship in a single transaction, covering create too - 3 domain tests + a full RLS-suite block proving the actual rollback) → **V.3 done** (`DetailScreen.jsx` gains a "Variation of"/"Variations" block, new `VariationsSection.jsx` reusing `CocktailCard` in Ingredient Detail's own grid pattern, zero new data loading - `recipeRelationships` already fetched since V.2, resolved via V.1's `resolveRecipeVariationContext()` against a local `recipesById` built from already-loaded `computed`; deterministic alphabetical sort added for multi-variation ordering; 2 new domain tests) → **V.4 NOT started** (makeability-aware sort/framing + the first two real catalogue links: Bloody Mary/Bloody Mary (Practical Version) and Zombie/Zombie (Home Bar Spiced & Dark Spec), both already live and unmodified). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer. Supersedes `docs/plans/substitutes-and-variations.md`'s earlier "Part 3"/"Stage C" sketch (kept there as historical record, now redirects here).
 
 Each numbered step is a development chunk boundary for this file.
 
 ## Exact next action (2026-09-13)
 
-0. **`docs/plans/linked-variations.md` — Stages V.1 + V.2 DONE + pushed 2026-09-13.** Next feature after Ingredient Detail v1: let two otherwise-independent recipes declare "this is a variation of that" (e.g. Bloody Mary / Bloody Mary (Practical Version)) as pure metadata + navigation - never ingredient/instruction inheritance, never affecting either recipe's own availability. **Read that file before starting the next stage** - it's the source of truth for this item.
+0. **`docs/plans/linked-variations.md` — Stages V.1 + V.2 + V.3 DONE + pushed 2026-09-13.** Next feature after Ingredient Detail v1: let two otherwise-independent recipes declare "this is a variation of that" (e.g. Bloody Mary / Bloody Mary (Practical Version)) as pure metadata + navigation - never ingredient/instruction inheritance, never affecting either recipe's own availability. **Read that file before starting the next stage** - it's the source of truth for this item.
 
    **Cycle-rule correction applied before/during V.1:** the original plan
    treated a relationship cycle as harmless. The user corrected this: a
    cycle (A→B→A, or a longer A→B→C→A) is invalid catalogue data even
    though member-facing resolution stays one hop only - self-links and
-   any cycle must be rejected, chains may otherwise exist. The plan doc's
-   "Relationship model" section keeps the original (superseded) reasoning
-   struck through as historical record, with the corrected rule
-   immediately below it.
+   any cycle must be rejected, chains may otherwise exist.
 
    **V.1 shipped:** migration `20260913120000_recipe_relationships.sql` -
    the `recipe_relationships` table (`recipe_id` = variation,
@@ -59,69 +56,92 @@ Each numbered step is a development chunk boundary for this file.
    that rejects any cycle - cheap specifically because `unique(recipe_id)`
    already guarantees the graph is a forest of trees, so checking a
    proposed edge is one linked-list walk, not a general graph traversal.
-   New pure `src/domain/recipeRelationships.js` (one-hop resolvers, 16
-   tests), not yet wired to any fetch/UI at that point.
+   New pure `src/domain/recipeRelationships.js` (one-hop resolvers).
 
-   **V.2 shipped (recipe editor assignment):** `EditorScreen.jsx` gains a
-   "Variation of" field (new `RecipeComboBox`, visible recipes minus
-   self) + an optional note, draft-only until Save, prefilled on edit from
-   the existing relationship. New pure `resolveVariationCandidates()`
-   (self-exclusion only, no client-side cycle filtering - the DB trigger
-   stays the sole cycle authority). New `fetchRecipeRelationships()`
-   wired into `useRecipes.js`/outlet context (the fetch V.1 deferred).
+   **V.2 shipped (recipe editor assignment + atomicity fix):**
+   `EditorScreen.jsx` gains a "Variation of" field (`RecipeComboBox`,
+   visible recipes minus self) + an optional note, draft-only until Save.
+   New pure `resolveVariationCandidates()` (self-exclusion only, no
+   client-side cycle filtering - the DB trigger stays the sole cycle
+   authority). `fetchRecipeRelationships()` wired into
+   `useRecipes.js`/outlet context. **Atomicity corrected the same day
+   before approval:** the user caught that a first-pass
+   `set_recipe_variation_of()` RPC left the relationship able to commit
+   even if a later recipe-field/component/tag write then failed - a
+   half-updated state, and the client cannot fix this with a compensating
+   write (explicitly ruled out). Fixed by dropping that RPC for one atomic
+   `save_recipe(p_recipe_id, p_fields, p_components, p_taste_tag_ids,
+   p_variation_of)` (migration `20260913140000`, `SECURITY INVOKER`,
+   mirrors `save_ingredient_type()`) owning the recipe's fields, full
+   component/alternative set, full taste-tag set, AND the relationship in
+   ONE transaction; `p_recipe_id: null` creates a new private recipe, so
+   both `createRecipe()`/`updateRecipe()` now call this one RPC.
    **Deferred, not built:** the clone-flow "this is a variation of the
-   clone source" opt-in checkbox (not part of this turn's explicit V.2
-   scope).
+   clone source" opt-in checkbox.
 
-   **V.2's atomicity - corrected the same day, before approval.** First
-   pass: a `set_recipe_variation_of()` RPC (migration `20260913130000`)
-   made the relationship's own delete-then-insert atomic, called first in
-   `updateRecipe()` so a cyclic *rejection* stopped later writes. **The
-   user caught the remaining gap before approving V.2:** if the
-   relationship write *succeeded* and a *later* step (the recipe's own
-   fields/components/tags) then failed, the relationship had already
-   committed - half-updated relative to the rest of the recipe, exactly
-   the state this feature must prevent, and the client cannot fix this
-   with a compensating write (explicitly ruled out). **Final fix:**
-   `set_recipe_variation_of()` dropped; a new `save_recipe(p_recipe_id,
-   p_fields, p_components, p_taste_tag_ids, p_variation_of)` (migration
-   `20260913140000`, `SECURITY INVOKER`, mirrors `save_ingredient_type()`'s
-   own established pattern) now owns the recipe's fields, its full
-   component/alternative set, its full taste-tag set, AND the relationship
-   in ONE transaction - a failure anywhere rolls back everything.
-   `p_recipe_id: null` creates a new private recipe (`owner_id =
-   auth.uid()`), so the same guarantee now covers `createRecipe()` too,
-   not just `updateRecipe()` - both now call this one RPC.
-   `createClassicRecipes()` (batch import) is unchanged, a separate,
-   already-per-row-isolated flow with no relationship support.
+   **V.3 shipped (Cocktail Detail relationship UI + navigation),
+   2026-09-13:** new `src/components/detail/VariationsSection.jsx` -
+   "Variation of" (the one base, if any) and/or "Variations" (direct
+   children, if any); both can show together for a recipe in the middle
+   of a chain (A←B←C: B shows both). Reuses the existing `CocktailCard`
+   in the exact same grid Ingredient Detail's own "cocktails using this"
+   section already established (`grid-cols-2 md:grid-cols-3
+   lg:grid-cols-4 gap-2.5`, small muted caption under each card for its
+   `note`) - one consistent "related recipes" visual language app-wide,
+   not a new row component. Renders `null` (no section, no empty heading)
+   when there's neither a base nor variations. Placed in `DetailScreen.jsx`
+   right after `StepsSection`, before `ActionButtons` - supplementary
+   position, not a hero feature. Each card navigates via
+   `navigate(\`/library/${id}\`)` (the real `/library/:id` route), so
+   every related recipe lands on its own independent detail page with its
+   own real availability badge - a makeable variation never makes its
+   base read as makeable, and vice versa. **Zero new data loading** -
+   `recipeRelationships` (the flat table) has been fetched once alongside
+   recipes since V.2; `DetailScreen.jsx` only builds a local `recipesById`
+   map from the already-loaded `computed` array (a plain `useMemo`, no
+   request) and calls V.1's own `resolveRecipeVariationContext()` - no
+   per-card/N+1 fetch, no new Supabase call at all. **Deterministic
+   ordering added** to `resolveRecipeVariationContext()` itself
+   (`src/domain/recipeRelationships.js`) - `variations` is now sorted by
+   name before returning, since the flat fetch has no `ORDER BY` and
+   Postgres never promises row order without one; plain alphabetical, not
+   makeability-aware ranking (that's V.4). A missing/hidden related
+   recipe is dropped silently by the existing V.1 resolver (unchanged
+   behavior) - never a broken card or a crash.
 
-   **Verified:** all three migrations (`...120000`/`...130000`/`...140000`)
-   pushed clean via `supabase db push --linked`; `db advisors --type
-   security` shows no new finding for any new function (including
-   `save_recipe()`, `SECURITY INVOKER` so the linter's SECURITY DEFINER
-   warning class doesn't even apply). `supabase/tests/rls_suite.sql`'s
-   `set_recipe_variation_of()` block was replaced with a `save_recipe()`
-   block proving **the actual regression**: a call that renames a recipe
-   AND reassigns it to a cycle-forming base is rejected wholesale, and
-   afterward BOTH the name AND the original relationship are unchanged
-   (not half-applied either way) - plus a successful combined field+
-   relationship save, relationship removal, the create path, and non-
-   editor/anon denial. **Full suite passes.** `corepack pnpm@10.34.3 test`
-   **360/360** (+19 total this feature). `corepack pnpm@10.34.3 build`
-   clean (180 modules).
+   **Verified:** all three migrations
+   (`...120000`/`...130000`/`...140000`) pushed clean via `supabase db
+   push --linked`; `db advisors --type security` shows no new finding.
+   `supabase/tests/rls_suite.sql`'s `save_recipe()` block proves a call
+   that renames a recipe AND reassigns it to a cycle-forming base is
+   rejected wholesale, with BOTH the name AND the original relationship
+   unchanged afterward - plus a successful combined field+relationship
+   save, relationship removal, the create path, and non-editor/anon
+   denial. **Full RLS suite passes.** V.3 added 2 new domain tests
+   (chain-middle resolves both base+variations at once; multi-variation
+   deterministic alphabetical sort regardless of input order).
+   `corepack pnpm@10.34.3 test` **362/362** (+21 total this feature).
+   `corepack pnpm@10.34.3 build` clean (181 modules).
 
-   **Not touched (later stages):** no Cocktail Detail UI (V.3), no
-   catalogue links (Bloody Mary/Zombie pairs, V.4), no import support.
-   `docs/project.md` untouched.
+   **Not touched (later stage / explicitly out of scope):** no live
+   catalogue links yet (Bloody Mary/Zombie pairs, V.4); no
+   makeability-aware variation ranking (V.4); no import support; no
+   changes to `computeAvail()`/`computeMakeability()`/adaptation
+   tiers/Buy Next/Home/Library grouping/recipe counts. `docs/project.md`
+   untouched.
 
-   **Exact next action:** the user reviews the corrected V.2 and decides
-   whether/when to proceed to V.3 (Cocktail Detail "Variations"/"Variation
-   of" UI). **Not yet browser-verified** - two manual checks owed: (1)
-   open an existing private recipe's editor, set "Variation of" to
-   another visible recipe, add a note, Save, reopen the editor and
-   confirm it reloads correctly; (2) attempt to assign a base that would
-   create a cycle and confirm a clear error appears with the draft
-   intact, not a blank/reset form.
+   **Exact next action:** the user reviews V.3 and decides whether/when
+   to proceed to V.4 (the live Bloody Mary/Zombie catalogue relationships
+   + any makeability-aware ordering). **Not yet browser-verified** -
+   manual checks owed: (1) the two V.2 checks noted previously (editor
+   "Variation of" set/reload; cyclic-assignment error with draft intact);
+   (2) V.3: using a test/fixture relationship (create one through the
+   editor, not a live catalogue link), confirm a variation's detail page
+   shows "Variation of" with the base card + note, the base's own detail
+   page shows "Variations" with that card, tapping either navigates
+   correctly and back-navigation still works normally, and a recipe with
+   no relationship shows neither section; then unlink the test
+   relationship(s) afterward.
 
 **Ingredient Detail v1 (I.1 through I.4, `docs/plans/ingredient-detail-page.md`) is feature-complete, 2026-09-12/13.** Tappable ingredient links + shared-tier grouping + basic identity (I.1); My Bar Add/Remove action, household-basic-aware (I.2); Can provide / Can be replaced by / Homemade preparation sections (I.3); admin/moderator "Edit ingredient" shortcut deep-linking straight into the existing `IngredientTypeEditor` (I.4 - a deliberate expansion beyond that stage's original "not a new deep-link" text, per the user's own explicit I.4 request). **I.1-I.3 manually verified by the user** (ingredient navigation, Add/Remove My Bar, Homemade Preparation, and the directional relationships all confirmed working); **I.4 has only this session's automated verification (tests + build), not yet a manual/browser check** - as a non-admin, confirm no edit action appears on any `/bar/type/:id`/`/bar/product/:id` page; as admin/moderator, confirm it lands directly on that ingredient's editor, already expanded, in Admin → Ingredient Types. A separate design/visual polish pass on this screen is planned next, on its own go-ahead - not started here. See the chunk-history entries below for the full stage-by-stage detail.
 
@@ -215,6 +235,75 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 needed). No migrations, no schema change - not needed to fix this.
 
 **Commit:** `7a22526`. `docs/project.md` untouched.
+
+---
+
+## Last completed chunk (Linked Variations Stage V.3 implemented - Cocktail Detail relationship UI + navigation, 2026-09-13 — 1 new component + 2 app files + domain resolver ordering fix, no migrations/catalogue changes)
+
+**What shipped.** Member-facing UI for Linked Variations: a recipe that is a
+variation shows **Variation of** [base recipe]; a recipe with direct
+variations shows **Variations** [variation recipe(s)]; a recipe in the
+middle of a chain shows both at once. One-hop only, exactly matching
+`resolveRecipeVariationContext()`'s own rule - never a grandparent/sibling/
+recursive family tree.
+
+**New file:** `src/components/detail/VariationsSection.jsx` - renders `null`
+(no section, no empty heading) when there's neither a base nor variations;
+otherwise reuses the existing `CocktailCard` in the exact same grid
+`IngredientDetailScreen.jsx`'s own "cocktails using this" section already
+established (`grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5`, a small
+muted caption under each card for its optional `note`, shown verbatim -
+never a generated "uses X instead" description, since the relationship
+carries no ingredient-delta data to generate one from). Calls
+`useNavigate()` internally (matching `ActionButtons.jsx`'s own precedent)
+and navigates each card via `navigate(\`/library/${id}\`)`, the real
+`/library/:id` route - only the card itself is clickable, not the whole
+section, and each target recipe lands on its own independent detail page
+with its own real availability badge (a makeable variation never makes its
+base read as makeable, and vice versa - confirmed by inspection that
+`computeAvail()`/`computeMakeability()`/`recommendations.js` have no
+cross-recipe parameter this could even attach to).
+
+**`src/screens/DetailScreen.jsx`:** added `recipeRelationships` to the
+existing `useOutletContext()` destructure (already fetched once alongside
+recipes since V.2 - **zero new data loading**, no new Supabase call of any
+kind this stage); builds a local `recipesById` map from the already-loaded
+`computed` array via a plain `useMemo` (no request, no per-card/N+1 fetch);
+calls V.1's own `resolveRecipeVariationContext(c.id, recipeRelationships,
+recipesById)` and renders `<VariationsSection base={variationBase}
+variations={variations} />` right after `StepsSection`, before
+`ActionButtons` - supplementary position in the information hierarchy, not
+a hero feature.
+
+**`src/domain/recipeRelationships.js`:** `resolveRecipeVariationContext()`'s
+`variations` array now sorted by `recipe.name.localeCompare()` before
+returning - the flat `recipe_relationships` fetch has no `ORDER BY`, and
+Postgres never promises row order without one, so this was needed to keep
+"Variations" rendering in the same order across reloads. Plain alphabetical
+determinism only, deliberately NOT makeability-aware ranking (assigned to
+V.4, not V.3, per the user's own explicit scope boundary).
+
+**New tests** in `src/domain/recipeRelationships.test.js`: a chain-middle
+recipe (A←B←C, resolving B) returns both its base (A) and its variations
+([C]) at once; a base with multiple direct variations returns all of them
+sorted deterministically by name regardless of the input rows' own order.
+
+**Verified:** `corepack pnpm@10.34.3 test` **362/362** (+2 from this
+stage). `corepack pnpm@10.34.3 build` clean (181 modules). Diff reviewed
+for V.3 scope creep - none found; no migration, no RLS change, no touch to
+`computeAvail()`/`computeMakeability()`/adaptation tiers/Buy Next/Home/
+Library grouping/recipe counts. **Not yet browser-verified** - manual check
+owed using a test/fixture relationship (not a live catalogue link): a
+variation's page shows "Variation of" + note, its base's page shows
+"Variations", a chain's middle recipe shows both, tapping either navigates
+correctly with normal back-navigation, and a recipe with no relationship
+shows neither section.
+
+**Not built (explicitly out of scope for V.3):** no live Bloody Mary/Zombie
+catalogue relationships (deferred to V.4, per explicit instruction); no
+makeability-aware variation ordering (V.4).
+
+**Commit:** see the git log for the exact hash. `docs/project.md` untouched.
 
 ---
 
