@@ -310,8 +310,7 @@ layer + the RLS suite changed (no `EditorScreen.jsx`/UI change needed);
 tooling in this sandbox) - the same two manual checks from the original
 V.2 chunk below remain owed.
 
-**Commit:** see the git log for the exact hash. `docs/project.md`
-untouched.
+**Commit:** `0033c98`. `docs/project.md` untouched.
 
 ---
 
