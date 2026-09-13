@@ -1,10 +1,8 @@
 import { useMemo, useRef, useState } from "react"
+import { LinkedTypeListEditor } from "@/components/admin/LinkedTypeListEditor"
+import { PreparationEditor } from "@/components/admin/PreparationEditor"
 import { ShapePicker } from "@/components/admin/ShapePicker"
-import { TypeComboBox } from "@/components/admin/TypeComboBox"
-import { StepsEditor } from "@/components/editor/StepsEditor"
-import { IconDots, IconX } from "@/components/icons"
 import {
-  BottomSheet,
   Btn,
   Card,
   CategoryPicker,
@@ -13,7 +11,6 @@ import {
   OwnedToggle,
   Select,
 } from "@/components/primitives"
-import { NON_VOLUME_UNITS } from "@/data/constants"
 import { resolveIngredientType } from "@/domain/ingredientResolution"
 import {
   BAR_PRIORITIES,
@@ -41,6 +38,13 @@ import { saveIngredientType } from "@/services/catalog"
 // The one catalog-shape rule (duplicate name / parent hierarchy) still runs
 // client-side via validateIngredientImport()'s single-item path before the
 // save call.
+//
+// This shell owns every draft's state, the dirty-check snapshot, and
+// handleSave - the "Can provide"/"Can be replaced by" lists render through
+// the shared LinkedTypeListEditor (src/components/admin/), and the
+// homemade-preparation block through PreparationEditor (same dir); both are
+// fully controlled (value + onChange), so this file stays the only place
+// that ever calls saveIngredientType().
 
 const LABEL =
   "text-xs font-bold text-tx2 font-display uppercase tracking-[0.06em]"
@@ -48,22 +52,6 @@ const LABEL =
 // secondary action so "Save changes" is the only filled/prominent button.
 const QUIET_BTN =
   "min-h-11 px-3 rounded-sm border border-bdr bg-transparent text-tx2 text-[13px] font-display font-semibold cursor-pointer disabled:opacity-50"
-const MENU_ITEM =
-  "w-full text-left py-2.5 px-3 min-h-11 rounded-sm text-[13px] text-tx bg-surface border border-bdr cursor-pointer"
-
-// Display-only reorder for a preparation input's unit picker (Stage D.4) -
-// weight is the common case for a homemade preparation (sugar, salt, ...),
-// so "g" moves up next to "ml" instead of sitting last. Reuses
-// NON_VOLUME_UNITS as-is (same allowed vocabulary, no duplicate list) -
-// that array's own order stays untouched everywhere else, since position 0
-// ("part") is a load-bearing fallback default in src/schemas/recipePaste.js,
-// not just a display preference.
-const PREPARATION_UNIT_OPTIONS = [
-  "ml",
-  "g",
-  "oz",
-  ...NON_VOLUME_UNITS.filter((u) => u !== "g"),
-]
 
 function normConversions(list) {
   return [...list]
@@ -199,13 +187,6 @@ export function IngredientTypeEditor({
     [formConversions, type.id, typeNameById],
   )
   const [draftConversions, setDraftConversions] = useState(initialConversions)
-  const [addingConv, setAddingConv] = useState(false)
-  const [newConvPreparedId, setNewConvPreparedId] = useState(null)
-  const [newConvGuidance, setNewConvGuidance] = useState("")
-  const [editingConvIdx, setEditingConvIdx] = useState(null)
-  const [convEditText, setConvEditText] = useState("")
-  const [menuForIdx, setMenuForIdx] = useState(null)
-  const menuAnchorRef = useRef(null)
 
   // Pickable "prepared" types: not this type, not already in the draft, and
   // not one that already provides THIS type (the DB trigger rejects that
@@ -221,41 +202,6 @@ export function IngredientTypeEditor({
       (t) => t.id !== type.id && !linked.has(t.id) && !providesThis.has(t.id),
     )
   }, [types, draftConversions, formConversions, type.id])
-
-  const openAddConv = () => {
-    setAddingConv(true)
-    setNewConvPreparedId(null)
-    setNewConvGuidance("")
-  }
-  const commitAddConv = () => {
-    if (!newConvPreparedId || !newConvGuidance.trim()) return
-    setDraftConversions([
-      ...draftConversions,
-      { preparedTypeId: newConvPreparedId, guidance: newConvGuidance.trim() },
-    ])
-    setAddingConv(false)
-  }
-  const removeConvAt = (idx) =>
-    setDraftConversions(draftConversions.filter((_, i) => i !== idx))
-  const startConvEdit = (idx) => {
-    setEditingConvIdx(idx)
-    setConvEditText(draftConversions[idx].guidance)
-  }
-  const commitConvEdit = () => {
-    const text = convEditText.trim()
-    if (!text) return
-    setDraftConversions(
-      draftConversions.map((c, i) =>
-        i === editingConvIdx ? { ...c, guidance: text } : c,
-      ),
-    )
-    setEditingConvIdx(null)
-  }
-  const openMenu = (e, idx) => {
-    menuAnchorRef.current = e.currentTarget
-    setMenuForSubIdx(null)
-    setMenuForIdx(idx)
-  }
 
   // ── "Can be replaced by" draft (from side = this type) - Stage B ──────
   // Directional catalogue suggestion. NOT symmetric, no inverse guard, no
@@ -274,12 +220,6 @@ export function IngredientTypeEditor({
     [ingredientSubstitutions, type.id, typeNameById],
   )
   const [draftSubstitutes, setDraftSubstitutes] = useState(initialSubstitutes)
-  const [addingSub, setAddingSub] = useState(false)
-  const [newSubToId, setNewSubToId] = useState(null)
-  const [newSubNote, setNewSubNote] = useState("")
-  const [editingSubIdx, setEditingSubIdx] = useState(null)
-  const [subEditText, setSubEditText] = useState("")
-  const [menuForSubIdx, setMenuForSubIdx] = useState(null)
 
   // Pickable "replacement" types: not this type and not already listed.
   // Deliberately NO inverse filter - "White Rum can be replaced by Spiced
@@ -288,41 +228,6 @@ export function IngredientTypeEditor({
     const listed = new Set(draftSubstitutes.map((s) => s.toTypeId))
     return types.filter((t) => t.id !== type.id && !listed.has(t.id))
   }, [types, draftSubstitutes, type.id])
-
-  const openAddSub = () => {
-    setAddingSub(true)
-    setNewSubToId(null)
-    setNewSubNote("")
-  }
-  const commitAddSub = () => {
-    if (!newSubToId || !newSubNote.trim()) return
-    setDraftSubstitutes([
-      ...draftSubstitutes,
-      { toTypeId: newSubToId, flavorNote: newSubNote.trim() },
-    ])
-    setAddingSub(false)
-  }
-  const removeSubAt = (idx) =>
-    setDraftSubstitutes(draftSubstitutes.filter((_, i) => i !== idx))
-  const startSubEdit = (idx) => {
-    setEditingSubIdx(idx)
-    setSubEditText(draftSubstitutes[idx].flavorNote)
-  }
-  const commitSubEdit = () => {
-    const text = subEditText.trim()
-    if (!text) return
-    setDraftSubstitutes(
-      draftSubstitutes.map((s, i) =>
-        i === editingSubIdx ? { ...s, flavorNote: text } : s,
-      ),
-    )
-    setEditingSubIdx(null)
-  }
-  const openSubMenu = (e, idx) => {
-    menuAnchorRef.current = e.currentTarget
-    setMenuForIdx(null)
-    setMenuForSubIdx(idx)
-  }
 
   // ── Homemade preparation draft (produced side = this type) - Stage D.3 ─
   // Unlike "Can provide"/"Can be replaced by" above, this type is the
@@ -378,53 +283,6 @@ export function IngredientTypeEditor({
         !alreadyUsed.has(t.id),
     )
   }
-
-  const openAddPreparation = () =>
-    setDraftPreparation({ name: type.name, instructions: [], inputs: [] })
-  const addPreparationInput = () =>
-    setDraftPreparation({
-      ...draftPreparation,
-      inputs: [
-        ...draftPreparation.inputs,
-        // A fresh client-side key (never a real row yet) - same stability
-        // reasoning as the loaded-preparation case above.
-        {
-          key: crypto.randomUUID(),
-          ingredientTypeId: null,
-          amount: 0,
-          unitLabel: "ml",
-        },
-      ],
-    })
-  const updatePreparationInput = (idx, patch) =>
-    setDraftPreparation({
-      ...draftPreparation,
-      inputs: draftPreparation.inputs.map((i, ix) =>
-        ix === idx ? { ...i, ...patch } : i,
-      ),
-    })
-  const removePreparationInput = (idx) =>
-    setDraftPreparation({
-      ...draftPreparation,
-      inputs: draftPreparation.inputs.filter((_, ix) => ix !== idx),
-    })
-  const addPreparationStep = () =>
-    setDraftPreparation({
-      ...draftPreparation,
-      instructions: [...draftPreparation.instructions, ""],
-    })
-  const removePreparationStep = (idx) =>
-    setDraftPreparation({
-      ...draftPreparation,
-      instructions: draftPreparation.instructions.filter((_, ix) => ix !== idx),
-    })
-  const updatePreparationStep = (idx, value) =>
-    setDraftPreparation({
-      ...draftPreparation,
-      instructions: draftPreparation.instructions.map((s, ix) =>
-        ix === idx ? value : s,
-      ),
-    })
 
   // ── Dirty hint ────────────────────────────────────────────────────────
   const initialSnapshot = useRef(null)
@@ -636,352 +494,93 @@ export function IngredientTypeEditor({
         {aliasError && <p className="text-xs text-coral">{aliasError}</p>}
       </div>
 
-      {/* Can provide - local draft, committed on Save changes */}
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <label className={LABEL}>Can provide</label>
-          {!addingConv && (
-            <button
-              type="button"
-              onClick={openAddConv}
-              className="min-h-11 px-2.5 text-xs text-cyan font-display font-semibold bg-transparent border-none cursor-pointer shrink-0"
-            >
-              + Add
-            </button>
-          )}
-        </div>
-        <p className="text-xs text-tx3 leading-snug">
-          Owning {type.name} can satisfy a recipe that needs the prepared form.
-          One-way.
-        </p>
+      <LinkedTypeListEditor
+        label="Can provide"
+        description={`Owning ${type.name} can satisfy a recipe that needs the prepared form. One-way.`}
+        items={draftConversions.map((c) => ({
+          id: c.preparedTypeId,
+          titleNode: typeNameById.get(c.preparedTypeId) ?? "(unknown)",
+          ariaName: typeNameById.get(c.preparedTypeId) ?? "(unknown)",
+          note: c.guidance,
+        }))}
+        addableTypes={addablePreparedTypes}
+        aliasesByTypeId={aliasesByTypeId}
+        onAdd={(targetId, note) =>
+          setDraftConversions([
+            ...draftConversions,
+            { preparedTypeId: targetId, guidance: note },
+          ])
+        }
+        onEditNote={(idx, note) =>
+          setDraftConversions(
+            draftConversions.map((c, i) =>
+              i === idx ? { ...c, guidance: note } : c,
+            ),
+          )
+        }
+        onRemove={(idx) =>
+          setDraftConversions(draftConversions.filter((_, i) => i !== idx))
+        }
+        addPlaceholder="Search prepared ingredient..."
+        notePlaceholder="e.g. Squeeze fresh juice from Lemon"
+        ariaLabelFor={(item) => `Actions for ${item.ariaName}`}
+        emptyNoteFallback="No guidance"
+        menuTitle="Conversion"
+        editMenuLabel="Edit guidance"
+      />
 
-        {draftConversions.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            {draftConversions.map((c, idx) => {
-              const preparedName =
-                typeNameById.get(c.preparedTypeId) ?? "(unknown)"
-              const editing = editingConvIdx === idx
-              return (
-                <div
-                  key={c.preparedTypeId}
-                  className="rounded-sm border border-bdr bg-surface2 p-2.5 flex items-start justify-between gap-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] text-tx font-display font-semibold break-words">
-                      {preparedName}
-                    </div>
-                    {editing ? (
-                      <div className="mt-1.5 flex flex-col gap-1.5">
-                        <Input
-                          placeholder="e.g. Squeeze fresh juice from Lemon"
-                          value={convEditText}
-                          onChange={setConvEditText}
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            disabled={!convEditText.trim()}
-                            onClick={commitConvEdit}
-                            className={QUIET_BTN}
-                          >
-                            Done
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingConvIdx(null)}
-                            className={QUIET_BTN}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-xs text-tx2 break-words mt-0.5">
-                        {c.guidance || (
-                          <span className="italic text-tx3">No guidance</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {!editing && (
-                    <button
-                      type="button"
-                      onClick={(e) => openMenu(e, idx)}
-                      aria-label={`Actions for ${preparedName}`}
-                      className="w-11 h-11 -mr-1 -mt-1 shrink-0 rounded-sm border border-bdr text-tx2 flex items-center justify-center cursor-pointer hover:text-tx active:bg-bg2"
-                    >
-                      <IconDots size={18} />
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
+      {/* "Can be replaced by" (Stage B) - suggestion only: never changes any
+          recipe's availability. */}
+      <LinkedTypeListEditor
+        label="Can be replaced by"
+        description={`When a recipe needs ${type.name}, suggest one of these as a stand-in. A hint only — it never changes availability, and it is one-way (not the reverse).`}
+        items={draftSubstitutes.map((s) => {
+          const toName = typeNameById.get(s.toTypeId) ?? "(unknown)"
+          return {
+            id: s.toTypeId,
+            titleNode: (
+              <>
+                {type.name} <span className="text-tx3">→</span> {toName}
+              </>
+            ),
+            ariaName: toName,
+            note: s.flavorNote,
+          }
+        })}
+        addableTypes={addableReplacementTypes}
+        aliasesByTypeId={aliasesByTypeId}
+        onAdd={(targetId, note) =>
+          setDraftSubstitutes([
+            ...draftSubstitutes,
+            { toTypeId: targetId, flavorNote: note },
+          ])
+        }
+        onEditNote={(idx, note) =>
+          setDraftSubstitutes(
+            draftSubstitutes.map((s, i) =>
+              i === idx ? { ...s, flavorNote: note } : s,
+            ),
+          )
+        }
+        onRemove={(idx) =>
+          setDraftSubstitutes(draftSubstitutes.filter((_, i) => i !== idx))
+        }
+        addPlaceholder="Search replacement ingredient..."
+        notePlaceholder="e.g. drier, less sweet"
+        ariaLabelFor={(item) =>
+          `Actions for ${type.name} replaced by ${item.ariaName}`
+        }
+        menuTitle="Substitute suggestion"
+        editMenuLabel="Edit note"
+      />
 
-        {addingConv && (
-          <div className="rounded-sm border border-cyan/40 bg-surface2 p-2.5 flex flex-col gap-1.5">
-            <TypeComboBox
-              valueId={newConvPreparedId}
-              onPick={setNewConvPreparedId}
-              types={addablePreparedTypes}
-              aliasesByTypeId={aliasesByTypeId}
-              placeholder="Search prepared ingredient..."
-            />
-            <Input
-              placeholder="e.g. Squeeze fresh juice from Lemon"
-              value={newConvGuidance}
-              onChange={setNewConvGuidance}
-            />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={!newConvPreparedId || !newConvGuidance.trim()}
-                onClick={commitAddConv}
-                className={QUIET_BTN}
-              >
-                Add
-              </button>
-              <button
-                type="button"
-                onClick={() => setAddingConv(false)}
-                className={QUIET_BTN}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Can be replaced by (Stage B) - local draft, committed on Save
-          changes. Suggestion only: never changes any recipe's availability. */}
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <label className={LABEL}>Can be replaced by</label>
-          {!addingSub && (
-            <button
-              type="button"
-              onClick={openAddSub}
-              className="min-h-11 px-2.5 text-xs text-cyan font-display font-semibold bg-transparent border-none cursor-pointer shrink-0"
-            >
-              + Add
-            </button>
-          )}
-        </div>
-        <p className="text-xs text-tx3 leading-snug">
-          When a recipe needs {type.name}, suggest one of these as a stand-in. A
-          hint only — it never changes availability, and it is one-way (not the
-          reverse).
-        </p>
-
-        {draftSubstitutes.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            {draftSubstitutes.map((s, idx) => {
-              const toName = typeNameById.get(s.toTypeId) ?? "(unknown)"
-              const editing = editingSubIdx === idx
-              return (
-                <div
-                  key={s.toTypeId}
-                  className="rounded-sm border border-bdr bg-surface2 p-2.5 flex items-start justify-between gap-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] text-tx font-display font-semibold break-words">
-                      {type.name} <span className="text-tx3">→</span> {toName}
-                    </div>
-                    {editing ? (
-                      <div className="mt-1.5 flex flex-col gap-1.5">
-                        <Input
-                          placeholder="e.g. drier, less sweet"
-                          value={subEditText}
-                          onChange={setSubEditText}
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            disabled={!subEditText.trim()}
-                            onClick={commitSubEdit}
-                            className={QUIET_BTN}
-                          >
-                            Done
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingSubIdx(null)}
-                            className={QUIET_BTN}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-xs text-tx2 break-words mt-0.5">
-                        {s.flavorNote}
-                      </div>
-                    )}
-                  </div>
-                  {!editing && (
-                    <button
-                      type="button"
-                      onClick={(e) => openSubMenu(e, idx)}
-                      aria-label={`Actions for ${type.name} replaced by ${toName}`}
-                      className="w-11 h-11 -mr-1 -mt-1 shrink-0 rounded-sm border border-bdr text-tx2 flex items-center justify-center cursor-pointer hover:text-tx active:bg-bg2"
-                    >
-                      <IconDots size={18} />
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {addingSub && (
-          <div className="rounded-sm border border-cyan/40 bg-surface2 p-2.5 flex flex-col gap-1.5">
-            <TypeComboBox
-              valueId={newSubToId}
-              onPick={setNewSubToId}
-              types={addableReplacementTypes}
-              aliasesByTypeId={aliasesByTypeId}
-              placeholder="Search replacement ingredient..."
-            />
-            <Input
-              placeholder="e.g. drier, less sweet"
-              value={newSubNote}
-              onChange={setNewSubNote}
-            />
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={!newSubToId || !newSubNote.trim()}
-                onClick={commitAddSub}
-                className={QUIET_BTN}
-              >
-                Add
-              </button>
-              <button
-                type="button"
-                onClick={() => setAddingSub(false)}
-                className={QUIET_BTN}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Homemade preparation (produced side = this type) - Stage D.3.
-          Single optional block, not a list - local draft, committed on Save
-          changes like everything else in this editor. */}
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <label className={LABEL}>Homemade preparation</label>
-          {!draftPreparation && (
-            <button
-              type="button"
-              onClick={openAddPreparation}
-              className="min-h-11 px-2.5 text-xs text-cyan font-display font-semibold bg-transparent border-none cursor-pointer shrink-0"
-            >
-              + Add
-            </button>
-          )}
-        </div>
-        <p className="text-xs text-tx3 leading-snug">
-          How a member could make {type.name} at home. A recipe missing{" "}
-          {type.name} can adapt around it once every input below is available -
-          it is never marked as owned just because it's preparable.
-        </p>
-
-        {draftPreparation && (
-          <div className="rounded-sm border border-bdr bg-surface2 p-2.5 flex flex-col gap-2.5">
-            <Input
-              label="Name"
-              value={draftPreparation.name}
-              onChange={(v) =>
-                setDraftPreparation({ ...draftPreparation, name: v })
-              }
-            />
-
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className={LABEL}>Inputs</span>
-                <button
-                  type="button"
-                  onClick={addPreparationInput}
-                  className="min-h-11 px-2.5 text-xs text-cyan font-display font-semibold bg-transparent border-none cursor-pointer shrink-0"
-                >
-                  + Add input
-                </button>
-              </div>
-              {draftPreparation.inputs.length === 0 && (
-                <p className="text-xs text-tx3">
-                  At least one input is required.
-                </p>
-              )}
-              {draftPreparation.inputs.map((input, idx) => (
-                <div key={input.key} className="flex gap-1.5 items-center">
-                  <div className="flex-1 min-w-0">
-                    <TypeComboBox
-                      valueId={input.ingredientTypeId}
-                      onPick={(id) =>
-                        updatePreparationInput(idx, { ingredientTypeId: id })
-                      }
-                      types={addablePreparationInputTypes(idx)}
-                      aliasesByTypeId={aliasesByTypeId}
-                      placeholder="Search ingredient..."
-                    />
-                  </div>
-                  <input
-                    aria-label={`Amount for input ${idx + 1}`}
-                    value={input.amount}
-                    onChange={(e) =>
-                      updatePreparationInput(idx, {
-                        amount: Number(e.target.value) || 0,
-                      })
-                    }
-                    inputMode="decimal"
-                    className="w-14 shrink-0 bg-surface border border-bdr rounded-sm p-2 text-tx text-[13px] text-center font-mono"
-                  />
-                  <div className="w-17 shrink-0">
-                    <Select
-                      small
-                      value={input.unitLabel}
-                      onChange={(v) =>
-                        updatePreparationInput(idx, { unitLabel: v })
-                      }
-                      options={PREPARATION_UNIT_OPTIONS}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removePreparationInput(idx)}
-                    aria-label={`Remove input ${idx + 1}`}
-                    className="w-11 h-11 shrink-0 rounded-sm border border-bdr text-tx2 flex items-center justify-center cursor-pointer hover:text-tx active:bg-bg2"
-                  >
-                    <IconX size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <StepsEditor
-              steps={draftPreparation.instructions}
-              onAdd={addPreparationStep}
-              onRemove={removePreparationStep}
-              onUpdate={updatePreparationStep}
-            />
-
-            <button
-              type="button"
-              onClick={() => setDraftPreparation(null)}
-              className={`${QUIET_BTN} text-coral self-start`}
-            >
-              Remove preparation
-            </button>
-          </div>
-        )}
-      </div>
+      <PreparationEditor
+        typeName={type.name}
+        preparation={draftPreparation}
+        onChange={setDraftPreparation}
+        addableInputTypesFor={addablePreparationInputTypes}
+        aliasesByTypeId={aliasesByTypeId}
+      />
 
       {error && (
         <p className="text-[13px] text-coral" role="alert">
@@ -1008,66 +607,6 @@ export function IngredientTypeEditor({
           Cancel
         </button>
       </div>
-
-      <BottomSheet
-        open={menuForIdx !== null}
-        onClose={() => setMenuForIdx(null)}
-        title="Conversion"
-        anchorRef={menuAnchorRef}
-      >
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              startConvEdit(menuForIdx)
-              setMenuForIdx(null)
-            }}
-            className={MENU_ITEM}
-          >
-            Edit guidance
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              removeConvAt(menuForIdx)
-              setMenuForIdx(null)
-            }}
-            className={`${MENU_ITEM} text-coral`}
-          >
-            Remove
-          </button>
-        </div>
-      </BottomSheet>
-
-      <BottomSheet
-        open={menuForSubIdx !== null}
-        onClose={() => setMenuForSubIdx(null)}
-        title="Substitute suggestion"
-        anchorRef={menuAnchorRef}
-      >
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              startSubEdit(menuForSubIdx)
-              setMenuForSubIdx(null)
-            }}
-            className={MENU_ITEM}
-          >
-            Edit note
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              removeSubAt(menuForSubIdx)
-              setMenuForSubIdx(null)
-            }}
-            className={`${MENU_ITEM} text-coral`}
-          >
-            Remove
-          </button>
-        </div>
-      </BottomSheet>
     </Card>
   )
 }
