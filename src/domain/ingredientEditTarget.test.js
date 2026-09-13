@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { resolveIngredientEditTarget } from "./ingredientEditTarget"
+import {
+  resolveDeepLinkedSearchQuery,
+  resolveIngredientEditTarget,
+} from "./ingredientEditTarget"
 
 const tomatoJuiceType = { id: "tomato-juice" }
 
@@ -60,5 +63,28 @@ describe("resolveIngredientEditTarget", () => {
       resolvedType: undefined,
     })
     expect(result).toBeNull()
+  })
+})
+
+describe("resolveDeepLinkedSearchQuery", () => {
+  const types = [
+    { id: "coffee-liqueur", name: "Coffee Liqueur" },
+    { id: "gin", name: "Gin" },
+  ]
+
+  it("resolves the deep-linked type's own name, to seed TypesTab's search box", () => {
+    expect(resolveDeepLinkedSearchQuery("coffee-liqueur", types)).toBe(
+      "Coffee Liqueur",
+    )
+  })
+
+  it("returns an empty string (the ordinary starting state) when there's no id", () => {
+    expect(resolveDeepLinkedSearchQuery(null, types)).toBe("")
+    expect(resolveDeepLinkedSearchQuery(undefined, types)).toBe("")
+    expect(resolveDeepLinkedSearchQuery("", types)).toBe("")
+  })
+
+  it("returns an empty string rather than fabricating a name for a stale/deleted type id", () => {
+    expect(resolveDeepLinkedSearchQuery("deleted-type", types)).toBe("")
   })
 })

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { IconEdit, IconMerge, IconTrash } from "@/components/icons"
 import { IngredientTypeEditor } from "@/components/IngredientTypeEditor"
 import { Btn, Card, ConfirmPanel, Input } from "@/components/primitives"
+import { resolveDeepLinkedSearchQuery } from "@/domain/ingredientEditTarget"
 import {
   deleteIngredientType,
   mergeIngredientType,
@@ -25,33 +26,23 @@ import {
 // deleted type id simply matches no row in `filteredTypes` below, so
 // nothing opens - no separate "not found" handling needed here.
 //
-// This mechanism was never manually/browser-verified before (see
-// current-context.md's outstanding items) - a live check found the editor
-// genuinely does open, but its row can sit far down this alphabetically-
-// grouped list with no indication anything happened, which reads exactly
-// like "nothing opened, this is just the normal list." `deepLinkedEditorRef`
-// + the effect below scroll that one row into view once, on mount, only
-// when arriving via the deep link - an ordinary manual Edit click is
-// already in view (the user just tapped it), so it's never touched there.
+// This mechanism's first-ever manual/browser check (see current-context.md's
+// outstanding items) found the editor genuinely does open, but its row can
+// sit far down this alphabetically-grouped list with nothing surfacing it -
+// reads exactly like "nothing happened, this is just the normal list." A
+// first fix scrolled that row into view (see git history); manual
+// verification then found a cleaner existing mechanism does the same job
+// better - pre-filling the search box with the deep-linked type's own name
+// (resolveDeepLinkedSearchQuery) reuses `filteredTypes` below to narrow the
+// list down to (near enough) just that type, same as if the user had typed
+// it themselves. One mechanism, not two - the scroll-into-view code is gone.
 export function TypesTab({ catalog, onAddNew, initialEditingTypeId }) {
-  const [typeQuery, setTypeQuery] = useState("")
+  const [typeQuery, setTypeQuery] = useState(() =>
+    resolveDeepLinkedSearchQuery(initialEditingTypeId, catalog.types),
+  )
   const [editingAdminTypeId, setEditingAdminTypeId] = useState(
     initialEditingTypeId ?? null,
   )
-  const deepLinkedEditorRef = useRef(null)
-  useEffect(() => {
-    // By the time this component exists at all, AppShell has already
-    // finished loading the whole catalog - it blocks the entire
-    // authenticated app's Outlet until then (App.jsx's own `isLoading`
-    // gate) - so the target row is already present on this very first
-    // render if it exists at all, even after a hard browser refresh on the
-    // deep-link URL. Only ever runs once, right after mount.
-    deepLinkedEditorRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
   const [confirmDeleteTypeId, setConfirmDeleteTypeId] = useState(null)
   const [deletingType, setDeletingType] = useState(false)
   const [typeDeleteError, setTypeDeleteError] = useState(null)
@@ -195,27 +186,23 @@ export function TypesTab({ catalog, onAddNew, initialEditingTypeId }) {
       ) : (
         filteredTypes.map((t) =>
           editingAdminTypeId === t.id ? (
-            <div
+            <IngredientTypeEditor
               key={t.id}
-              ref={t.id === initialEditingTypeId ? deepLinkedEditorRef : null}
-            >
-              <IngredientTypeEditor
-                type={t}
-                categories={catalog.categories}
-                types={catalog.types}
-                aliases={catalog.aliases}
-                liquidColors={catalog.liquidColors}
-                formConversions={catalog.formConversions}
-                ingredientSubstitutions={catalog.ingredientSubstitutions}
-                ingredientPreparations={catalog.ingredientPreparations}
-                ingredientPreparationInputs={catalog.ingredientPreparationInputs}
-                onSaved={async () => {
-                  await catalog.refetch()
-                  setEditingAdminTypeId(null)
-                }}
-                onCancel={() => setEditingAdminTypeId(null)}
-              />
-            </div>
+              type={t}
+              categories={catalog.categories}
+              types={catalog.types}
+              aliases={catalog.aliases}
+              liquidColors={catalog.liquidColors}
+              formConversions={catalog.formConversions}
+              ingredientSubstitutions={catalog.ingredientSubstitutions}
+              ingredientPreparations={catalog.ingredientPreparations}
+              ingredientPreparationInputs={catalog.ingredientPreparationInputs}
+              onSaved={async () => {
+                await catalog.refetch()
+                setEditingAdminTypeId(null)
+              }}
+              onCancel={() => setEditingAdminTypeId(null)}
+            />
           ) : (
             <Card key={t.id} className="py-3.5 px-4">
               <div className="flex items-start gap-2.5">

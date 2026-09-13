@@ -34,3 +34,27 @@ export function resolveIngredientEditTarget({ isStaff, resolvedType }) {
   if (!isStaff || !resolvedType) return null
   return resolvedType.id
 }
+
+/**
+ * The search-box text TypesTab.jsx should pre-fill when it's opened via the
+ * deep link above (`?type=<id>`), so the *existing* search/filter mechanism
+ * - not a separate "featured row"/scroll-into-view mechanism - naturally
+ * narrows the list down to (near enough) just the target type. Superseded
+ * a plain mount-time `scrollIntoView()` (see git history) once manual
+ * verification showed filtering alone already puts the target at or very
+ * near the top; kept as its own pure function, not inlined in TypesTab.jsx,
+ * so "what text to seed" is independently testable without mounting
+ * anything.
+ *
+ * Returns "" (the ordinary empty/full-list starting state) when there's no
+ * id, or the id doesn't resolve to a real type (stale/deleted link) - never
+ * fabricates a name.
+ *
+ * @param {string | null | undefined} typeId
+ * @param {{ id: string, name: string }[]} types
+ * @returns {string}
+ */
+export function resolveDeepLinkedSearchQuery(typeId, types) {
+  if (!typeId) return ""
+  return types.find((t) => t.id === typeId)?.name ?? ""
+}
