@@ -12,8 +12,8 @@ This repo runs inside a **Figma Make** sandbox: the dev server is already runnin
 
 1. `docs/Cocktail_Library_Development_Spec.md` — authoritative. Don't silently expand, remove, or reinterpret scope.
 2. `docs/Cocktail_Library_Mindmaps.md` — flow/process reference, illustrates the spec.
-3. `docs/Cocktail_Library_Figma_Prompt.md` — the original UI-generation brief. Historical; `src/App.tsx` is Figma Make's build output from it. Useful as a visual/UX reference, not authoritative where it conflicts with the dev spec.
-4. `docs/Cocktail_Library_Build_Agent_Prompt.md` — the meta-prompt that set up this working process (continuity files, phase breakdown, testing requirements, maintenance protocol).
+3. `docs/archive/initial-design/Cocktail_Library_Figma_Prompt.md` — the original UI-generation brief. Historical — the app was converted from the Figma Make TypeScript scaffold to plain JavaScript (`src/App.jsx`) on day one, so no build output from it remains in `src/`. Useful as a visual/UX reference, not authoritative where it conflicts with the dev spec.
+4. `docs/archive/initial-design/Cocktail_Library_Build_Agent_Prompt.md` — the meta-prompt that set up this working process (continuity files, phase breakdown, testing requirements, maintenance protocol). Historical — describes how the process was bootstrapped, not a live operating doc.
 
 ## Language: JavaScript only
 
@@ -33,7 +33,7 @@ No TypeScript in application source (`src/**`). Use `.jsx` for components, `.js`
 - `supabase/migrations/` — versioned SQL migrations; schema source of truth, no undocumented dashboard-only changes.
 - `supabase/seed.sql` — minimal, clearly-labeled dev fixtures only. Never a fabricated large catalog — the real catalog enters through batch import. Hosted projects don't auto-apply this on `db push` — reseed with `supabase db query --linked --file supabase/seed.sql`.
 - `supabase/functions/` — Edge Functions for anything requiring elevated privilege (invitation generation/redemption, moderation actions).
-- `docs/` — product specs. Inputs, not something to edit as part of feature work. `docs/plans/` is the one exception - saved plan-mode documents for large refactors (durable record of what was planned/executed and why, since the live plan file outside the repo doesn't survive past a session), not specs.
+- `docs/` — product specs. Inputs, not something to edit as part of feature work. `docs/plans/` is the one exception - saved plan-mode documents for active/in-flight features (durable record of what's planned/executed and why, since the live plan file outside the repo doesn't survive past a session), not specs. Once every stage of a plan has shipped and been verified (or the user confirms no further verification is coming), move it to `docs/plans/archive/` and fold a short summary into `docs/project.md`'s "Done" - `docs/plans/` itself should only ever hold currently active work, and can be empty (aside from `archive/`) when nothing is in flight. `docs/archive/initial-design/` holds the original Figma Make UI-generation brief and build-agent meta-prompt - historical reference, not authoritative or part of the document authority order above.
 
 If a subdirectory later needs its own `AGENTS.md`, document its scope here and keep instructions consistent with this file.
 
@@ -42,7 +42,7 @@ If a subdirectory later needs its own `AGENTS.md`, document its scope here and k
 - Double quotes for strings containing apostrophes (`"We're here to help"`), or escape them in single-quoted strings — an unescaped apostrophe breaks the build.
 - Balanced JSX tags and braces.
 - Default-export components.
-- Format with `oxfmt` (`pnpm format`) before considering a chunk done.
+- Format with `oxfmt` (`pnpm format`) before considering a chunk done - **except in this Windows sandbox**, where `oxfmt` has a real CRLF-related bug; don't run the repo-wide formatter here, and reflow only the specific files you touched by hand or via an isolated-LF check instead.
 - No fuzzy/name-similarity matching anywhere in availability or import logic — always resolve through explicit IDs, ancestry, or substitution-group relationships.
 - **Mobile-first is a primary acceptance criterion, not a nice-to-have, for every UI change** (2026-09-06). Design for narrow screens first: comfortable touch targets (44×44px minimum for anything tappable — steppers, toggles, links doubling as buttons, not just the specific controls that have needed it before), readable text without zooming, easy scrolling, primary actions reachable without hunting. Never rely on hover-only affordances or on a keyboard opening automatically on tap — a focused input on mobile does not imply the keyboard appears (confirmed live, iOS Safari, 2026-09-06), so don't build UI that assumes it does. Desktop behavior is real but supplementary — verify phone usability specifically, don't infer it from a desktop pass.
 
@@ -58,7 +58,7 @@ If a subdirectory later needs its own `AGENTS.md`, document its scope here and k
 
 - The availability engine, unit conversion, recommendation ranking, and import validation are pure `src/domain/` functions — write unit tests for the states/rules in the dev spec's "Testing requirements" section before calling that logic done. `pnpm test` runs Vitest (config: `vitest.config.js`, separate from `vite.config.ts` since that file carries Figma Make dev-server plugins irrelevant to a test run); tests live next to the module they cover (`foo.js` / `foo.test.js`).
 - Run the production build (`pnpm build`) and any test suite (`pnpm test`) before reporting a chunk complete.
-- `pnpm test` coverage is unit-level only (pure functions, no Supabase/RLS). RLS itself is covered separately by `supabase/tests/rls_suite.sql` — run with `npx supabase db query --linked --file supabase/tests/rls_suite.sql`. No Docker/Podman is available in this sandbox, so a local instance (which `supabase test db`'s pgTAP support needs) isn't an option; the suite instead runs plain SQL directly against the hosted linked project, simulating each identity by switching the `role` GUC + `request.jwt.claims`, wrapped in one transaction rolled back at the end so no fixture data is ever left behind. A failing check raises a specific `FAIL: <message>` naming exactly which one broke. Coverage so far is partial — `recipes`, `ingredient_types`, `memberships` only, not all ~15 RLS-protected tables; extend it table-by-table following the same pattern, don't start a second suite file.
+- `pnpm test` coverage is unit-level only (pure functions, no Supabase/RLS). RLS itself is covered separately by `supabase/tests/rls_suite.sql` — run with `npx supabase db query --linked --file supabase/tests/rls_suite.sql`. No Docker/Podman is available in this sandbox, so a local instance (which `supabase test db`'s pgTAP support needs) isn't an option; the suite instead runs plain SQL directly against the hosted linked project, simulating each identity by switching the `role` GUC + `request.jwt.claims`, wrapped in one transaction rolled back at the end so no fixture data is ever left behind. A failing check raises a specific `FAIL: <message>` naming exactly which one broke. Coverage now spans every RLS-protected table introduced through the features shipped so far (recipes, ingredient types, memberships, catalog tables, substitutions/preparations, recipe relationships, and more) - extend it table-by-table alongside each new table, following the same pattern; don't start a second suite file.
 - PostgREST resource-embedding selects (`.select("a, b:table(col), c(nested(col))")`) can't be validated through `supabase db query` — that runs raw SQL directly, bypassing PostgREST's embed resolution entirely. Sanity-check the actual query string with a real REST call instead: `curl -s -G "$VITE_SUPABASE_URL/rest/v1/<table>" -H "apikey: $VITE_SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $VITE_SUPABASE_PUBLISHABLE_KEY" --data-urlencode "select=<the select string>" --data-urlencode "limit=1"`. A 400 means the embed is ambiguous/wrong; a 200 (even with `[]`, since RLS denies anon by default) confirms the query shape itself is valid.
 
 ## Preserving unrelated work
@@ -71,12 +71,13 @@ Don't materially expand product scope, change the required stack, or introduce a
 
 ## Commits
 
-Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, ...). Propose a message at each coherent milestone; don't commit unless asked. This repo has no git history yet — ask before running `git init`.
+Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, ...). This repo has an established git history on `main` - commit and push a completed, tested stage before handing it to the user for manual verification, without needing to ask each time once that pattern is set for a session. Still ask before an unusually disruptive git operation (force-push, history rewrite, re-running `git init`, etc.). On this Windows/Git-Bash sandbox, author a multi-line or backtick-containing commit message via a heredoc file (`cat > /tmp/msg.txt <<'EOF' ... EOF` then `git commit -F /tmp/msg.txt`) rather than a plain `-m` string - a real shell-quoting bug here mangles backtick-quoted code identifiers otherwise.
 
 ## `current-context.md` protocol
 
 - Read it at the start of every session/chunk, but verify against actual repo state first — it can drift out of date.
-- Update it at the end of every completed chunk: verified result, decisions and reasons, migrations/env changes, last test/build result, exact next action, relevant files/areas.
+- **It is a compact reference doc, not a changelog** (reorganized 2026-09-13 - it had grown into a multi-thousand-line chunk-by-chunk log that duplicated git history and the plan docs under `docs/plans/archive/`). Keep it to: architecture/stack pointers, the domain model's standing invariants, ownership/RLS assumptions, current schema/migration state, testing/tooling constraints, the active-plan pointer, and a short "known outstanding items" list.
+- Update it only when one of those durable facts actually changes (a new invariant, a resolved tooling gotcha, a plan moving from active to archived, a genuinely new outstanding item) - not after every small chunk. Detailed stage-by-stage history belongs in the relevant `docs/plans/*` doc (active) or `docs/plans/archive/*` doc (shipped), plus git history/commit messages - not appended here.
 - Update `CLAUDE.md` or this file only when a durable command, convention, or architectural fact has genuinely changed — remove or correct stale instructions rather than appending contradictions. Don't use either file as a progress diary.
 
 ## `docs/project.md` — the user's planning space
@@ -91,4 +92,4 @@ Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, ...). Propose a messag
 
 - Node 22, pnpm pinned via `.mise.toml` (10.34.3) — bare `pnpm` is not on PATH. Use `corepack pnpm@10.34.3 ...` and pin that version explicitly. **Do not run bare `npx pnpm ...`**: with no `packageManager` field in `package.json`, npx/corepack fetch the latest pnpm (v12), which on this machine tries to wipe `node_modules`, fails with "Access is denied", and leaves a broken install — recover with `corepack pnpm@10.34.3 install --frozen-lockfile`.
 - Supabase CLI is not globally installed — use `npx supabase ...` (confirmed reachable, v2.114.0).
-- No git repository exists yet.
+- Git is available and this repo has an established history on `main` (see `git log`) — see the "Commits" section above for the actual workflow.

@@ -19,14 +19,15 @@ Social network, cocktail school, public community.
 You might revisit this every few months, not every day.
 
 # Current Focus
-Fixing the recurring "JWT issued at future" startup error on the first app open of the day.
+Nothing in progress right now - all recent work below is shipped, pushed, and (mostly) manually verified. Pick the next item from "Next" below.
 
 # Next
-- Ingredient forms — owning Lemon should satisfy a Lemon Juice recipe (Lemon/Lime only for v1). Same plan doc. — built, phone check pending.
-- Homemade preparations — "you can make Simple Syrup" hints without pretending it's already owned. Same plan doc.
-- Improve mood/taste discovery.
+- Improve mood/taste discovery (still the long-standing open item from earlier - not started).
+- Ingredient Detail screen visual/design polish pass - a deliberate follow-up to the shipped v1 (see `current-context.md`), not started.
+- A few small manual-verification checks are still owed on recently shipped work (Ingredient Detail I.4's admin shortcut; Linked Variations' real Bloody Mary/Zombie relationships end-to-end; the adapted-card compact-action wording on a real phone) - see `current-context.md` for the exact checklists.
 
 # Backlog
+- Duplicate-ingredient-type merge tool (Admin → Ingredient Types → "Merge") is built and RLS-covered but never browser-verified - do that click-through before relying on it for a real live duplicate.
 
 # Done
 - Serving-size selector + parts ratio view — 2026-09-05.
@@ -34,6 +35,11 @@ Fixing the recurring "JWT issued at future" startup error on the first app open 
 - Cocktail Library + My Bar UX (grouped Library, Sort control, ingredient/bottle recipe pages) — 2026-09-06.
 - My Bar redesign (owned-first "My ingredients", "Add ingredients" split, shelf visuals, Speed Rack) — 2026-09-07.
 - Household basics (Ice, Salt, Water, White Sugar, Black Pepper) + admin-managed "Build your bar" onboarding list — 2026-09-10.
+- Ingredient forms ("Can provide" — owning Lemon satisfies a Lemon Juice recipe) + Suggested Substitutes (catalogue-wide, suggestion-only) — 2026-09-10/11.
+- Adapted availability & makeability ("Make With Adaptations": a recipe missing an ingredient you can substitute or prepare at home is discoverably makeable, not just "unavailable") + homemade preparations — 2026-09-11/12.
+- Ingredient Detail page v1 (tap any ingredient name → its own detail page: My Bar action, Can provide/Can be replaced by, homemade preparation, cocktails using it, admin edit shortcut) — 2026-09-12/13.
+- Linked Variations (a recipe can declare "this is a variation of that," e.g. Bloody Mary / Bloody Mary (Practical Version) — pure metadata + navigation, never affects either recipe's own availability) — 2026-09-13.
+- Adapted-card UI polish (cocktail cards show a compact concrete action — "⇄ Spiced Rum", "Prep Simple Syrup" — instead of a verbose repeated status sentence) — 2026-09-13.
 
 # Scenarios
 S01 — Choose a drink
@@ -57,3 +63,6 @@ Brief product decisions worth keeping for planning. Implementation detail and ra
 2026-09-06 — Tapping an ingredient/bottle opens its matching cocktails; owning it is a separate action. Generic ownership and specific-product ownership stay distinct — never silently remove products or add generic ownership.
 2026-09-06 — Substitution matches are phrased as a possibility ("Can replace Bourbon"), never as an active substitution.
 2026-09-06 — Admin ingredient-type editing moves off the My Bar browsing grid to a detail overflow action; full editing stays in Admin → Ingredient Types.
+2026-09-10 — General catalogue substitutes are suggestion-only by default; a recipe's own adopted alternative is what actually affects that recipe's availability.
+2026-09-11 — A recipe resolvable via an owned general substitute or a satisfiable homemade preparation is "Make With Adaptations" — discoverably makeable, never lumped in with "Unavailable," and never silently merged into "Perfect"/"Good Enough" either.
+2026-09-13 — A linked variation is pure metadata + navigation between two otherwise-independent recipes — never ingredient/instruction inheritance, and never affects either recipe's own availability. One base, many variations; a relationship cycle is invalid data and rejected at write time.
