@@ -1,6 +1,6 @@
 # EditorScreen modularization
 
-**Status: in progress, started 2026-09-14.** Third round of the component-size cleanup, after `docs/plans/archive/component-size-refactor.md` (2026-08-24) and `docs/plans/archive/component-modularization-round-2.md` (2026-09-14, `IngredientTypeEditor`/`IngredientDetailScreen`). `EditorScreen.jsx` was 799 lines right after the 2026-08-24 pass and grew to 948 since — driven mainly by the localStorage draft-autosave subsystem and the paste-import mode, both of which already have their UI extracted (`DraftRestoreBanner`, `OtherDraftsPicker`, `PasteRecipeMode`) but whose *state and effects* still live entirely in the shell.
+**Status: executed and committed, 2026-09-14.** Third round of the component-size cleanup, after `docs/plans/archive/component-size-refactor.md` (2026-08-24) and `docs/plans/archive/component-modularization-round-2.md` (2026-09-14, `IngredientTypeEditor`/`IngredientDetailScreen`). `EditorScreen.jsx` was 799 lines right after the 2026-08-24 pass and grew to 948 since — driven mainly by the localStorage draft-autosave subsystem and the paste-import mode, both of which already have their UI extracted (`DraftRestoreBanner`, `OtherDraftsPicker`, `PasteRecipeMode`) but whose *state and effects* still live entirely in the shell. All three stages landed with `pnpm test`/`pnpm build` green throughout and zero `oxlint` findings; `EditorScreen.jsx` ends at 789 lines. Stopped there deliberately (Stage 4) — what remains is core recipe-form state/handlers, the prefill effect, and Linked Variations fields, all explicitly meant to stay together per this plan's own scope, not a line count to keep chasing.
 
 Pure extraction, behavior-preserving. The draft subsystem carries real bug history (see "Behavior invariants" below) - this round does not touch any of that behavior, only relocates it.
 
@@ -31,7 +31,7 @@ Pure extraction, behavior-preserving. The draft subsystem carries real bug histo
 
 ## Verification checklist
 
-- [ ] `src/lib/recipeDrafts.test.js` (new) covers: draft index read/write + `MAX_DRAFTS` eviction, `hasDraftContent` true/false cases, `readDraftContent`/`writeDraftContent`, `removeDraftIndexEntry` removes only the targeted draft, `shouldAutosaveDraft` (including the draftBanner-blocks-autosave case), `isSelfAssignedDraft`.
-- [ ] `corepack pnpm@10.34.3 test` and `corepack pnpm@10.34.3 build` green after each stage.
-- [ ] Diff read carefully for dependency-array/timing drift, not just moved code.
-- [ ] No claim of manual UI verification here - handed to the user as a short checklist.
+- [x] `src/lib/recipeDrafts.test.js` (new, 23 tests) covers: draft index read/write + `MAX_DRAFTS` eviction, `hasDraftContent` true/false cases, `readDraftContent`/`writeDraftContent`, `removeDraftIndexEntry` removes only the targeted draft, `shouldAutosaveDraft` (including the draftBanner-blocks-autosave case), `isSelfAssignedDraft`. Uses a minimal in-memory `localStorage` stand-in (no jsdom) since this Node-environment Vitest config has no real one.
+- [x] `corepack pnpm@10.34.3 test` (420 passing) and `corepack pnpm@10.34.3 build` green after every stage.
+- [x] Diff read carefully after each stage for dependency-array/timing drift, not just moved code - confirmed the `formValues` memo in Stage 3 has the identical 9-value dependency list the effect used to depend on directly, so its reference (and the effect's re-run timing) only changes exactly when one of those 9 fields does.
+- [x] No manual UI verification claimed here - handed to the user as a short checklist (see the commit(s) covering this work / session transcript).
