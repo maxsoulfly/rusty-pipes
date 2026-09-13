@@ -3,7 +3,7 @@ import {
   buildProductImportPrompt,
   validateProductImport,
 } from "@/schemas/productImport"
-import { createProducts } from "@/services/catalog"
+import { createProducts } from "@/services/products"
 
 // Admin Batch Import -> Products. Fully self-contained - one flat bulk
 // insert since products have no per-row children (unlike recipes'

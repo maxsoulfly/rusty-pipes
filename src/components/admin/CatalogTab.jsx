@@ -17,7 +17,7 @@ import {
   updateIngredientCategory,
   updateLiquidColor,
   updateTasteTag,
-} from "@/services/catalog"
+} from "@/services/catalogLookupTables"
 
 // Glasses, taste tags, cocktail families, liquid colors, and ingredient
 // categories - the lookup lists recipes and ingredient types reference. All

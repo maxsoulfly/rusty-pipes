@@ -2,7 +2,10 @@ import { useState } from "react"
 import { IconEdit, IconMerge, IconTrash } from "@/components/icons"
 import { IngredientTypeEditor } from "@/components/IngredientTypeEditor"
 import { Btn, Card, ConfirmPanel, Input } from "@/components/primitives"
-import { deleteIngredientType, mergeIngredientType } from "@/services/catalog"
+import {
+  deleteIngredientType,
+  mergeIngredientType,
+} from "@/services/ingredientTypes"
 
 // Every ingredient type in the catalog. Same split-out reasoning as Classic
 // Recipes - editing already existed (My Bar's admin pencil, now

@@ -4,7 +4,7 @@ import {
   buildRecipeImportPrompt,
   validateRecipeImport,
 } from "@/schemas/recipeImport"
-import { createIngredientTypes } from "@/services/catalog"
+import { createIngredientTypes } from "@/services/ingredientTypes"
 import { createClassicRecipes } from "@/services/recipes"
 
 // Admin Batch Import -> Recipes (adminOnly - see ImportTab.jsx's own

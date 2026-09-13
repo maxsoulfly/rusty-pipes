@@ -9,7 +9,7 @@ import {
   OwnedToggle,
 } from "@/components/primitives"
 import { resolveIngredientType } from "@/domain/ingredientResolution"
-import { deleteProduct, updateProduct } from "@/services/catalog"
+import { deleteProduct, updateProduct } from "@/services/products"
 
 // The per-type "browse every catalog product, owned or not" panel - what
 // shows when a type card's chevron is expanded. Admin-only product

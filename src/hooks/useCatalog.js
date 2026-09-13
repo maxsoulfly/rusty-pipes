@@ -4,20 +4,22 @@ import {
   fetchCocktailFamilies,
   fetchGlassAliases,
   fetchGlasses,
-  fetchIngredientAliases,
   fetchIngredientCategories,
-  fetchIngredientTypes,
   fetchLiquidColors,
-  fetchProducts,
   fetchTasteTags,
-} from "@/services/catalog"
+} from "@/services/catalogLookupTables"
 import { fetchIngredientFormConversions } from "@/services/ingredientForms"
 import {
   fetchIngredientPreparationInputs,
   fetchIngredientPreparations,
 } from "@/services/ingredientPreparations"
 import { fetchIngredientSubstitutions } from "@/services/ingredientSubstitutions"
+import {
+  fetchIngredientAliases,
+  fetchIngredientTypes,
+} from "@/services/ingredientTypes"
 import { fetchOnboardingIngredients } from "@/services/onboarding"
+import { fetchProducts } from "@/services/products"
 
 export function useCatalog() {
   const [state, setState] = useState({

@@ -11,11 +11,11 @@ import {
   buildIngredientImportPrompt,
   validateIngredientImport,
 } from "@/schemas/ingredientImport"
-import { createIngredientTypes } from "@/services/catalog"
 import {
   fetchPendingIngredientRequests,
   resolveIngredientRequest,
 } from "@/services/ingredientRequests"
+import { createIngredientTypes } from "@/services/ingredientTypes"
 import {
   deriveInvitationStatus,
   fetchInvitations,

@@ -9,7 +9,7 @@ import { IconAlert, IconCheck, IconInfo } from "@/components/icons"
 import { TopBar } from "@/components/Nav"
 import { Btn, Card, Input, OwnedToggle } from "@/components/primitives"
 import { resolveIngredientType } from "@/domain/ingredientResolution"
-import { createProduct } from "@/services/catalog"
+import { createProduct } from "@/services/products"
 
 export default function AddProductScreen() {
   const navigate = useNavigate()

@@ -21,7 +21,7 @@ import {
   BAR_PRIORITIES,
   validateIngredientImport,
 } from "@/schemas/ingredientImport"
-import { saveIngredientType } from "@/services/catalog"
+import { saveIngredientType } from "@/services/ingredientTypes"
 
 // Shared "edit an existing ingredient type" form. Only consumer today is
 // Admin -> Ingredient Types (src/components/admin/TypesTab.jsx).
