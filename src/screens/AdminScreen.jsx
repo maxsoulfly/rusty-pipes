@@ -11,15 +11,7 @@ import {
   buildIngredientImportPrompt,
   validateIngredientImport,
 } from "@/schemas/ingredientImport"
-import {
-  buildProductImportPrompt,
-  validateProductImport,
-} from "@/schemas/productImport"
-import {
-  buildRecipeImportPrompt,
-  validateRecipeImport,
-} from "@/schemas/recipeImport"
-import { createIngredientTypes, createProducts } from "@/services/catalog"
+import { createIngredientTypes } from "@/services/catalog"
 import {
   fetchPendingIngredientRequests,
   resolveIngredientRequest,
@@ -29,7 +21,6 @@ import {
   fetchInvitations,
 } from "@/services/invitations"
 import {
-  createClassicRecipes,
   demoteRecipeToCommunity,
   fetchCommunityRecipes,
   promoteRecipeToClassic,
@@ -138,36 +129,11 @@ export default function AdminScreen() {
   const [importing, setImporting] = useState(false)
   const [promptCopied, setPromptCopied] = useState(false)
 
-  // Recipe batch import - same paste/validate/preview/commit shape as
-  // ingredients, kept as separate state since the two entities' prompts,
-  // validators, and commit paths are unrelated.
-  const [recipeBatchPhase, setRecipeBatchPhase] = useState("paste")
-  const [recipeImportJson, setRecipeImportJson] = useState("")
-  const [recipeImportResult, setRecipeImportResult] = useState(null)
-  const [recipeImporting, setRecipeImporting] = useState(false)
-  const [recipePromptCopied, setRecipePromptCopied] = useState(false)
-  const [recipeImportSuccessMessage, setRecipeImportSuccessMessage] =
-    useState(null)
-
-  // Inline "add this missing ingredient" from a recipe-import row, rather
-  // than forcing a trip out to the Ingredients tab and back with the pasted
-  // JSON lost. One draft at a time (not per-row) since only one form can be
-  // usefully edited at once anyway. Reuses validateIngredientImport/
-  // createIngredientTypes - same rules as Single Ingredient, not a second
-  // hand-rolled check.
-  const [addIngredientDraft, setAddIngredientDraft] = useState(null)
-  const [addIngredientSaving, setAddIngredientSaving] = useState(false)
-  const [addIngredientError, setAddIngredientError] = useState(null)
-
-  // Product batch import - same shape again, one flat bulk insert since
-  // products have no per-row children (unlike recipes' components/tags).
-  const [productBatchPhase, setProductBatchPhase] = useState("paste")
-  const [productImportJson, setProductImportJson] = useState("")
-  const [productImportResult, setProductImportResult] = useState(null)
-  const [productImporting, setProductImporting] = useState(false)
-  const [productPromptCopied, setProductPromptCopied] = useState(false)
-  const [productImportSuccessMessage, setProductImportSuccessMessage] =
-    useState(null)
+  // Recipe and Product batch import each own their state locally now
+  // (useRecipeBatchImport/useProductBatchImport, called inside
+  // ImportRecipes.jsx/ImportProducts.jsx) - unlike Ingredients above, neither
+  // has any cross-tab coupling, so there was nothing keeping them lifted
+  // here. See docs/plans/archive/admin-screen-modularization.md.
 
   // Moderation is real: currently-published community recipes, with an
   // Unpublish action. There's no pre-publish review queue in the spec
@@ -383,205 +349,6 @@ export default function AdminScreen() {
     }
   }
 
-  const recipeImportPrompt = buildRecipeImportPrompt({
-    types: catalog.types,
-    glasses: catalog.glasses,
-    families: catalog.families,
-    tasteTags: catalog.tasteTags,
-    aliases: catalog.aliases,
-  })
-
-  const copyRecipeImportPrompt = () => {
-    navigator.clipboard.writeText(recipeImportPrompt).catch(() => {})
-    setRecipePromptCopied(true)
-    setTimeout(() => setRecipePromptCopied(false), 2000)
-  }
-
-  // catalogOverride lets a caller pass freshly-refetched data directly,
-  // instead of this function reading the component's own `catalog` closure -
-  // needed because `catalog.refetch()` updates React *state* (a future
-  // render), it never mutates the `catalog` object an already-running
-  // function is holding. handleSaveAddIngredientDraft used to call this
-  // right after awaiting catalog.refetch() and still validate against the
-  // pre-refetch catalog every single time (not a rare race - a plain JS
-  // closure can never see a state update from within its own execution) -
-  // real bug a user hit while batch-importing "Alexander" and adding its
-  // missing ingredients one at a time, where each add's re-validate still
-  // showed that exact ingredient as unresolved.
-  const runRecipeImportValidation = (catalogOverride) => {
-    const c = catalogOverride ?? catalog
-    let parsed
-    try {
-      parsed = JSON.parse(recipeImportJson)
-      if (!Array.isArray(parsed)) throw new Error("Expected a JSON array")
-    } catch (err) {
-      setRecipeImportResult({ parseError: err.message })
-      setRecipeBatchPhase("results")
-      return
-    }
-    const validation = validateRecipeImport(parsed, {
-      types: c.types,
-      glasses: c.glasses,
-      families: c.families,
-      tasteTags: c.tasteTags,
-      aliases: c.aliases,
-      glassAliases: c.glassAliases,
-      existingRecipeNames: computed.map((r) => r.name),
-    })
-    setRecipeImportResult(validation)
-    setRecipeBatchPhase("results")
-  }
-
-  const handleCommitRecipeImport = async () => {
-    if (!recipeImportResult?.results) return
-    const rows = recipeImportResult.results
-      .filter((r) => r.valid)
-      .map((r) => r.resolved)
-    if (rows.length === 0) return
-    setRecipeImporting(true)
-    try {
-      const { createdCount, failures } = await createClassicRecipes(rows)
-      await refetchRecipes()
-      if (failures.length === 0) {
-        setRecipeImportSuccessMessage(
-          `Imported ${createdCount} recipe${createdCount === 1 ? "" : "s"}.`,
-        )
-        setRecipeBatchPhase("paste")
-        setRecipeImportJson("")
-        setRecipeImportResult(null)
-      } else {
-        setRecipeImportResult({
-          ...recipeImportResult,
-          commitError: `${createdCount} imported, ${failures.length} failed: ${failures
-            .map((f) => `"${f.name}" (${f.message})`)
-            .join("; ")}`,
-        })
-      }
-    } catch (err) {
-      setRecipeImportResult({ ...recipeImportResult, commitError: err.message })
-    } finally {
-      setRecipeImporting(false)
-    }
-  }
-
-  const openAddIngredientDraft = (name) => {
-    setAddIngredientError(null)
-    setAddIngredientDraft({
-      name,
-      categoryId: "",
-      parentTypeId: "",
-      barPriority: "common",
-      color: "",
-      description: "",
-    })
-  }
-
-  const handleSaveAddIngredientDraft = async () => {
-    if (!addIngredientDraft) return
-    setAddIngredientSaving(true)
-    setAddIngredientError(null)
-    const categoryName =
-      catalog.categories.find((c) => c.id === addIngredientDraft.categoryId)
-        ?.name ?? ""
-    const parentTypeName = addIngredientDraft.parentTypeId
-      ? catalog.types.find((t) => t.id === addIngredientDraft.parentTypeId)
-          ?.name
-      : undefined
-    const { results } = validateIngredientImport(
-      [
-        {
-          name: addIngredientDraft.name.trim(),
-          category: categoryName,
-          parentType: parentTypeName,
-          barPriority: addIngredientDraft.barPriority,
-          color: addIngredientDraft.color.trim() || undefined,
-          description: addIngredientDraft.description.trim() || undefined,
-        },
-      ],
-      {
-        categories: catalog.categories,
-        types: catalog.types,
-        aliases: catalog.aliases,
-      },
-    )
-    const [result] = results
-    if (!result.valid) {
-      setAddIngredientError(result.errors.join("; "))
-      setAddIngredientSaving(false)
-      return
-    }
-    try {
-      await createIngredientTypes([result.resolved])
-      const freshCatalog = await catalog.refetch()
-      setAddIngredientDraft(null)
-      // Re-validate in place so the row that was blocked on this ingredient
-      // updates immediately, without losing the pasted JSON. Passed
-      // explicitly - see runRecipeImportValidation's comment for why this
-      // can't just read the component's own (stale) catalog closure here.
-      runRecipeImportValidation(freshCatalog)
-    } catch (err) {
-      setAddIngredientError(err.message)
-    } finally {
-      setAddIngredientSaving(false)
-    }
-  }
-
-  const productImportPrompt = buildProductImportPrompt({
-    types: catalog.types,
-    aliases: catalog.aliases,
-  })
-
-  const copyProductImportPrompt = () => {
-    navigator.clipboard.writeText(productImportPrompt).catch(() => {})
-    setProductPromptCopied(true)
-    setTimeout(() => setProductPromptCopied(false), 2000)
-  }
-
-  const runProductImportValidation = () => {
-    let parsed
-    try {
-      parsed = JSON.parse(productImportJson)
-      if (!Array.isArray(parsed)) throw new Error("Expected a JSON array")
-    } catch (err) {
-      setProductImportResult({ parseError: err.message })
-      setProductBatchPhase("results")
-      return
-    }
-    const validation = validateProductImport(parsed, {
-      types: catalog.types,
-      aliases: catalog.aliases,
-      existingProducts: catalog.products,
-    })
-    setProductImportResult(validation)
-    setProductBatchPhase("results")
-  }
-
-  const handleCommitProductImport = async () => {
-    if (!productImportResult?.results) return
-    const rows = productImportResult.results
-      .filter((r) => r.valid)
-      .map((r) => r.resolved)
-    if (rows.length === 0) return
-    setProductImporting(true)
-    try {
-      await createProducts(rows)
-      await catalog.refetch()
-      setProductImportSuccessMessage(
-        `Imported ${rows.length} product${rows.length === 1 ? "" : "s"}.`,
-      )
-      setProductBatchPhase("paste")
-      setProductImportJson("")
-      setProductImportResult(null)
-    } catch (err) {
-      setProductImportResult({
-        ...productImportResult,
-        commitError: err.message,
-      })
-    } finally {
-      setProductImporting(false)
-    }
-  }
-
   // Reuses the same validator batch import uses (single-item array), so a
   // duplicate/unknown-value mistake is caught the same way in both paths
   // instead of a separately hand-rolled check that could drift.
@@ -751,6 +518,8 @@ export default function AdminScreen() {
         {tab === "import" && (
           <ImportTab
             catalog={catalog}
+            computed={computed}
+            refetchRecipes={refetchRecipes}
             isAdmin={isAdmin}
             importEntity={importEntity}
             setImportEntity={setImportEntity}
@@ -786,38 +555,6 @@ export default function AdminScreen() {
             setImportResult={setImportResult}
             importing={importing}
             onCommitImport={handleCommitImport}
-            recipeImportSuccessMessage={recipeImportSuccessMessage}
-            recipeBatchPhase={recipeBatchPhase}
-            setRecipeBatchPhase={setRecipeBatchPhase}
-            recipeImportPrompt={recipeImportPrompt}
-            recipePromptCopied={recipePromptCopied}
-            onCopyRecipeImportPrompt={copyRecipeImportPrompt}
-            recipeImportJson={recipeImportJson}
-            setRecipeImportJson={setRecipeImportJson}
-            onRunRecipeImportValidation={() => runRecipeImportValidation()}
-            recipeImportResult={recipeImportResult}
-            setRecipeImportResult={setRecipeImportResult}
-            recipeImporting={recipeImporting}
-            onCommitRecipeImport={handleCommitRecipeImport}
-            addIngredientDraft={addIngredientDraft}
-            setAddIngredientDraft={setAddIngredientDraft}
-            onOpenAddIngredientDraft={openAddIngredientDraft}
-            addIngredientError={addIngredientError}
-            addIngredientSaving={addIngredientSaving}
-            onSaveAddIngredientDraft={handleSaveAddIngredientDraft}
-            productImportSuccessMessage={productImportSuccessMessage}
-            productBatchPhase={productBatchPhase}
-            setProductBatchPhase={setProductBatchPhase}
-            productImportPrompt={productImportPrompt}
-            productPromptCopied={productPromptCopied}
-            onCopyProductImportPrompt={copyProductImportPrompt}
-            productImportJson={productImportJson}
-            setProductImportJson={setProductImportJson}
-            onRunProductImportValidation={runProductImportValidation}
-            productImportResult={productImportResult}
-            setProductImportResult={setProductImportResult}
-            productImporting={productImporting}
-            onCommitProductImport={handleCommitProductImport}
           />
         )}
 

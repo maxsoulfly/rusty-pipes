@@ -8,30 +8,31 @@ import {
   Input,
   Select,
 } from "@/components/primitives"
+import { useRecipeBatchImport } from "@/hooks/useRecipeBatchImport"
 import { BAR_PRIORITIES } from "@/schemas/ingredientImport"
 
-export function ImportRecipes({
-  catalog,
-  recipeImportSuccessMessage,
-  recipeBatchPhase,
-  setRecipeBatchPhase,
-  recipeImportPrompt,
-  recipePromptCopied,
-  onCopyPrompt,
-  recipeImportJson,
-  setRecipeImportJson,
-  onValidate,
-  recipeImportResult,
-  setRecipeImportResult,
-  recipeImporting,
-  onCommit,
-  addIngredientDraft,
-  setAddIngredientDraft,
-  onOpenAddIngredientDraft,
-  addIngredientError,
-  addIngredientSaving,
-  onSaveAddIngredientDraft,
-}) {
+export function ImportRecipes({ catalog, computed, refetchRecipes }) {
+  const {
+    recipeImportSuccessMessage,
+    recipeBatchPhase,
+    setRecipeBatchPhase,
+    recipeImportPrompt,
+    recipePromptCopied,
+    onCopyPrompt,
+    recipeImportJson,
+    setRecipeImportJson,
+    onValidate,
+    recipeImportResult,
+    setRecipeImportResult,
+    recipeImporting,
+    onCommit,
+    addIngredientDraft,
+    setAddIngredientDraft,
+    onOpenAddIngredientDraft,
+    addIngredientError,
+    addIngredientSaving,
+    onSaveAddIngredientDraft,
+  } = useRecipeBatchImport({ catalog, computed, refetchRecipes })
   return (
     <div className="flex flex-col gap-4">
       {recipeImportSuccessMessage && (

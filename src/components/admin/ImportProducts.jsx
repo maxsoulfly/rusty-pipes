@@ -1,22 +1,24 @@
 import clsx from "clsx"
 import { IconCheck, IconCopy } from "@/components/icons"
 import { Btn, Card } from "@/components/primitives"
+import { useProductBatchImport } from "@/hooks/useProductBatchImport"
 
-export function ImportProducts({
-  productImportSuccessMessage,
-  productBatchPhase,
-  setProductBatchPhase,
-  productImportPrompt,
-  productPromptCopied,
-  onCopyPrompt,
-  productImportJson,
-  setProductImportJson,
-  onValidate,
-  productImportResult,
-  setProductImportResult,
-  productImporting,
-  onCommit,
-}) {
+export function ImportProducts({ catalog }) {
+  const {
+    productImportSuccessMessage,
+    productBatchPhase,
+    setProductBatchPhase,
+    productImportPrompt,
+    productPromptCopied,
+    onCopyPrompt,
+    productImportJson,
+    setProductImportJson,
+    onValidate,
+    productImportResult,
+    setProductImportResult,
+    productImporting,
+    onCommit,
+  } = useProductBatchImport({ catalog })
   return (
     <div className="flex flex-col gap-4">
       {productImportSuccessMessage && (

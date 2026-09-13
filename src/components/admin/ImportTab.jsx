@@ -22,14 +22,23 @@ const INGREDIENT_MODES = [
 // Batch Import covers three entities - "ingredients" (with its own
 // single/batch sub-modes), "recipes", and "products" (both batch/AI only,
 // since they already have a member-facing equivalent for one-off creation).
-// Almost all of this tab's state stays lifted in the AdminScreen shell
-// rather than becoming local here - `startSingleAddFromRequest` (Requests
-// and Ingredient Types tabs deep-link into the single-ingredient form) reads
-// and writes several of these same fields from outside this tab entirely,
-// so keeping them here would just mean threading a second copy back up.
+//
+// Ingredients' state stays lifted in the AdminScreen shell rather than
+// becoming local here - `startSingleAddFromRequest` (Requests and
+// Ingredient Types tabs deep-link into the single-ingredient form) reads
+// and writes several of those same fields from outside this tab entirely,
+// and the single-add and batch-ingredient paths share one success-message
+// slot, so splitting either out would just mean threading a second copy
+// back up. Recipes and Products have no such cross-tab coupling - each now
+// owns its own batch-import state locally (useRecipeBatchImport /
+// useProductBatchImport, called inside ImportRecipes.jsx/ImportProducts.jsx
+// themselves) - this tab only threads through the plain data
+// (catalog/computed/refetchRecipes) those hooks need.
 export function ImportTab(props) {
   const {
     catalog,
+    computed,
+    refetchRecipes,
     importEntity,
     setImportEntity,
     importMode,
@@ -133,45 +142,12 @@ export function ImportTab(props) {
       {importEntity === "recipes" && isAdmin && (
         <ImportRecipes
           catalog={catalog}
-          recipeImportSuccessMessage={props.recipeImportSuccessMessage}
-          recipeBatchPhase={props.recipeBatchPhase}
-          setRecipeBatchPhase={props.setRecipeBatchPhase}
-          recipeImportPrompt={props.recipeImportPrompt}
-          recipePromptCopied={props.recipePromptCopied}
-          onCopyPrompt={props.onCopyRecipeImportPrompt}
-          recipeImportJson={props.recipeImportJson}
-          setRecipeImportJson={props.setRecipeImportJson}
-          onValidate={props.onRunRecipeImportValidation}
-          recipeImportResult={props.recipeImportResult}
-          setRecipeImportResult={props.setRecipeImportResult}
-          recipeImporting={props.recipeImporting}
-          onCommit={props.onCommitRecipeImport}
-          addIngredientDraft={props.addIngredientDraft}
-          setAddIngredientDraft={props.setAddIngredientDraft}
-          onOpenAddIngredientDraft={props.onOpenAddIngredientDraft}
-          addIngredientError={props.addIngredientError}
-          addIngredientSaving={props.addIngredientSaving}
-          onSaveAddIngredientDraft={props.onSaveAddIngredientDraft}
+          computed={computed}
+          refetchRecipes={refetchRecipes}
         />
       )}
 
-      {importEntity === "products" && (
-        <ImportProducts
-          productImportSuccessMessage={props.productImportSuccessMessage}
-          productBatchPhase={props.productBatchPhase}
-          setProductBatchPhase={props.setProductBatchPhase}
-          productImportPrompt={props.productImportPrompt}
-          productPromptCopied={props.productPromptCopied}
-          onCopyPrompt={props.onCopyProductImportPrompt}
-          productImportJson={props.productImportJson}
-          setProductImportJson={props.setProductImportJson}
-          onValidate={props.onRunProductImportValidation}
-          productImportResult={props.productImportResult}
-          setProductImportResult={props.setProductImportResult}
-          productImporting={props.productImporting}
-          onCommit={props.onCommitProductImport}
-        />
-      )}
+      {importEntity === "products" && <ImportProducts catalog={catalog} />}
     </div>
   )
 }
