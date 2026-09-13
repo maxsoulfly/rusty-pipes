@@ -43,14 +43,31 @@ import { SectionTitle } from "@/components/primitives"
 // visually implied it described the base. It doesn't, so it's no longer
 // rendered that way: the base's own card renders alone, with the note
 // pulled out into its own clearly-labeled "How this version differs"
-// block below the grid, so it can't be mistaken for a caption on that
-// card. On a base's own page, the exact same note correctly describes
-// each variation CARD relative to the base being viewed - that side is
-// completely unchanged, note still directly under its own card, no new
-// heading needed (the existing muted caption already reads unambiguously
-// in that direction). Never rewrites/inverts/regenerates the note text
-// either way - always the exact stored string, since it may not be
-// mechanically invertible.
+// block, so it can't be mistaken for a caption on that card. On a base's
+// own page, the exact same note correctly describes each variation CARD
+// relative to the base being viewed - that side is completely unchanged,
+// note still directly under its own card, no new heading needed (the
+// existing muted caption already reads unambiguously in that direction).
+// Never rewrites/inverts/regenerates the note text either way - always
+// the exact stored string, since it may not be mechanically invertible.
+//
+// Stage V.5 polish (manual-screenshot finding) - the "How this version
+// differs" block was first placed BELOW the whole grid, at the grid's own
+// full container width - for a short note (Bloody Mary) that read fine,
+// but a longer one (Zombie) stretched into one very long line spanning
+// almost the entire Cocktail Detail width, visually disconnected from the
+// card above it. Fixed by moving the note INSIDE the same grid cell as
+// the base's own card (a `flex flex-col` wrapper, exactly the structure
+// the "Variations" side below already uses for each variation's own
+// caption) - this is the one existing sizing convention already proven to
+// read correctly here, reused rather than a new hardcoded width: the note
+// now wraps naturally within one grid column's own width at every
+// breakpoint (`grid-cols-2 md:grid-cols-3 lg:grid-cols-4`, unchanged),
+// directly under the card it belongs to, with no manual line breaks and
+// no change to the card's own size. The "Variations" side was reviewed
+// against the same concern and needed no change - each variation's own
+// note already lives inside its own per-card column wrapper, so it was
+// never at risk of stretching full-width in the first place.
 export function VariationsSection({ base, variations, showMakeableFraming }) {
   const navigate = useNavigate()
   const goTo = (id) => navigate(`/library/${id}`)
@@ -63,18 +80,23 @@ export function VariationsSection({ base, variations, showMakeableFraming }) {
         <div>
           <SectionTitle>Variation of</SectionTitle>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
-            <CocktailCard c={base.recipe} onClick={() => goTo(base.recipe.id)} />
-          </div>
-          {base.note && (
-            <div className="mt-2.5">
-              <span className="block text-[11px] font-bold text-tx2 uppercase tracking-[0.05em] mb-1">
-                How this version differs
-              </span>
-              <p className="text-[11px] text-tx3 leading-snug">
-                {base.note}
-              </p>
+            <div className="flex flex-col gap-1.5">
+              <CocktailCard
+                c={base.recipe}
+                onClick={() => goTo(base.recipe.id)}
+              />
+              {base.note && (
+                <div>
+                  <span className="block text-[11px] font-bold text-tx2 uppercase tracking-[0.05em] mb-1">
+                    How this version differs
+                  </span>
+                  <p className="text-[11px] text-tx3 leading-snug">
+                    {base.note}
+                  </p>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
 

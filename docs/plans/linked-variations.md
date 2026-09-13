@@ -10,8 +10,11 @@ links V.4 adds now that the UI itself was confirmed working. That same
 manual verification found a real V.3/V.4 presentation bug - the
 relationship note was rendered as if it described the BASE recipe's card
 on a variation's own page, when it actually always describes the
-variation relative to its base. Fixed same-day as Stage V.5 - see its own
-entry below.** Written after
+variation relative to its base. Fixed same-day as Stage V.5; a follow-up
+round of manual screenshots then found the fixed note block itself was
+full container width (fine for a short note, but a long one spanned
+almost the whole page) - fixed same-day as a layout width polish, still
+within V.5. See its own entry below.** Written after
 Ingredient Detail v1 (I.1–I.4, `docs/plans/ingredient-detail-page.md`)
 shipped and was manually verified. This is Stage C of `docs/plans/
 substitutes-and-variations.md`, which sketched an early version of this
@@ -806,8 +809,8 @@ DONE, 2026-09-13.**
   a sticky recipe-name header in the editor while scrolling - a separate,
   small UX follow-up, out of scope for V.4's own explicit instructions.
 
-**V.5 — Bugfix: directional note placement (manual-verification finding).
-DONE, 2026-09-13.**
+**V.5 — Bugfix: directional note placement + layout width polish
+(manual-verification findings). DONE, 2026-09-13.**
 - **The bug.** The stored relationship `note` is directional - it always
   means "how the variation differs from its base," never the reverse.
   V.3/V.4's rendering on a variation's own page ("Variation of") showed
@@ -842,16 +845,38 @@ DONE, 2026-09-13.**
   "Can't make the original?" framing, `CocktailCard`, and the live Bloody
   Mary/Zombie catalogue rows - all unchanged; the diff touches exactly one
   component (layout) and its own tests.
+- **Layout width polish (second manual-verification finding, same day).**
+  The "How this version differs" block above was initially placed BELOW
+  the whole grid, at the grid's own full container width - fine for a
+  short note (Bloody Mary), but the longer Zombie note stretched into one
+  very long line spanning almost the entire Cocktail Detail width,
+  visually disconnected from the base card above it. Fixed by moving the
+  note INSIDE the same grid cell as the base's own card (a `flex
+  flex-col` wrapper) - exactly the structure the "Variations" side
+  already uses for each variation's own caption, reused rather than a new
+  hardcoded width. The note now wraps naturally within one grid column's
+  own width at every breakpoint (`grid-cols-2 md:grid-cols-3
+  lg:grid-cols-4`, unchanged), directly under the card it belongs to - no
+  manual line breaks, no change to the card's own size, mobile-first
+  responsive by construction since it's governed by the same grid
+  breakpoints as everything else in this section. The "Variations" side
+  was reviewed against the same concern and needed no change - each
+  variation's own note already lives inside its own per-card column
+  wrapper, so it was never at risk of stretching full-width in the first
+  place. Pure CSS/JSX-structure change - no domain logic, no new tests
+  needed beyond confirming the existing suite still passes unchanged.
 - *Acceptance:* opening a variation shows its base's card alone, with the
-  saved note in its own "How this version differs" block below the grid -
-  never as a caption on the base card; opening a base still shows each
-  variation's own note as a caption directly under that variation's own
-  card, unchanged from V.3; the exact same stored note string renders
-  unchanged from either direction (2 new domain tests: same note through
-  both `resolveRecipeVariationContext()` perspectives; a note-less
-  relationship resolves to `note: null` cleanly on both sides); the
-  existing V.4 makeability-tier ordering and framing tests all still pass
-  unchanged, since no domain logic used by either was touched.
+  saved note in its own "How this version differs" block, constrained to
+  the same width as the card's own grid column and wrapping naturally at
+  every breakpoint - never a full-page-width line, never a caption on the
+  base card; opening a base still shows each variation's own note as a
+  caption directly under that variation's own card, unchanged from V.3;
+  the exact same stored note string renders unchanged from either
+  direction (2 new domain tests: same note through both
+  `resolveRecipeVariationContext()` perspectives; a note-less relationship
+  resolves to `note: null` cleanly on both sides); the existing V.4
+  makeability-tier ordering and framing tests all still pass unchanged,
+  since no domain logic used by either was touched at any point in V.5.
 
 Each stage: `corepack pnpm@10.34.3` test + build, isolated-LF
 `oxfmt --check`, RLS suite re-run after V.1's migration, `db advisors
@@ -1027,24 +1052,33 @@ relationships, cards, and navigation all work - but also surfaced that the
 note rendered directly under the BASE card visually read as a description
 of the base, not of the variation being viewed. Fixed in V.5.
 
-**Manual verification still owed for V.5 (the corrected layout, not yet
+**Manual verification of the first V.5 fix (directional note placement) -
+done by the user, 2026-09-13, via screenshots, and it found the layout
+width bug above.** The note correctly moved off the base's card and into
+its own "How this version differs" block - direction/semantics confirmed
+right - but that block was still full container width, and the longer
+Zombie note stretched into one very long line, visually disconnected from
+the card. Fixed by the layout width polish above (same day).
+
+**Manual verification still owed for the layout width polish (not yet
 browser-checked this stage):**
 - Open **Bloody Mary (Practical Version)** → confirm "Variation of" shows
-  the **Bloody Mary** card alone, with a separate **"How this version
-  differs"** block below it carrying the existing note - not a caption
-  under the Bloody Mary card.
-- Open **Bloody Mary** → confirm "Variations" still shows **Bloody Mary
-  (Practical Version)** with its note as a caption directly under that
-  card, exactly as before (this direction is unchanged).
-- Open **Zombie (Home Bar Spiced & Dark Spec)** → confirm the same
-  "Variation of" + separated "How this version differs" layout, with the
-  Zombie note.
-- Open **Zombie** → confirm "Variations" still shows **Zombie (Home Bar
-  Spiced & Dark Spec)** with its note as a caption, unchanged.
-- Confirm the V.4 "Can't make the original? You can make one of these
-  instead." framing still appears/disappears correctly (unaffected by this
-  layout change) and both pairs' own ingredient lists/steps/badges remain
-  completely unaffected.
+  the **Bloody Mary** card with its **"How this version differs"** note
+  directly below it, constrained to roughly the card's own column width
+  (not stretching across the page) and wrapping naturally.
+- Open **Zombie (Home Bar Spiced & Dark Spec)** → confirm the same, with
+  the longer Zombie note wrapping into multiple lines within that same
+  column width, still clearly attached to the card above it - no
+  overflow, no manual-looking line breaks.
+- Check narrow mobile, normal phone width, and desktop/wide screen - the
+  note column should track the same 2/3/4-column breakpoints the card
+  grid already uses, never becoming a single unreadably narrow sliver.
+- Open **Bloody Mary** and **Zombie** (the base pages) → confirm
+  "Variations" still shows each practical/home-bar variation's own note
+  as a caption directly under its own card, unchanged from V.3.
+- Confirm the V.4 "Can't make the original?" framing still appears/
+  disappears correctly and both pairs' own ingredient lists/steps/badges
+  remain completely unaffected.
 
 ---
 

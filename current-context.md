@@ -33,7 +33,7 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
 19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **I.1 through I.4 DONE + pushed, 2026-09-12/13 - v1 COMPLETE.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, "cocktails using this," and (for staff) an edit shortcut → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, the single shared `useInventory()` instance, `isPreparationSatisfiable()`, and the existing `IngredientTypeEditor`; no schema changes (every field/table this feature surfaces already existed, just unrendered to members). Staged **I.1 done** (tappable ingredient-name links + shared-tier grouping + basic identity) → **I.2 done** (My Bar Add/Remove action, household-basic-aware) → **I.3 done** (Can provide / Can be replaced by / Homemade preparation sections, each directional, reusing `IngredientLink`) → **I.4 done** (admin/moderator-only "Edit ingredient" shortcut, deep-linking straight into that ingredient type's existing editor - the plan's original "not a new deep-link" deferral was explicitly superseded by the user's own I.4 request; see item 0). **I.1-I.3 manually verified by the user; I.4 is not yet browser-verified** - see item 0 for the exact owed check. See the plan doc for the full audit/design.
 
-20. Linked Variations (new feature, `docs/plans/linked-variations.md`) — **V.1 + V.2 + V.3 + V.4 + V.5 DONE + pushed 2026-09-13, V.2 and V.3 manually verified (that verification found the V.5 bug).** Lets two otherwise-independent recipes declare "this is a variation of that" (e.g. Bloody Mary ↔ Bloody Mary (Practical Version)) as pure metadata/navigation - never ingredient/instruction inheritance, never affecting either recipe's own availability. One base → many variations (no general many-to-many), directional storage (variation points at its base) with bidirectional display (one hop only); **a relationship cycle is rejected at write time** (corrected 2026-09-13 from the original plan's "cycles are harmless, don't bother preventing them" stance - a `BEFORE INSERT/UPDATE` trigger walks the proposed base's chain, since `unique(recipe_id)` already guarantees the graph is a forest of trees, so this is a single linked-list walk, not a graph algorithm), a new standalone `recipe_relationships` table (not a `recipes` column - avoids widening its column-restricted update grant), reusing the existing `recipe_is_visible`/`recipe_is_editable` RLS helpers for authorization. Batch import explicitly does NOT gain a variation reference (no reliable identity mechanism at import time, per AGENTS.md's own no-fuzzy-matching rule) - admin-editor-only for v1. Staged **V.1 done** (schema + migration + cycle-prevention trigger + RLS + a pure one-hop `src/domain/recipeRelationships.js` resolver, 16 new tests) → **V.2 done** (recipe editor "Variation of" field + a new `RecipeComboBox`; **atomicity corrected same-day** - a first-pass `set_recipe_variation_of()` RPC only made the relationship's own write atomic and stopped a cyclic *rejection* from allowing later writes, but didn't stop an already-*succeeded* relationship write from staying committed if a later step then failed; replaced by one `save_recipe()` RPC that owns the recipe's fields, components, taste tags, AND the relationship in a single transaction, covering create too - 3 domain tests + a full RLS-suite block proving the actual rollback) → **V.3 done** (`DetailScreen.jsx` gains a "Variation of"/"Variations" block, new `VariationsSection.jsx` reusing `CocktailCard` in Ingredient Detail's own grid pattern, zero new data loading - `recipeRelationships` already fetched since V.2, resolved via V.1's `resolveRecipeVariationContext()` against a local `recipesById` built from already-loaded `computed`; deterministic alphabetical sort added for multi-variation ordering; 2 new domain tests) → **V.4 done** (makeability-tier-aware variation ordering reusing shared `DISPLAY_TIER_ORDER`; a new `shouldShowMakeableVariationFraming()` + extracted `isPossibleTier()` helper drive a compact "Can't make the original? You can make one of these instead." line, base → variations side only; small editor label/helper wording polish; the two real catalogue relationships now live - **Bloody Mary (Practical Version) → Bloody Mary** (pre-existing, note reviewed and kept) and **Zombie (Home Bar Spiced & Dark Spec) → Zombie** (newly linked after a real ingredient/prep comparison), both written through the app's own `save_recipe()` RPC under a simulated real admin identity, not raw SQL; 13 new domain tests) → **V.5 done** (bugfix - the relationship note is directional ("how the variation differs from its base"), but a variation's page rendered it as a caption under the BASE's card, implying it described the base; fixed to render the base's card alone with the note in its own "How this version differs" block below it, presentation-only, base → variations direction unchanged; 2 new domain tests). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer. Supersedes `docs/plans/substitutes-and-variations.md`'s earlier "Part 3"/"Stage C" sketch (kept there as historical record, now redirects here).
+20. Linked Variations (new feature, `docs/plans/linked-variations.md`) — **V.1 + V.2 + V.3 + V.4 + V.5 DONE + pushed 2026-09-13, V.2 and V.3 manually verified (that verification found the V.5 bug).** Lets two otherwise-independent recipes declare "this is a variation of that" (e.g. Bloody Mary ↔ Bloody Mary (Practical Version)) as pure metadata/navigation - never ingredient/instruction inheritance, never affecting either recipe's own availability. One base → many variations (no general many-to-many), directional storage (variation points at its base) with bidirectional display (one hop only); **a relationship cycle is rejected at write time** (corrected 2026-09-13 from the original plan's "cycles are harmless, don't bother preventing them" stance - a `BEFORE INSERT/UPDATE` trigger walks the proposed base's chain, since `unique(recipe_id)` already guarantees the graph is a forest of trees, so this is a single linked-list walk, not a graph algorithm), a new standalone `recipe_relationships` table (not a `recipes` column - avoids widening its column-restricted update grant), reusing the existing `recipe_is_visible`/`recipe_is_editable` RLS helpers for authorization. Batch import explicitly does NOT gain a variation reference (no reliable identity mechanism at import time, per AGENTS.md's own no-fuzzy-matching rule) - admin-editor-only for v1. Staged **V.1 done** (schema + migration + cycle-prevention trigger + RLS + a pure one-hop `src/domain/recipeRelationships.js` resolver, 16 new tests) → **V.2 done** (recipe editor "Variation of" field + a new `RecipeComboBox`; **atomicity corrected same-day** - a first-pass `set_recipe_variation_of()` RPC only made the relationship's own write atomic and stopped a cyclic *rejection* from allowing later writes, but didn't stop an already-*succeeded* relationship write from staying committed if a later step then failed; replaced by one `save_recipe()` RPC that owns the recipe's fields, components, taste tags, AND the relationship in a single transaction, covering create too - 3 domain tests + a full RLS-suite block proving the actual rollback) → **V.3 done** (`DetailScreen.jsx` gains a "Variation of"/"Variations" block, new `VariationsSection.jsx` reusing `CocktailCard` in Ingredient Detail's own grid pattern, zero new data loading - `recipeRelationships` already fetched since V.2, resolved via V.1's `resolveRecipeVariationContext()` against a local `recipesById` built from already-loaded `computed`; deterministic alphabetical sort added for multi-variation ordering; 2 new domain tests) → **V.4 done** (makeability-tier-aware variation ordering reusing shared `DISPLAY_TIER_ORDER`; a new `shouldShowMakeableVariationFraming()` + extracted `isPossibleTier()` helper drive a compact "Can't make the original? You can make one of these instead." line, base → variations side only; small editor label/helper wording polish; the two real catalogue relationships now live - **Bloody Mary (Practical Version) → Bloody Mary** (pre-existing, note reviewed and kept) and **Zombie (Home Bar Spiced & Dark Spec) → Zombie** (newly linked after a real ingredient/prep comparison), both written through the app's own `save_recipe()` RPC under a simulated real admin identity, not raw SQL; 13 new domain tests) → **V.5 done** (bugfix - the relationship note is directional ("how the variation differs from its base"), but a variation's page rendered it as a caption under the BASE's card, implying it described the base; fixed to render the base's card alone with the note in its own "How this version differs" block, presentation-only, base → variations direction unchanged; 2 new domain tests - **plus a same-day layout-width follow-up**, found via manual screenshots: that new note block was still full container width, so a longer note (Zombie) stretched into one very long line disconnected from the card; fixed by moving the note inside the same per-card grid-column wrapper the "Variations" side already used, so it wraps naturally at column width instead of page width, no new hardcoded size). See the plan doc for the full audit/design and item 0 of "Exact next action" for the current pointer. Supersedes `docs/plans/substitutes-and-variations.md`'s earlier "Part 3"/"Stage C" sketch (kept there as historical record, now redirects here).
 
 Each numbered step is a development chunk boundary for this file.
 
@@ -157,17 +157,36 @@ Each numbered step is a development chunk boundary for this file.
    perspectives; a note-less relationship resolves to `note: null`
    cleanly on both sides).
 
+   **V.5 layout-width polish (same day) - manual screenshots of the fix
+   above found a second issue:** the new "How this version differs" block
+   was still full container width - fine for a short note (Bloody Mary),
+   but the longer Zombie note stretched into one very long line spanning
+   almost the whole Cocktail Detail width, visually disconnected from the
+   base card above it. Fixed by moving the note INSIDE the same grid cell
+   as the base's own card (a `flex flex-col` wrapper), reusing the exact
+   structure the "Variations" side already uses for each variation's own
+   caption - no new hardcoded width, the note now wraps naturally within
+   one grid column's own responsive width
+   (`grid-cols-2 md:grid-cols-3 lg:grid-cols-4`, unchanged) at every
+   breakpoint, directly under the card it belongs to. The "Variations"
+   side was reviewed against the same concern and needed no change - each
+   variation's own note already lives inside its own per-card column
+   wrapper. Pure CSS/JSX-structure change - no domain logic touched, so no
+   new tests beyond confirming the existing suite still passes.
+
    **Verified:** no new migration this stage (both relationship writes
    used the existing `save_recipe()` RPC, already RLS-suite-covered).
-   `corepack pnpm@10.34.3 test` **377/377** (+13 V.4 + 2 V.5 = +15 total
-   this feature's last two stages). `corepack pnpm@10.34.3 build` clean
-   (181 modules, unchanged - no new file). Diff reviewed for scope creep -
-   V.4: none found (no recursive tree, no siblings/grandparents, no
-   recipe inheritance, no import support, no variation badges, no
-   availability propagation, no new relationship type); V.5: none found
-   (touches exactly one component + its own tests - no schema, no stored
-   note change, no relationship direction change, no makeability/ordering
-   change, no card change, no catalogue data change).
+   `corepack pnpm@10.34.3 test` **377/377** (+13 V.4 + 2 V.5 note-fix = +15
+   total this feature's last two stages; the layout-width polish added no
+   new tests, none needed). `corepack pnpm@10.34.3 build` clean (181
+   modules, unchanged - no new file at any point in V.4/V.5). Diff
+   reviewed for scope creep - V.4: none found (no recursive tree, no
+   siblings/grandparents, no recipe inheritance, no import support, no
+   variation badges, no availability propagation, no new relationship
+   type); V.5 (both the note-direction fix and the layout-width polish):
+   none found (touches exactly one component + its own tests across both -
+   no schema, no stored note change, no relationship direction change, no
+   makeability/ordering change, no card change, no catalogue data change).
 
    **Not touched (out of scope, confirmed by inspection):** `computeAvail()`;
    `computeMakeability()`; adaptation tiers; Buy Next; Home/Library
@@ -175,17 +194,20 @@ Each numbered step is a development chunk boundary for this file.
    the sticky editor header (recorded follow-up, not built). `docs/project.md`
    untouched.
 
-   **Exact next action:** the user reviews V.4 + V.5. **Not yet
-   browser-verified this stage** - manual checks owed: open Bloody Mary
-   (Practical Version) and confirm "Variation of" now shows the Bloody
-   Mary card alone with the note in a separate "How this version differs"
-   block below it (not a caption on the card); open Bloody Mary and
-   confirm "Variations" still shows the Practical Version with its note as
-   a caption under its own card, unchanged; repeat both for the Zombie
-   pair; confirm the V.4 "Can't make the original?" framing still
-   appears/disappears correctly (unaffected by this layout change); confirm
-   neither recipe's own ingredients/steps/badge changed. Do not start
-   another feature until the user reviews this.
+   **Exact next action:** the user reviews V.4 + V.5 (including the layout
+   width polish). **Not yet browser-verified this stage** - manual checks
+   owed: open Bloody Mary (Practical Version) and Zombie (Home Bar Spiced
+   & Dark Spec), confirm "Variation of" shows the base card with its "How
+   this version differs" note directly below it, constrained to roughly
+   the card's own column width and wrapping naturally (not a full-page
+   line) at narrow mobile, normal phone, and desktop widths; open Bloody
+   Mary and Zombie (the base pages), confirm "Variations" still shows each
+   variation with its note as a caption under its own card, unchanged;
+   confirm the V.4 "Can't make the original?" framing still appears/
+   disappears correctly; confirm neither recipe's own ingredients/steps/
+   badge changed. Do not start another feature until the user reviews
+   this - the sticky editor-header follow-up is explicitly not started
+   yet either.
 
 **Ingredient Detail v1 (I.1 through I.4, `docs/plans/ingredient-detail-page.md`) is feature-complete, 2026-09-12/13.** Tappable ingredient links + shared-tier grouping + basic identity (I.1); My Bar Add/Remove action, household-basic-aware (I.2); Can provide / Can be replaced by / Homemade preparation sections (I.3); admin/moderator "Edit ingredient" shortcut deep-linking straight into the existing `IngredientTypeEditor` (I.4 - a deliberate expansion beyond that stage's original "not a new deep-link" text, per the user's own explicit I.4 request). **I.1-I.3 manually verified by the user** (ingredient navigation, Add/Remove My Bar, Homemade Preparation, and the directional relationships all confirmed working); **I.4 has only this session's automated verification (tests + build), not yet a manual/browser check** - as a non-admin, confirm no edit action appears on any `/bar/type/:id`/`/bar/product/:id` page; as admin/moderator, confirm it lands directly on that ingredient's editor, already expanded, in Admin → Ingredient Types. A separate design/visual polish pass on this screen is planned next, on its own go-ahead - not started here. See the chunk-history entries below for the full stage-by-stage detail.
 
@@ -279,6 +301,63 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 needed). No migrations, no schema change - not needed to fix this.
 
 **Commit:** `7a22526`. `docs/project.md` untouched.
+
+---
+
+## Last completed chunk (Linked Variations Stage V.5 - layout width polish for the "How this version differs" note, 2026-09-13 — CSS/JSX-structure-only change to 1 component, no new tests needed, no schema/migration/catalogue change)
+
+**Found by the user's own manual screenshots of the V.5 note-direction
+fix.** That fix correctly moved the relationship note off the base's card
+and into its own labeled "How this version differs" block - direction/
+semantics confirmed right - but the block itself was still rendered BELOW
+the whole grid, at the grid's own full container width. For a short note
+(Bloody Mary: "Uses Soy sauce instead of Worcestershire Sauce and regular
+salt instead of Celery Salt. More common at home") that read fine, but
+the longer Zombie note stretched into one extremely long horizontal line
+spanning almost the entire Cocktail Detail width, visually disconnected
+from the relationship card above it.
+
+**Fix (`src/components/detail/VariationsSection.jsx`, CSS/JSX-structure
+only - no new component, no schema/domain/service change):** the note
+block now lives INSIDE the same grid cell as the base's own card - the
+card and the label+note are wrapped together in one `flex flex-col
+gap-1.5` div, which is itself the sole item in the existing
+`grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5` grid (unchanged
+breakpoints). This is the exact same structural pattern the "Variations"
+side already uses for each variation's own caption (card + note in one
+per-item flex-col wrapper, itself a grid cell) - reused rather than
+inventing a new width value, so the note now wraps naturally within one
+grid column's own responsive width at every breakpoint instead of the
+whole page's width. No manual line breaks; the card's own size is
+completely unchanged; mobile-first responsive by construction, since it's
+governed by the same grid breakpoints as everything else in this section.
+The "Variations" side was reviewed against the same concern and needed no
+change - each variation's own note already lives inside its own per-card
+column wrapper, so it was never at risk of stretching full-width.
+
+**Not touched:** everything the V.5 note-direction fix already left
+untouched (relationship schema, stored note text, relationship direction,
+V.4 makeability-tier ordering, V.4 framing logic, `CocktailCard`, live
+catalogue rows) - this stage narrows further still, touching only markup/
+class structure inside one component, no logic of any kind.
+
+**Verified:** no domain logic changed, so no new tests were added or
+needed - `corepack pnpm@10.34.3 test` **377/377** (unchanged count,
+confirming nothing broke). `corepack pnpm@10.34.3 build` clean (181
+modules, unchanged - no new file). Diff is exactly one file
+(`VariationsSection.jsx`), confirmed via `git status`/`git diff` before
+committing - matches the explicit "CSS/layout polish only" scope.
+
+**Not yet browser-verified this stage:** open Bloody Mary (Practical
+Version) and Zombie (Home Bar Spiced & Dark Spec), confirm the "How this
+version differs" note now sits directly under the base card, constrained
+to roughly the card's own column width, wrapping naturally (not a single
+long line) at narrow mobile, normal phone, and desktop widths; confirm
+the "Variations" side (each base's own page) is visually unchanged from
+before.
+
+**Commit:** see the git log for the exact hash. `docs/project.md`
+untouched.
 
 ---
 
