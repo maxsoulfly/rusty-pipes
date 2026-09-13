@@ -1,6 +1,6 @@
 # AdminScreen modularization
 
-**Status: executed and committed, 2026-09-14.** Fourth round of the component-size cleanup, after `docs/plans/archive/component-size-refactor.md` (2026-08-24), `docs/plans/archive/component-modularization-round-2.md`, and `docs/plans/archive/editor-screen-modularization.md` (both 2026-09-14). The 2026-08-24 refactor split `AdminScreen.jsx` from 3,769 to 793 lines; it grew to 838 since (mostly the Onboarding tab, added cleanly as its own file). Re-inspected fresh rather than trusting the earlier audit's numbers.
+**Status: executed and committed, 2026-09-14.** Fourth round of the component-size cleanup, after `docs/plans/archive/component-size-refactor.md` (2026-08-24), `docs/plans/archive/component-modularization-round-2.md`, and `docs/plans/archive/editor-screen-modularization.md` (both 2026-09-14). The 2026-08-24 refactor split `AdminScreen.jsx` from 3,769 to 793 lines; it grew to 838 since (mostly the Onboarding tab, added cleanly as its own file). Re-inspected fresh rather than trusting the earlier audit's numbers. **Manually verified by the user, 2026-09-14** — recipe/product batch import, the Requests → "Add to catalog" deep link, and Promote/Demote all confirmed working.
 
 ## Responsibilities found (verified by reading the current file, not assumed)
 
@@ -35,6 +35,6 @@
 - [x] `corepack pnpm@10.34.3 build` — clean.
 - [x] `oxlint` (default + `-D no-undef`) on every touched file — zero real findings; the only `no-undef` hits are the same known browser-global false positives (`window`/`navigator`/`setTimeout`) documented in the 2026-08-24 refactor.
 - [x] Diff read carefully: confirmed recipe/product batch-import fields were never read/written outside their own tab before extraction, and that the shared `importSuccessMessage`/`startSingleAddFromRequest` cross-tab coupling for ingredients was correctly left untouched.
-- [ ] No manual UI verification claimed here - see the handoff checklist.
+- [x] Manually verified by the user, 2026-09-14 — recipe/product batch import, Requests → "Add to catalog" deep link, and Promote/Demote all confirmed working.
 
 No existing bug was found during this pass.
