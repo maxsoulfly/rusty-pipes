@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { computeMakeability, isPreparationSatisfiable } from "./makeability"
+import {
+  buildAdaptedCardActions,
+  computeMakeability,
+  isPreparationSatisfiable,
+} from "./makeability"
 
 function component(overrides) {
   return {
@@ -559,5 +563,129 @@ describe("isPreparationSatisfiable", () => {
 
   it("is null-safe when inputs is null/undefined", () => {
     expect(isPreparationSatisfiable(undefined, new Set())).toBe(true)
+  })
+})
+
+describe("buildAdaptedCardActions", () => {
+  it("substitution-only adapted recipe -> 'Use <substitute>', reading the actually-selected substitute, not merely the first catalogue option", () => {
+    // Two candidates configured for the same component (White Rum -> Spiced
+    // Rum, White Rum -> Gold Rum) - only Gold Rum is owned, so it must be
+    // the one that appears, proving this reads the real resolution rather
+    // than always picking whichever substitute happens to be listed first.
+    const cocktail = { ings: [component({ ingId: "white-rum" })] }
+    const rows = [
+      WHITE_RUM_TO_SPICED,
+      {
+        from_type_id: "white-rum",
+        to_type_id: "gold-rum",
+        flavor_note: "rounder, sweeter",
+      },
+    ]
+    const { adapted } = computeMakeability(
+      cocktail,
+      new Set(["gold-rum"]),
+      name,
+      undefined,
+      undefined,
+      rows,
+    )
+    expect(buildAdaptedCardActions(adapted.resolvedRequired)).toEqual([
+      { ingId: "white-rum", kind: "substitute", text: "Use Gold Rum" },
+    ])
+  })
+
+  it("preparation-only adapted recipe -> 'Prepare <ingredient>'", () => {
+    const cocktail = { ings: [component({ ingId: "simple-syrup" })] }
+    const { adapted } = computeMakeability(
+      cocktail,
+      new Set(["white-sugar", "water"]),
+      name,
+      undefined,
+      undefined,
+      [],
+      SIMPLE_SYRUP_BY_PRODUCED,
+    )
+    expect(buildAdaptedCardActions(adapted.resolvedRequired)).toEqual([
+      { ingId: "simple-syrup", kind: "preparation", text: "Prepare Simple Syrup" },
+    ])
+  })
+
+  it("substitution + preparation together -> two actions, in recipe-component order (the Daiquiri acceptance scenario)", () => {
+    const cocktail = {
+      ings: [
+        component({ ingId: "white-rum" }),
+        component({ ingId: "lime-juice" }),
+        component({ ingId: "simple-syrup" }),
+      ],
+    }
+    const owned = new Set(["spiced-rum", "lemon-juice", "white-sugar", "water"])
+    const { adapted } = computeMakeability(
+      cocktail,
+      owned,
+      name,
+      undefined,
+      undefined,
+      [WHITE_RUM_TO_SPICED, LIME_JUICE_TO_LEMON],
+      SIMPLE_SYRUP_BY_PRODUCED,
+    )
+    expect(buildAdaptedCardActions(adapted.resolvedRequired)).toEqual([
+      { ingId: "white-rum", kind: "substitute", text: "Use Spiced Rum" },
+      { ingId: "lime-juice", kind: "substitute", text: "Use Lemon Juice" },
+      { ingId: "simple-syrup", kind: "preparation", text: "Prepare Simple Syrup" },
+    ])
+  })
+
+  it("multiple substitutions alone -> deterministic actions, one per component, in recipe order", () => {
+    const cocktail = {
+      ings: [
+        component({ ingId: "white-rum" }),
+        component({ ingId: "lime-juice" }),
+      ],
+    }
+    const owned = new Set(["spiced-rum", "lemon-juice"])
+    const { adapted } = computeMakeability(
+      cocktail,
+      owned,
+      name,
+      undefined,
+      undefined,
+      [WHITE_RUM_TO_SPICED, LIME_JUICE_TO_LEMON],
+    )
+    expect(buildAdaptedCardActions(adapted.resolvedRequired)).toEqual([
+      { ingId: "white-rum", kind: "substitute", text: "Use Spiced Rum" },
+      { ingId: "lime-juice", kind: "substitute", text: "Use Lemon Juice" },
+    ])
+  })
+
+  it("never fabricates an action from every possible catalogue relationship - only what resolvedRequired actually resolved", () => {
+    // Lime Juice has a configured substitute (Lemon Juice) that is NOT
+    // owned, so it resolves via a different route entirely (owned
+    // directly) and never appears in resolvedRequired at all - confirming
+    // this function only ever renders what the engine actually selected,
+    // never every configured possibility for the recipe.
+    const cocktail = {
+      ings: [
+        component({ ingId: "white-rum" }),
+        component({ ingId: "lime-juice" }),
+      ],
+    }
+    const owned = new Set(["spiced-rum", "lime-juice"]) // lime juice owned directly
+    const { strict, adapted } = computeMakeability(
+      cocktail,
+      owned,
+      name,
+      undefined,
+      undefined,
+      [WHITE_RUM_TO_SPICED, LIME_JUICE_TO_LEMON],
+    )
+    expect(strict.missingRequiredIds).toEqual(["white-rum"])
+    expect(buildAdaptedCardActions(adapted.resolvedRequired)).toEqual([
+      { ingId: "white-rum", kind: "substitute", text: "Use Spiced Rum" },
+    ])
+  })
+
+  it("is empty for a recipe with no adaptation (null resolvedRequired)", () => {
+    expect(buildAdaptedCardActions(null)).toEqual([])
+    expect(buildAdaptedCardActions(undefined)).toEqual([])
   })
 })

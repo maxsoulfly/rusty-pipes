@@ -22,7 +22,34 @@ rather than doing them one at a time; see "Stage D.4 & D.5 — DONE" below.
 see "Stage D manual verification — PASSED" below). The adapted discovery
 category is finalized as **"Make With Adaptations"** (renamed from "Make
 With Substitutions" the same day - see the same section). Stage C (Linked
-Variations) remains NOT started, independent, on a separate go-ahead.
+Variations) is now also complete (`docs/plans/linked-variations.md`).
+
+**Adapted-card presentation follow-up, 2026-09-13 (later manual-testing
+finding, not a new stage - card copy only).** `CocktailCard`/`SmallCard`'s
+adapted status originally showed `display.label`'s composed sentence
+("Make with substitutions", "Make with substitutions · Prepare Simple
+Syrup first") - accurate, but redundant under the "Make With Adaptations"
+category heading, and too verbose for a narrow mobile card. Replaced with
+compact, concrete per-component actions built directly from
+`adapted.resolvedRequired` (new `buildAdaptedCardActions()`,
+`src/domain/makeability.js`) - "Use Lemon Juice" for a resolved
+substitute, "Prepare Simple Syrup" for a resolved preparation, one line
+each, reusing the existing shared "adapted" tier icon for a substitute
+action and no icon for a preparation action (none exists to reuse).
+Also fixed a real contradiction this surfaced: the card's own yellow/
+orange missing-ingredient chip previously read `strict.avail` directly
+(`c.avail === "almost"`), so an adapted card could show its new action AND
+a "−Lime Juice" chip for the exact same, already-resolved requirement.
+Both cards now gate that chip on `display.tier === "almost"` instead - the
+single shared status field every surface already reads - so it's
+suppressed exactly when (and only when) `display.tier` is `"adapted"`;
+Almost There/Unavailable cards are completely unaffected (`display.tier`
+already equals the bare `avail` for both). `display.label`/
+`composeAdaptedLabel()` themselves are unchanged - still used by
+`HeroCard`'s own richer Cocktail Detail explanation, which was
+deliberately left untouched (the detail page's job is "why/how," the
+card's job is now "what to do"). See `current-context.md`'s own chunk
+entry for the full detail, tests, and file list.
 
 > **D1 is SUPERSEDED, 2026-09-11 — planning only, not yet implemented.** The
 > user has decided general catalogue substitutes should be able to affect

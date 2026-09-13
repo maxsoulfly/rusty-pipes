@@ -196,6 +196,39 @@ function composeAdaptedLabel(resolvedRequired) {
 }
 
 /**
+ * Card-level compact adaptation actions ("what do I actually need to do"),
+ * built directly from `resolvedRequired` - never re-derived by parsing
+ * `display.label`'s composed prose (that string exists for a badge/detail
+ * context, not as a machine-readable source; re-parsing it would be a
+ * second, drifting definition of the same fact this function already has
+ * structured access to). One entry per resolved component, in the exact
+ * order `resolvedRequired` already arrives in - deterministic
+ * recipe-component order, since `computeAdaptedResult()` above builds it by
+ * walking `strict.missingRequiredIds`, which itself walks the recipe's own
+ * `ings` array in order (see availability.js) - no re-sorting needed or
+ * done here.
+ *
+ * `kind` is returned alongside `text` so a caller can decide its own icon
+ * treatment (e.g. the shared "adapted" tier icon for a substitute action,
+ * no icon at all for a preparation action) without this pure function
+ * needing to know anything about presentation.
+ *
+ * @param {ReturnType<typeof computeAdaptedResult>['resolvedRequired'] | null | undefined} resolvedRequired
+ * @returns {{ ingId: string, kind: "substitute" | "preparation", text: string }[]}
+ */
+export function buildAdaptedCardActions(resolvedRequired) {
+  return (resolvedRequired ?? []).map((r) =>
+    r.via === "substitute"
+      ? { ingId: r.ingId, kind: "substitute", text: `Use ${r.matchedName}` }
+      : {
+          ingId: r.ingId,
+          kind: "preparation",
+          text: `Prepare ${r.producedName}`,
+        },
+  )
+}
+
+/**
  * The one shared makeability result every display surface should read.
  *
  * @param {Parameters<typeof computeAvail>[0]} cocktail

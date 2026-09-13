@@ -29,7 +29,7 @@ Agreed phase plan (revised by user on 2026-08-15 — private recipe CRUD moved i
 
    (Note: item 17's "Stage 1 done, mobile verification pending" / "admin type editing moved to an `IngredientDetailScreen` overflow action" text predates the My Bar redesign's later stages — see the corrected current state in item 18's plan doc: inline admin edit pencils are gone, editing now goes through Admin → Ingredient Types via the ⋯ menu.)
 
-18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms (Concept 2) + Suggested Substitutes (Stage B) shipped via `docs/plans/substitutes-and-variations.md` (Stages A/B, DONE 2026-09-10). Homemade Preparations SUPERSEDED 2026-09-11 by a smaller design in that same doc ("Stage D — Adapted Availability & Minimal Homemade Preparations"), then that smaller design itself SHIPPED as Stage D.3 the same day. Stage D (D.1 adapted availability, D.2 discovery/grouping/ordering, D.3 tier-5 preparations, D.4 counts/breakdown + real Daiquiri catalogue rows, D.5 per-component exclusion + Buy Next ranking) is FULLY DONE + pushed 2026-09-11, **manually verified working correctly in the running app 2026-09-12, and the adapted category's user-facing name finalized as "Make With Adaptations"** (was "Make With Substitutions"). **Stage D is feature-complete and verified - nothing outstanding.** See item 0 and the chunk entries below. Linked cocktail variations (Stage C) remain NOT started, independent, on a separate go-ahead.** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
+18. Household basics, ingredient forms, and homemade preparations (new feature) — **Household Basics COMPLETE (Stages 1–3), 2026-09-10. Ingredient Forms (Concept 2) + Suggested Substitutes (Stage B) shipped via `docs/plans/substitutes-and-variations.md` (Stages A/B, DONE 2026-09-10). Homemade Preparations SUPERSEDED 2026-09-11 by a smaller design in that same doc ("Stage D — Adapted Availability & Minimal Homemade Preparations"), then that smaller design itself SHIPPED as Stage D.3 the same day. Stage D (D.1 adapted availability, D.2 discovery/grouping/ordering, D.3 tier-5 preparations, D.4 counts/breakdown + real Daiquiri catalogue rows, D.5 per-component exclusion + Buy Next ranking) is FULLY DONE + pushed 2026-09-11, **manually verified working correctly in the running app 2026-09-12, and the adapted category's user-facing name finalized as "Make With Adaptations"** (was "Make With Substitutions"). **Stage D is feature-complete and verified.** **Adapted-card presentation follow-up, 2026-09-13** (card copy only, not a new stage - see the chunk entry below): `CocktailCard`/`SmallCard` now show compact per-component actions ("Use Lemon Juice", "Prepare Simple Syrup") built from `adapted.resolvedRequired` instead of `display.label`'s composed sentence, and no longer show a contradictory missing-ingredient chip for an already-resolved requirement on an adapted card - `HeroCard`'s own richer Cocktail Detail explanation is unchanged. See item 0 and the chunk entries below. Linked cocktail variations (Stage C) are now also complete (`docs/plans/linked-variations.md`).** Goal: recognize what someone can make from what they own without marking every ingredient form separately. Full audit + a staged plan agreed with the user (three deliberately separate mechanisms; two rounds of revision based on the user's own corrections and product decisions) in `docs/plans/household-basics-ingredient-forms-preparations.md` — read that file before starting, it is the source of truth for this item. **Stage 1 (schema + inert admin toggle):** `ingredient_types.assumed_available boolean not null default false` migration `20260909120000`, threaded through `fetchIngredientTypes`/`updateIngredientType`, "Household basic" `OwnedToggle` in `IngredientTypeEditor.jsx`. Phone-verified. **Stage 2 (engine wiring, Ice only, `c1629b9`, mobile-verified 2026-09-09):** `resolveOwnedIngredientTypes()` takes optional `assumedAvailableTypeIds` (unioned post-ancestor-walk — exact id only, no propagation); `computeAvail()` takes optional `householdBasicIds` and returns a `householdBasics` map; `App.jsx` derives `householdBasicTypeIds`; `IngredientsSection.jsx` renders a "Household basic" note + green dot; `ingredientRecipeMatches.js` deliberately does NOT get the assumed set. **Stage 3 (admin-managed onboarding config) — DONE + closed out 2026-09-10:** `onboarding_ingredients` table + `set_onboarding_config` RPC; `OnboardingTab.jsx` admin editor (draft → atomic save, ★ Initial ≤6, group dropdown, ↑/↓ + drag-to-reorder within group); resolver `resolveOnboardingSelection`; `BuildYourBar.jsx` reads it; three admin shortcuts → `/admin?tab=onboarding`. Live `assumed_available` set: Black Pepper / Ice / Salt / Water / White Sugar. See the close-out chunk below for the exact verified scope + two non-blocking limits. **Next: Ingredient Forms (Concept 2) — run its pre-stage re-audit first.**
 
 19. Ingredient Detail page (new feature, `docs/plans/ingredient-detail-page.md`) — **I.1 through I.4 DONE + pushed, 2026-09-12/13 - v1 COMPLETE.** Makes ingredient names navigable first-class objects (tap an ingredient on a recipe page → its own detail page with a My Bar action, relationships, homemade preparation, "cocktails using this," and (for staff) an edit shortcut → back to the recipe, already recalculated - no more leaving a recipe to fix My Bar in a separate flow). **Enriches the ingredient/bottle detail screen that already exists** (`IngredientDetailScreen.jsx`, `/bar/type/:id`/`/bar/product/:id`, shipped as item 16's Stage 3/4) rather than building a new page - reuses `computeMakeability()`/`display`, `findRecipesUsingIngredient()`, `groupByDisplayTier()`, the single shared `useInventory()` instance, `isPreparationSatisfiable()`, and the existing `IngredientTypeEditor`; no schema changes (every field/table this feature surfaces already existed, just unrendered to members). Staged **I.1 done** (tappable ingredient-name links + shared-tier grouping + basic identity) → **I.2 done** (My Bar Add/Remove action, household-basic-aware) → **I.3 done** (Can provide / Can be replaced by / Homemade preparation sections, each directional, reusing `IngredientLink`) → **I.4 done** (admin/moderator-only "Edit ingredient" shortcut, deep-linking straight into that ingredient type's existing editor - the plan's original "not a new deep-link" deferral was explicitly superseded by the user's own I.4 request; see item 0). **I.1-I.3 manually verified by the user; I.4 is not yet browser-verified** - see item 0 for the exact owed check. See the plan doc for the full audit/design. **UI polish, 2026-09-13 (found during Linked Variations manual testing, unrelated to that feature):** `IngredientLink`'s shared hover/active state was a filled background tint, which read as a separate "pill" floating above a row's own secondary text (e.g. "Substituting: X" underneath an ingredient name) - fixed by replacing the background with a color-agnostic `brightness-*` shift, so a row reads as one coherent block at rest/hover/press. Focus-visible ring, tap-target technique, and HeroCard's own separately-boxed "Missing: X" callout are all unchanged. See the chunk entry below.
 
@@ -356,6 +356,129 @@ clean (173 modules, unchanged module count - no new file, `IngredientTypeEditor
 needed). No migrations, no schema change - not needed to fix this.
 
 **Commit:** `7a22526`. `docs/project.md` untouched.
+
+---
+
+## Last completed chunk (Adapted-card presentation - compact concrete actions replace verbose status text, 2026-09-13 — new src/domain/makeability.js helper + 6 tests, CocktailCard.jsx (both cards) updated, no schema/eligibility/count change)
+
+**Found during manual testing on both mobile and desktop.** An adapted
+recipe's card status was a full composed sentence -
+`⇄ Make with substitutions` or
+`⇄ Make with substitutions · Prepare Simple Syrup first` - accurate, but
+redundant (the card already sits under the **MAKE WITH ADAPTATIONS**
+section heading) and too verbose for a narrow 2-column mobile card. The
+card also had a real internal contradiction: it could show that verbose
+"makeable" status while simultaneously showing a yellow/orange
+"−Lime Juice"-style missing chip for the exact requirement the adaptation
+had already resolved.
+
+**Structured data already available - nothing new needed at the
+`computeMakeability()` level.** Inspected `computeMakeability()`
+(`src/domain/makeability.js`) before writing anything: `adapted
+.resolvedRequired` (an array, one entry per originally-missing required
+component, in recipe-component order) already carries exactly the
+"actual resolution selected for THIS recipe with THIS user's bar" the
+task required - `{ ingId, via: "substitute", matchedId, matchedName,
+note }` for a resolved substitute, or `{ ingId, via: "preparation",
+preparationId, producedTypeId, producedName, instructions, inputs }` for
+a resolved preparation. This was already being computed and returned;
+only `display.label`'s own composed PROSE ("Make with substitutions...")
+was ever rendered on a card - the structured array behind it was already
+there, unused by any card. No new field was added to `computeMakeability
+()`'s own return shape.
+
+**New pure `buildAdaptedCardActions(resolvedRequired)`
+(`src/domain/makeability.js`):** maps each `resolvedRequired` entry
+directly to `{ ingId, kind: "substitute"|"preparation", text }` -
+`"Use <matchedName>"` for a substitute, `"Prepare <producedName>"` for a
+preparation - never re-parsing `display.label`'s human-readable string
+(the task's own explicit instruction), never listing every catalogue
+possibility (only what THIS engine call actually resolved). Order is
+whatever `resolvedRequired` already arrives in - already deterministic
+recipe-component order (it's built by walking `strict.missingRequiredIds`,
+itself built from the recipe's own `ings` array) - no re-sorting.
+
+**`src/components/CocktailCard.jsx` (both `CocktailCard` and
+`SmallCard`):** when `display.tier === "adapted"`, the old single status
+line is replaced with one line per action from
+`buildAdaptedCardActions()` - a substitute action gets the existing
+shared "adapted" tier icon (`AVAIL_CFG.adapted.icon`, "⇄" - reused, not
+invented); a preparation action gets no icon (no existing
+preparation-specific icon to reuse, and the task explicitly said not to
+invent a decorative one). Every other tier (`perfect`/`good`/`almost`/
+`unavail`) renders exactly as before - the old status-line branch is
+still there, just now conditional on `adaptedActions.length === 0`.
+`SmallCard` (Home's "Perfect"/"Good Enough"/"Make With Adaptations"/
+horizontal shelves) gets the identical treatment at its own smaller font
+size - Home's adapted shelf is explicitly named in the task as a context
+to cover, and every card in it is adapted by construction, making it the
+single highest-value place for this.
+
+**Missing-chip contradiction fixed the same way in both cards:** the
+chip's own gate changed from the bare `c.avail === "almost"` to
+`display.tier === "almost"` - the one field every other primary-status
+surface already reads. Since `computeAdaptedResult()` is all-or-nothing
+(every originally-missing required component must resolve for `adapted`
+to be non-null at all - confirmed by re-reading its own code, not
+assumed), `display.tier === "adapted"` structurally means every one of
+those components was resolved, so this single condition change correctly
+suppresses the chip exactly when (and only when) the adaptation resolved
+it, with no risk of ever hiding a genuinely unresolved item - a card
+can never be both `"adapted"` and `"almost"`/`"unavail"` at the same
+time, so Almost There/Unavailable cards keep their chip completely
+unaffected (their `display.tier` already equals the bare `avail`, same
+condition as before this change, byte-for-byte).
+
+**Every `CocktailCard`/`SmallCard` usage site gets this automatically, no
+special-casing:** Library, Home (both the grid and the small-card
+shelves), Lists, Ingredient Detail's "cocktails using this," and Linked
+Variations' `VariationsSection.jsx` (a related recipe's own card there
+still reads its own independently-computed `display`/`adapted` - nothing
+in this fix or in `VariationsSection.jsx` couples one recipe's adaptation
+to another's).
+
+**Not touched (out of scope, confirmed by inspection):** adaptation
+eligibility/precedence (`computeAdaptedResult()`'s own tier-4/tier-5
+logic, `isPreparationSatisfiable()`); `display.tier` semantics;
+availability counts (`makeabilityCounts.js`); Library/Home grouping
+(`availabilityGroups.js`); Buy Next (`recommendations.js`); the
+substitutions/preparations catalogue tables themselves; recipe data;
+Linked Variations relationships; `HeroCard.jsx`'s own Cocktail Detail
+badge, which still shows `display.label`'s full composed sentence as its
+primary text (unchanged) - the richer "why/how" explanation stays on the
+detail page, exactly as the task required; `IngredientsSection.jsx`'s own
+per-ingredient "Adapted: X" lines (also unchanged - a different,
+already-existing, more detailed mechanism).
+
+**Verified:** `corepack pnpm@10.34.3 test` **392/392** (+6 -
+substitution-only action; preparation-only action; substitution +
+preparation together, two actions in recipe order (the Daiquiri
+scenario); multiple substitutions, deterministic order; confirms the
+action names the actually-OWNED substitute even when a different,
+unowned one is also configured for the same component - never "merely
+the first catalogue option"; empty array for a null/undefined
+`resolvedRequired`). `corepack pnpm@10.34.3 build` clean (182 modules,
+unchanged - no new file, `makeability.js` already existed). Diff is
+exactly 3 files (`makeability.js`, `makeability.test.js`,
+`CocktailCard.jsx`) - confirmed via `git status` before committing.
+
+**Not (and cannot be) browser/component-rendering-verified this stage:**
+the actual card layout/wrapping/icon placement is component-level and
+structural - matching this project's own established testing limits (no
+jsdom/component-rendering harness) - verified by reading the code rather
+than an automated render test. Manual checks owed: open Library/Home in
+both "Make With Adaptations" contexts (the main grid and Home's small-card
+shelf) and confirm a substitution-only adapted card shows exactly
+"⇄ Use <substitute>" with no missing chip; a preparation-only one shows
+"Prepare <ingredient>" with no missing chip; a recipe needing both shows
+two stacked lines; an Almost There or Unavailable card still shows its
+own genuine missing-ingredient chip unchanged; a related recipe card
+under a Linked Variations "Variation of"/"Variations" block shows its own
+independent adapted actions when applicable; the existing two-column
+mobile grid is unaffected (no card became full-width).
+
+**Commit:** see the git log for the exact hash. `docs/project.md`
+untouched.
 
 ---
 
