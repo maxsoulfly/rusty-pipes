@@ -4,6 +4,11 @@ import { IconX } from "@/components/icons"
 import { Input, Select } from "@/components/primitives"
 import { PREPARATION_UNITS } from "@/data/constants"
 
+const LABEL =
+  "text-xs font-bold text-tx2 font-display uppercase tracking-[0.06em]"
+const QUIET_BTN =
+  "min-h-11 px-3 rounded-sm border border-bdr bg-transparent text-tx2 text-[13px] font-display font-semibold cursor-pointer disabled:opacity-50"
+
 // Homemade preparation draft (produced side = this type) - Stage D.3.
 // Unlike LinkedTypeListEditor's two lists, at most one preparation exists
 // per produced type, so this is a single optional block, not a list.
