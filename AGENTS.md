@@ -61,6 +61,20 @@ If a subdirectory later needs its own `AGENTS.md`, document its scope here and k
 - `pnpm test` coverage is unit-level only (pure functions, no Supabase/RLS). RLS itself is covered separately by `supabase/tests/rls_suite.sql` — run with `npx supabase db query --linked --file supabase/tests/rls_suite.sql`. No Docker/Podman is available in this sandbox, so a local instance (which `supabase test db`'s pgTAP support needs) isn't an option; the suite instead runs plain SQL directly against the hosted linked project, simulating each identity by switching the `role` GUC + `request.jwt.claims`, wrapped in one transaction rolled back at the end so no fixture data is ever left behind. A failing check raises a specific `FAIL: <message>` naming exactly which one broke. Coverage now spans every RLS-protected table introduced through the features shipped so far (recipes, ingredient types, memberships, catalog tables, substitutions/preparations, recipe relationships, and more) - extend it table-by-table alongside each new table, following the same pattern; don't start a second suite file.
 - PostgREST resource-embedding selects (`.select("a, b:table(col), c(nested(col))")`) can't be validated through `supabase db query` — that runs raw SQL directly, bypassing PostgREST's embed resolution entirely. Sanity-check the actual query string with a real REST call instead: `curl -s -G "$VITE_SUPABASE_URL/rest/v1/<table>" -H "apikey: $VITE_SUPABASE_PUBLISHABLE_KEY" -H "Authorization: Bearer $VITE_SUPABASE_PUBLISHABLE_KEY" --data-urlencode "select=<the select string>" --data-urlencode "limit=1"`. A 400 means the embed is ambiguous/wrong; a 200 (even with `[]`, since RLS denies anon by default) confirms the query shape itself is valid.
 
+## Pre-commit verification (dev before prod)
+
+A push to `main` deploys to production. For any user-visible or runtime-affecting change, verify it in the local dev app *before* committing — passing unit tests and `pnpm build` is necessary but not sufficient for UI/runtime changes, and production is never the first manual test environment.
+
+1. Implement the scoped change.
+2. Run the relevant automated tests and `pnpm build`.
+3. Manually exercise the affected flow in the running local dev app (`$PORT`) before committing.
+4. If that reveals a regression, fix it before commit/push.
+5. Only commit and push once both automated checks and dev verification pass.
+
+If a change genuinely can't be manually exercised from this environment, say so explicitly *before* committing and name exactly what remains unverified — don't push it untested and call it done. Migrations and other changes with no dev-app path should still be checked the safest way available (RLS suite, advisors, a dry-run query — see "Testing & verification" above) before deployment.
+
+This is a floor, not a replacement for the user's own manual check afterward (see "Session pacing"/"Commits" below) — it exists so that check isn't the first time the change is actually exercised.
+
 ## Preserving unrelated work
 
 This repo may contain work from other sessions or tools. Don't delete, rewrite, or reformat files outside the current chunk's scope without checking first.
@@ -71,11 +85,11 @@ Don't materially expand product scope, change the required stack, or introduce a
 
 ## Session pacing
 
-When the product decision and desired behavior are already established, the next steps are technically clear, the work stays inside the agreed scope, and it's reversible through Git, keep going through multiple related implementation steps in one session rather than stopping after every small stage (inspect → implement → focused tests → continue related steps → full tests/build → relevant DB/RLS checks → update docs → commit/push → stop for manual verification). Still stop when a product/UX decision is needed, requirements are ambiguous, the next action would expand scope, a destructive/risky action needs approval, or manual UI verification is required before the next implementation decision. Don't start unrelated work just because the user is away.
+When the product decision and desired behavior are already established, the next steps are technically clear, the work stays inside the agreed scope, and it's reversible through Git, keep going through multiple related implementation steps in one session rather than stopping after every small stage (inspect → implement → focused tests → continue related steps → full tests/build → relevant DB/RLS checks → dev-app verification of the affected flow → update docs → commit/push → stop for the user's own manual check). Still stop when a product/UX decision is needed, requirements are ambiguous, the next action would expand scope, a destructive/risky action needs approval, or manual UI verification is required before the next implementation decision. Don't start unrelated work just because the user is away.
 
 ## Commits
 
-Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, ...). This repo has an established git history on `main` - commit and push a completed, tested stage before handing it to the user for manual verification, without needing to ask each time once that pattern is set for a session. Still ask before an unusually disruptive git operation (force-push, history rewrite, re-running `git init`, etc.). On this Windows/Git-Bash sandbox, author a multi-line or backtick-containing commit message via a heredoc file (`cat > /tmp/msg.txt <<'EOF' ... EOF` then `git commit -F /tmp/msg.txt`) rather than a plain `-m` string - a real shell-quoting bug here mangles backtick-quoted code identifiers otherwise.
+Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, ...). This repo has an established git history on `main` - commit and push a completed, tested, and dev-verified stage (see "Pre-commit verification" above) before handing it to the user for their own manual check, without needing to ask each time once that pattern is set for a session. Still ask before an unusually disruptive git operation (force-push, history rewrite, re-running `git init`, etc.). On this Windows/Git-Bash sandbox, author a multi-line or backtick-containing commit message via a heredoc file (`cat > /tmp/msg.txt <<'EOF' ... EOF` then `git commit -F /tmp/msg.txt`) rather than a plain `-m` string - a real shell-quoting bug here mangles backtick-quoted code identifiers otherwise.
 
 ## `current-context.md` protocol
 
