@@ -836,10 +836,7 @@ export default function EditorScreen() {
             {error && <p className="text-xs text-coral">{error}</p>}
 
             <div className="flex gap-2">
-              <Btn variant="ghost" onClick={handleCancel} disabled={saving}>
-                Cancel
-              </Btn>
-              <div className="flex-1">
+              <div className="flex-[7]">
                 <Btn
                   variant="primary"
                   full
@@ -847,6 +844,16 @@ export default function EditorScreen() {
                   disabled={!canSave}
                 >
                   {isEditing ? "Save Changes" : "Save Recipe"}
+                </Btn>
+              </div>
+              <div className="flex-[3]">
+                <Btn
+                  variant="ghost"
+                  full
+                  onClick={handleCancel}
+                  disabled={saving}
+                >
+                  Cancel
                 </Btn>
               </div>
             </div>
