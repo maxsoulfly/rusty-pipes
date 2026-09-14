@@ -427,4 +427,33 @@ describe("buildRecipeImportPrompt", () => {
     })
     expect(prompt).toContain("Gin (also known as: London Dry)")
   })
+
+  // Rusty Pipes convention: liquidColor is always the BOTTOM/base layer,
+  // liquidColor2 (when set) is always the layer above it, at the TOP - by
+  // the drink's actual visual position in the finished glass, never by
+  // ingredient/pour order or which color is more prominent. The prompt used
+  // to only say liquidColor was the "base" the drink is "built on," which
+  // read as ambiguous enough that real AI output sometimes reversed the two
+  // fields - this locks the explicit bottom/top wording in place.
+  it("defines liquidColor as the bottom layer and liquidColor2 as the top layer", () => {
+    const prompt = buildRecipeImportPrompt(catalog)
+    expect(prompt).toMatch(/"liquidColor":.*BOTTOM/)
+    expect(prompt).toMatch(/"liquidColor2":.*ABOVE liquidColor, at the TOP/)
+  })
+
+  it("says the bottom/top assignment is by visual position, not ingredient/pour order or dominance", () => {
+    const prompt = buildRecipeImportPrompt(catalog)
+    expect(prompt).toMatch(/never from ingredient order/)
+    expect(prompt).toMatch(/never on pour order, ingredient order, or dominance/)
+  })
+
+  it("gives an explicit Tequila Sunrise example mapping grenadine/red to liquidColor (bottom) and orange juice/orange to liquidColor2 (top)", () => {
+    const prompt = buildRecipeImportPrompt(catalog)
+    expect(prompt).toMatch(
+      /grenadine sinks and colors the BOTTOM of the glass red/,
+    )
+    expect(prompt).toMatch(
+      /liquidColor is the red \(grenadine, bottom\) and liquidColor2 is the orange \(orange juice, top\)/,
+    )
+  })
 })
