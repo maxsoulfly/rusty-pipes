@@ -167,3 +167,24 @@ export const INGREDIENT_SHAPES = [
   "dairy",
   "ice",
 ]
+
+// The controlled unit vocabulary for a homemade preparation's input
+// quantities (Stage D.3, PreparationEditor.jsx's own unit `<Select>` and,
+// as of the 2026-09-14 rich ingredient-import work, `src/schemas/
+// ingredientImport.js`'s validator/AI prompt too - a single source of truth
+// so both can never drift onto different allowed values). Not a DB CHECK
+// constraint (`ingredient_preparation_inputs.unit_label` is a plain
+// `text`) - this is what the *app* considers a valid, selectable unit, the
+// same "controlled admin-managed vocabulary, not free text" precedent as
+// GLASS_SHAPES/FAMILY_SHAPES/INGREDIENT_SHAPES above. "g" moved to the
+// front (weight is the common case for a homemade preparation - sugar,
+// salt, ...) and NON_VOLUME_UNITS' own load-bearing element-0 default
+// ("part", see that constant's comment) is left untouched - only this
+// array's own order differs, achieved by filtering "g" out of the spread
+// rather than reordering NON_VOLUME_UNITS itself.
+export const PREPARATION_UNITS = [
+  "ml",
+  "g",
+  "oz",
+  ...NON_VOLUME_UNITS.filter((u) => u !== "g"),
+]

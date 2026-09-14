@@ -12,11 +12,23 @@ export async function fetchIngredientTypes() {
 }
 
 // Admin-only via ingredient_types' existing "admin insert" RLS policy - no
-// new grant needed. `rows` are already-validated resolved objects from
-// src/schemas/ingredientImport.js, not raw import JSON.
+// new grant needed. `rows` must already be exactly this table's own columns
+// (src/schemas/ingredientImport.js's toIngredientTypeRow() strips its
+// richer resolved shape down to this before calling here) - never the
+// relationship fields (aliases/conversions/substitutes/preparation), which
+// aren't columns on this table at all and would make the insert fail.
+// Returns the inserted rows' id+name (rich ingredient import, 2026-09-14) so
+// a caller can attach a newly-created row's aliases/"Can provide"/"Can be
+// replaced by"/homemade preparation afterward via saveIngredientType() -
+// this plain insert can't create those itself, save_ingredient_type() only
+// ever updates an existing row.
 export async function createIngredientTypes(rows) {
-  const { error } = await supabase.from("ingredient_types").insert(rows)
+  const { data, error } = await supabase
+    .from("ingredient_types")
+    .insert(rows)
+    .select("id, name")
   if (error) throw error
+  return data
 }
 
 // Admin/moderator-only via the pre-existing "ingredient_types: admin update"

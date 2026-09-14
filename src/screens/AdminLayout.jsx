@@ -13,13 +13,17 @@ import { TopBar } from "@/components/Nav"
 import { resolveLegacyAdminPath } from "@/domain/adminLegacyRoutes"
 import {
   buildIngredientImportPrompt,
+  toIngredientTypeRow,
   validateIngredientImport,
 } from "@/schemas/ingredientImport"
 import {
   fetchPendingIngredientRequests,
   resolveIngredientRequest,
 } from "@/services/ingredientRequests"
-import { createIngredientTypes } from "@/services/ingredientTypes"
+import {
+  createIngredientTypes,
+  saveIngredientType,
+} from "@/services/ingredientTypes"
 import {
   deriveInvitationStatus,
   fetchInvitations,
@@ -334,6 +338,7 @@ export default function AdminLayout() {
     categories: catalog.categories,
     types: catalog.types,
     aliases: catalog.aliases,
+    liquidColors: catalog.liquidColors,
   })
 
   const copyImportPrompt = () => {
@@ -356,29 +361,94 @@ export default function AdminLayout() {
       categories: catalog.categories,
       types: catalog.types,
       aliases: catalog.aliases,
+      ingredientPreparations: catalog.ingredientPreparations,
     })
     setImportResult(validation)
     setBatchPhase("results")
   }
 
+  // Two-phase because save_ingredient_type() only ever UPDATEs an existing
+  // row (it raises if p_type_id doesn't already exist - see its own
+  // migration comment) - it cannot create one, so a rich import can't do
+  // everything in a single call the way editing an existing type can.
+  //
+  // Phase 1: bulk-insert every valid row's plain ingredient_types columns
+  // only (toIngredientTypeRow() strips aliases/canProvide/canBeReplacedBy/
+  // homemadePreparation - none of those are columns on this table). One
+  // statement, atomic - either every row in this batch lands or none do,
+  // exactly as it always has.
+  //
+  // Phase 2: for whichever of those rows actually asked for aliases/"Can
+  // provide"/"Can be replaced by"/a homemade preparation, attach them
+  // through the SAME atomic save_ingredient_type() RPC the Ingredient Type
+  // editor itself uses - one transaction per type, so a type never ends up
+  // with half its relationships (save_ingredient_type() rolls its own call
+  // back entirely on any failure). A failure here never touches phase 1's
+  // already-committed base row for ANY type, including this one - the type
+  // simply exists without its requested extras, fully editable normally,
+  // and is named in the result below rather than silently dropped.
   const handleCommitImport = async () => {
     if (!importResult?.results) return
-    const rows = importResult.results
-      .filter((r) => r.valid)
-      .map((r) => r.resolved)
-    if (rows.length === 0) return
+    const validResults = importResult.results.filter((r) => r.valid)
+    if (validResults.length === 0) return
     setImporting(true)
     try {
-      await createIngredientTypes(rows)
-      await catalog.refetch()
-      setImportSuccessMessage(
-        `Imported ${rows.length} ingredient type${
-          rows.length === 1 ? "" : "s"
-        }.`,
+      const inserted = await createIngredientTypes(
+        validResults.map((r) => toIngredientTypeRow(r.resolved)),
       )
-      setBatchPhase("paste")
-      setImportJson("")
-      setImportResult(null)
+      const idByName = new Map(inserted.map((row) => [row.name, row.id]))
+
+      const relationshipFailures = []
+      for (const { resolved } of validResults) {
+        const hasRelationships =
+          resolved.aliases.length > 0 ||
+          resolved.conversions.length > 0 ||
+          resolved.substitutes.length > 0 ||
+          resolved.preparation != null
+        if (!hasRelationships) continue
+        const typeId = idByName.get(resolved.name)
+        if (!typeId) continue // every valid row was just inserted above
+        try {
+          await saveIngredientType({
+            typeId,
+            name: resolved.name,
+            categoryId: resolved.category_id,
+            parentTypeId: resolved.parent_type_id,
+            barPriority: resolved.bar_priority,
+            assumedAvailable: resolved.assumed_available,
+            color: resolved.color,
+            description: resolved.description,
+            shape: resolved.shape ?? "spirit_bottle",
+            aliases: resolved.aliases,
+            conversions: resolved.conversions,
+            substitutes: resolved.substitutes,
+            preparation: resolved.preparation,
+          })
+        } catch (err) {
+          relationshipFailures.push({ name: resolved.name, message: err.message })
+        }
+      }
+
+      await catalog.refetch()
+      const summary = `Imported ${inserted.length} ingredient type${
+        inserted.length === 1 ? "" : "s"
+      }.`
+      if (relationshipFailures.length > 0) {
+        setImportSuccessMessage(summary)
+        setImportResult({
+          ...importResult,
+          commitError: `${relationshipFailures.length} type${
+            relationshipFailures.length === 1 ? "" : "s"
+          } imported without its extra details - fix in the Ingredient Type editor: ${relationshipFailures
+            .map((f) => `${f.name} (${f.message})`)
+            .join("; ")}`,
+        })
+      } else {
+        setImportSuccessMessage(summary)
+        setBatchPhase("paste")
+        setImportJson("")
+        setImportResult(null)
+      }
     } catch (err) {
       setImportResult({ ...importResult, commitError: err.message })
     } finally {
@@ -412,6 +482,7 @@ export default function AdminLayout() {
         categories: catalog.categories,
         types: catalog.types,
         aliases: catalog.aliases,
+        ingredientPreparations: catalog.ingredientPreparations,
       },
     )
     const [result] = results
@@ -421,7 +492,13 @@ export default function AdminLayout() {
       return
     }
     try {
-      await createIngredientTypes([result.resolved])
+      // This form has no fields for aliases/canProvide/canBeReplacedBy/a
+      // homemade preparation, so result.resolved always has them empty -
+      // toIngredientTypeRow() strips those (always-present-but-empty) keys
+      // the same way the batch path does, purely for a consistent, correct
+      // insert payload; there is never a second (relationship-attaching)
+      // phase to run for this path.
+      await createIngredientTypes([toIngredientTypeRow(result.resolved)])
       await catalog.refetch()
       let message = `Added "${result.resolved.name}".`
       if (singleFromRequestId) {

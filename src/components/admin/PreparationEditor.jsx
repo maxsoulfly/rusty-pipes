@@ -2,26 +2,7 @@ import { StepsEditor } from "@/components/editor/StepsEditor"
 import { TypeComboBox } from "@/components/admin/TypeComboBox"
 import { IconX } from "@/components/icons"
 import { Input, Select } from "@/components/primitives"
-import { NON_VOLUME_UNITS } from "@/data/constants"
-
-const LABEL =
-  "text-xs font-bold text-tx2 font-display uppercase tracking-[0.06em]"
-const QUIET_BTN =
-  "min-h-11 px-3 rounded-sm border border-bdr bg-transparent text-tx2 text-[13px] font-display font-semibold cursor-pointer disabled:opacity-50"
-
-// Display-only reorder for a preparation input's unit picker (Stage D.4) -
-// weight is the common case for a homemade preparation (sugar, salt, ...),
-// so "g" moves up next to "ml" instead of sitting last. Reuses
-// NON_VOLUME_UNITS as-is (same allowed vocabulary, no duplicate list) -
-// that array's own order stays untouched everywhere else, since position 0
-// ("part") is a load-bearing fallback default in src/schemas/recipePaste.js,
-// not just a display preference.
-const PREPARATION_UNIT_OPTIONS = [
-  "ml",
-  "g",
-  "oz",
-  ...NON_VOLUME_UNITS.filter((u) => u !== "g"),
-]
+import { PREPARATION_UNITS } from "@/data/constants"
 
 // Homemade preparation draft (produced side = this type) - Stage D.3.
 // Unlike LinkedTypeListEditor's two lists, at most one preparation exists
@@ -154,7 +135,7 @@ export function PreparationEditor({
                     small
                     value={input.unitLabel}
                     onChange={(v) => updateInput(idx, { unitLabel: v })}
-                    options={PREPARATION_UNIT_OPTIONS}
+                    options={PREPARATION_UNITS}
                   />
                 </div>
                 <button
