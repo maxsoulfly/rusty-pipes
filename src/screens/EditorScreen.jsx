@@ -6,6 +6,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom"
+import { GlassSvg } from "@/components/GlassSvg"
 import { TopBar } from "@/components/Nav"
 import { DraftRestoreBanner } from "@/components/editor/DraftRestoreBanner"
 import { EntryModeSwitcher } from "@/components/editor/EntryModeSwitcher"
@@ -105,6 +106,15 @@ export default function EditorScreen() {
   const toggleSecondColor = (checked) => {
     setHasSecondColor(checked)
     if (!checked) setLiquidColor2("")
+  }
+  // Editor convenience only - swaps the two draft color values in place, no
+  // service/domain call, no persistence beyond the normal recipe save that
+  // already happens on Save Recipe/Save Changes. Only ever reachable when
+  // both colors exist (see the disabled guard at its call site) - there is
+  // nothing meaningful to swap otherwise.
+  const swapColors = () => {
+    setLiquidColor(liquidColor2)
+    setLiquidColor2(liquidColor)
   }
   const [ings, setIngs] = useState([
     { ingredientName: "", amount: "", unit: "ml", role: "required" },
@@ -310,6 +320,13 @@ export default function EditorScreen() {
   })
 
   const effectiveGlassName = glassName || glasses[0]?.name || ""
+  // For the live color preview below - if the name doesn't resolve to a
+  // real glass (nothing picked yet, or a stale name), `undefined` is passed
+  // straight through to GlassSvg, which already has its own existing
+  // fallback silhouette for an unmatched shape - no new fallback invented.
+  const previewGlassShape = glasses.find(
+    (g) => g.name === effectiveGlassName,
+  )?.shape
 
   // Linked Variations Stage V.2 - candidate bases for "Variation of":
   // every recipe this viewer can already see (`computed` is already
@@ -646,7 +663,7 @@ export default function EditorScreen() {
 
             <div>
               <label className="text-xs font-bold text-tx2 font-display uppercase tracking-[0.06em] block mb-2">
-                Liquid Color
+                Liquid Color — Bottom / Base
               </label>
               <ColorSwatchPicker
                 value={liquidColor}
@@ -669,17 +686,44 @@ export default function EditorScreen() {
               {hasSecondColor && (
                 <>
                   <p className="text-[11px] text-tx3 mb-2">
-                    For a Tequila Sunrise, a layered shot, or similar - the
-                    glass renders a top-to-bottom blend between the two colors
-                    instead of one flat fill. Most cocktails don't need this.
+                    For a layered drink like a Tequila Sunrise - this second
+                    color renders as the TOP layer, above the bottom/base
+                    color, instead of one flat fill. Most cocktails don't need
+                    this.
                   </p>
+                  <label className="text-xs font-bold text-tx2 font-display uppercase tracking-[0.06em] block mb-2">
+                    Liquid Color 2 — Top / Upper
+                  </label>
                   <ColorSwatchPicker
                     value={liquidColor2}
                     onChange={setLiquidColor2}
                     colors={catalog.liquidColors}
                   />
+                  <button
+                    type="button"
+                    disabled={!liquidColor2}
+                    onClick={swapColors}
+                    className="mt-2 min-h-11 px-3 rounded-sm border border-bdr bg-transparent text-tx2 text-[13px] font-display font-semibold cursor-pointer disabled:opacity-50"
+                  >
+                    ⇄ Swap colors
+                  </button>
                 </>
               )}
+            </div>
+
+            {/* Live preview - the editor had no visual feedback at all for
+                these two fields before this (2026-09-14 audit finding), so
+                a human author had no way to confirm which color would land
+                where short of saving and viewing the recipe elsewhere. */}
+            <div className="flex items-center gap-2">
+              <GlassSvg
+                type={previewGlassShape}
+                liquidColor={liquidColor}
+                liquidColor2={hasSecondColor ? liquidColor2 : null}
+                size={48}
+                avail="perfect"
+              />
+              <span className="text-xs text-tx3">Preview</span>
             </div>
 
             <IngredientRowsEditor

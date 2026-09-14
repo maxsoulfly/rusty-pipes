@@ -4,6 +4,7 @@
 // the two lists in sync when adding a new glass shape.
 
 import { useId } from "react"
+import { resolveGradientStops } from "@/domain/glassGradient"
 
 export function GlassSvg({
   type,
@@ -29,13 +30,25 @@ export function GlassSvg({
   // for the plain liquid color used everywhere below - every shape branch
   // already fills its liquid shape identically, so this is a single
   // substitution point rather than touching all ~20 branches.
+  //
+  // No `gradientUnits` is set below, so this defaults to
+  // `objectBoundingBox`, where offset 0% is the top of whichever shape this
+  // gradient fills and 100% is the bottom - true uniformly for every shape
+  // branch, since none of them apply a transform to the filled element.
+  // resolveGradientStops() (src/domain/glassGradient.js) owns which color
+  // goes to which end - see its own comment for the settled convention and
+  // why this used to be reversed.
   const gradId = useId()
   const fill = liquidColor2 ? `url(#${gradId})` : liquidColor
+  const { topStopColor, bottomStopColor } = resolveGradientStops(
+    liquidColor,
+    liquidColor2,
+  )
   const gradientDefs = liquidColor2 && (
     <defs>
       <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor={liquidColor} />
-        <stop offset="100%" stopColor={liquidColor2} />
+        <stop offset="0%" stopColor={topStopColor} />
+        <stop offset="100%" stopColor={bottomStopColor} />
       </linearGradient>
     </defs>
   )
