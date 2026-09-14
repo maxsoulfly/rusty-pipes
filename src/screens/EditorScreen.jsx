@@ -539,6 +539,24 @@ export default function EditorScreen() {
     }
   }
 
+  // Abandons the current editing session with zero writes - never calls
+  // createRecipe/updateRecipe. In edit mode there's nothing else to clean up
+  // (isEditing never writes a draft to localStorage in the first place - see
+  // isDraftable above). In create mode, discardDraft() is the SAME helper
+  // the "Discard" button on DraftRestoreBanner already uses
+  // (useRecipeDraftAutosave.js) - it deletes this draft's localStorage entry/
+  // index row and clears `?draft=` from the URL, and is already a no-op-safe
+  // call whether a draft was just self-assigned this session, restored from
+  // an earlier session, still mid-decision behind the restore banner, or
+  // never created at all (blank draftId). Reuses the same back-navigation
+  // the header's own back arrow already uses, rather than a hardcoded route,
+  // so Cancel returns wherever the user actually came from (recipe detail,
+  // library, etc.) in both edit and create mode.
+  const handleCancel = () => {
+    if (isDraftable) discardDraft()
+    navigate(-1)
+  }
+
   if (catalogLoading || (isEditing && !prefilled)) {
     return (
       <div className="py-15 px-6 text-center text-tx2 text-sm">Loading...</div>
@@ -817,14 +835,21 @@ export default function EditorScreen() {
 
             {error && <p className="text-xs text-coral">{error}</p>}
 
-            <Btn
-              variant="primary"
-              full
-              onClick={handleSave}
-              disabled={!canSave}
-            >
-              {isEditing ? "Save Changes" : "Save Recipe"}
-            </Btn>
+            <div className="flex gap-2">
+              <Btn variant="ghost" onClick={handleCancel} disabled={saving}>
+                Cancel
+              </Btn>
+              <div className="flex-1">
+                <Btn
+                  variant="primary"
+                  full
+                  onClick={handleSave}
+                  disabled={!canSave}
+                >
+                  {isEditing ? "Save Changes" : "Save Recipe"}
+                </Btn>
+              </div>
+            </div>
           </>
         )}
       </div>
