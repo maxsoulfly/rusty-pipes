@@ -45,14 +45,14 @@ export function AdminMenu({ isAdmin }) {
         <div className="flex flex-col gap-2">
           <button
             type="button"
-            onClick={() => go("/admin?tab=types")}
+            onClick={() => go("/admin/ingredient-types")}
             className={itemClass}
           >
             Edit ingredients
           </button>
           <button
             type="button"
-            onClick={() => go("/admin?tab=onboarding")}
+            onClick={() => go("/admin/onboarding")}
             className={itemClass}
           >
             Onboarding ingredients

@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react"
 import clsx from "clsx"
 import {
+  Navigate,
+  NavLink,
+  Outlet,
   useNavigate,
   useOutletContext,
   useSearchParams,
 } from "react-router-dom"
 import { IconChevD } from "@/components/icons"
 import { TopBar } from "@/components/Nav"
+import { resolveLegacyAdminPath } from "@/domain/adminLegacyRoutes"
 import {
   buildIngredientImportPrompt,
   validateIngredientImport,
@@ -37,51 +41,80 @@ import { RequestsTab } from "@/components/admin/RequestsTab"
 import { TypesTab } from "@/components/admin/TypesTab"
 import { UsersTab } from "@/components/admin/UsersTab"
 
-// Grouped by what the tab is *for*, not the order each was built in
-// (the original order): Overview first, then recipe content (Classic
-// Recipes, Moderation - which is community recipe moderation), then
-// catalog/taxonomy tools (Catalog, Ingredient Types, Batch Import,
-// Requests - Requests feeds directly into Ingredient Types/Batch Import),
-// then membership admin (Users, Invitations) last.
-// adminOnly tabs are invisible to a moderator - full ingredient-catalog
-// authoring + the promote/demote/unpublish trio is moderator's scope, but
-// Users/Invitations management stays admin-only.
+// Admin nested-route migration (2026-09-14) - this file used to BE the
+// single /admin screen, switching what it rendered via local `tab` state
+// and a one-time `?tab=`/`?type=` URL read (see git history). It's now the
+// shared layout for real nested routes (/admin, /admin/recipes, /admin/
+// ingredient-types, ...) declared in App.jsx: TopBar + tab nav + an
+// <Outlet> for whichever admin section route matched. `RequireStaff` (and,
+// for the three admin-only sections below, `RequireAdmin`) wraps this
+// layout's own route in App.jsx, not anything in here - a non-staff/
+// non-admin visitor never gets far enough to mount this component or any
+// child route at all, so there's nothing left to gate inside it.
+//
+// The genuinely cross-section state this screen owned before the route
+// split - ingredient batch-import state (shared by Requests "Add to
+// catalog," Ingredient Types "+ Add," and Import itself), community/
+// classic recipe state (shared by Moderation's Promote and Classic
+// Recipes/Overview), and every count Overview/the nav badge read - all
+// stays lifted HERE, unchanged, and is handed to whichever child route is
+// active via <Outlet context={...}>, the same "call once, share via
+// context" mechanism App.jsx's own AppShell already uses one level up for
+// catalog/inventory/recipes. Recipe and Product batch import are the one
+// exception, already living in their own hooks with zero cross-section
+// coupling (see docs/plans/archive/admin-screen-modularization.md) - that
+// stays exactly as it is, untouched by this migration.
+//
+// Grouped by what the tab is *for*, not the order each was built in:
+// Overview first, then recipe content (Classic Recipes, Moderation -
+// community recipe moderation), then catalog/taxonomy tools (Catalog,
+// Ingredient Types, Batch Import, Requests - Requests feeds directly into
+// Ingredient Types/Batch Import), then membership admin (Users,
+// Invitations) last. adminOnly tabs are invisible to a moderator - full
+// ingredient-catalog authoring + the promote/demote/unpublish trio is
+// moderator's scope, but Users/Invitations/Onboarding management stays
+// admin-only (RequireAdmin in App.jsx enforces this at the route level,
+// not just nav visibility - see App.jsx's own comment).
 const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "recipes", label: "Classic Recipes" },
-  { id: "moderation", label: "Moderation" },
-  { id: "catalog", label: "Catalog" },
-  { id: "types", label: "Ingredient Types" },
-  { id: "onboarding", label: "Onboarding ingredients", adminOnly: true },
-  { id: "import", label: "Batch Import" },
-  { id: "requests", label: "Requests" },
-  { id: "users", label: "Users", adminOnly: true },
-  { id: "invites", label: "Invitations", adminOnly: true },
+  { id: "overview", label: "Overview", path: "/admin" },
+  { id: "recipes", label: "Classic Recipes", path: "/admin/recipes" },
+  { id: "moderation", label: "Moderation", path: "/admin/moderation" },
+  { id: "catalog", label: "Catalog", path: "/admin/catalog" },
+  {
+    id: "types",
+    label: "Ingredient Types",
+    path: "/admin/ingredient-types",
+  },
+  {
+    id: "onboarding",
+    label: "Onboarding ingredients",
+    path: "/admin/onboarding",
+    adminOnly: true,
+  },
+  { id: "import", label: "Batch Import", path: "/admin/import" },
+  { id: "requests", label: "Requests", path: "/admin/requests" },
+  { id: "users", label: "Users", path: "/admin/users", adminOnly: true },
+  {
+    id: "invites",
+    label: "Invitations",
+    path: "/admin/invitations",
+    adminOnly: true,
+  },
 ]
 
-export default function AdminScreen() {
+export default function AdminLayout() {
   const navigate = useNavigate()
   const { catalog, computed, refetchRecipes, userId, isAdmin } =
     useOutletContext()
   const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin)
-  // Deep-link support (?tab=types) so e.g. My Bar's admin ⋯ menu can open
-  // straight into Ingredient Types. Read once as the initial value, not kept
-  // in sync afterward - manual tab clicks shouldn't rewrite the URL. Falls
-  // back to Overview for an unknown or (for a moderator) admin-only id.
-  const [searchParams] = useSearchParams()
-  const requestedTab = searchParams.get("tab")
-  const [tab, setTab] = useState(
-    visibleTabs.some((t) => t.id === requestedTab) ? requestedTab : "overview",
-  )
-  // Ingredient Detail Stage I.4 - a second deep-link param, one level
-  // deeper than `tab` above: `?tab=types&type=<id>` opens Ingredient Types
-  // with that specific type's editor already expanded, for the "Edit
-  // ingredient" shortcut on a member-facing ingredient/bottle page.
-  // Read once, same as `requestedTab` - not kept in sync with a manual
-  // edit/cancel afterward. Existence is validated by `TypesTab` itself
-  // (a stale/deleted type id just finds nothing, same as today's manual
-  // edit flow would for a since-deleted row) - no extra check needed here.
-  const requestedTypeId = searchParams.get("type")
+
+  // Real navigation now, not a state switch - used by Overview's card taps
+  // and by startSingleAddFromRequest's cross-section jump below. Looks the
+  // tab id up in TABS rather than taking a raw path, so every caller keeps
+  // using the same short ids this screen has always used internally.
+  const goToTab = (id) =>
+    navigate(TABS.find((t) => t.id === id)?.path ?? "/admin")
+
   const [invites, setInvites] = useState([])
   const [invitesLoading, setInvitesLoading] = useState(true)
 
@@ -222,7 +255,7 @@ export default function AdminScreen() {
 
   // Users tab data fetch - kept here (rather than local to UsersTab) simply
   // to match this file's established pattern of fetching once per
-  // AdminScreen mount; nothing else reads `users`.
+  // AdminLayout mount; nothing else reads `users`.
   const [users, setUsers] = useState([])
   const [usersLoading, setUsersLoading] = useState(true)
 
@@ -270,7 +303,11 @@ export default function AdminScreen() {
   // without that a prior visit to Recipes/Products import would leave this
   // deep link landing on the wrong sub-tab. Called from both RequestsTab and
   // TypesTab, and reaches into Batch Import's own state - stays at the
-  // shell level rather than becoming local to either tab.
+  // shell level rather than becoming local to either tab. Now a real route
+  // navigation (goToTab) instead of a local setTab - the state it primes
+  // still lives here and is read by AdminImportRoute via Outlet context, so
+  // the prefill survives the route transition exactly as it survived a tab
+  // switch before.
   const [singleFromRequestId, setSingleFromRequestId] = useState(null)
   const startSingleAddFromRequest = (name = "", requestId = null) => {
     setImportSuccessMessage(null)
@@ -278,7 +315,7 @@ export default function AdminScreen() {
     setImportMode("single")
     setSingleName(name)
     setSingleFromRequestId(requestId)
-    setTab("import")
+    goToTab("import")
   }
 
   const loadInvitations = () => {
@@ -405,6 +442,79 @@ export default function AdminScreen() {
     }
   }
 
+  // Handed down to whichever child route is active via <Outlet context>,
+  // same mechanism App.jsx's own AppShell uses one level up - every value a
+  // tab/route needs, computed/owned exactly once here regardless of how
+  // many sections read it (classicRecipes, communityRecipes, users,
+  // invites, pendingRequests all cross section boundaries - see this file's
+  // top comment).
+  const adminContext = {
+    catalog,
+    computed,
+    refetchRecipes,
+    userId,
+    isAdmin,
+    goToTab,
+    classicRecipes,
+    communityRecipes,
+    communityLoading,
+    loadCommunityRecipes,
+    confirmPromote,
+    promoting,
+    promoteError,
+    setConfirmPromote,
+    handlePromote,
+    confirmDemoteId,
+    demoting,
+    demoteError,
+    setConfirmDemoteId,
+    handleDemote,
+    users,
+    usersLoading,
+    loadUsers,
+    invites,
+    setInvites,
+    invitesLoading,
+    pendingRequests,
+    requestsLoading,
+    loadPendingRequests,
+    startSingleAddFromRequest,
+    importEntity,
+    setImportEntity,
+    importMode,
+    setImportMode,
+    importSuccessMessage,
+    setImportSuccessMessage,
+    setSingleFromRequestId,
+    singleName,
+    setSingleName,
+    singleCategoryId,
+    setSingleCategoryId,
+    singleParentTypeId,
+    setSingleParentTypeId,
+    singleBarPriority,
+    setSingleBarPriority,
+    singleColor,
+    setSingleColor,
+    singleDescription,
+    setSingleDescription,
+    singleSaving,
+    singleError,
+    handleAddSingle,
+    batchPhase,
+    setBatchPhase,
+    importPrompt,
+    promptCopied,
+    copyImportPrompt,
+    importJson,
+    setImportJson,
+    runImportValidation,
+    importResult,
+    setImportResult,
+    importing,
+    handleCommitImport,
+  }
+
   return (
     <div className="pb-[calc(96px_+_env(safe-area-inset-bottom,0px))]">
       {/* TopBar is already sticky on its own (Nav.jsx) - wrapping it and the
@@ -416,21 +526,24 @@ export default function AdminScreen() {
 
         <div className="flex border-b border-bdr bg-bg2 overflow-x-auto">
           {visibleTabs.map((t) => (
-            <button
+            <NavLink
               key={t.id}
-              onClick={() => setTab(t.id)}
-              className={clsx(
-                "py-3 px-4 bg-transparent border-none border-b-2 cursor-pointer text-[13px] font-display whitespace-nowrap transition-all duration-150",
-                tab === t.id
-                  ? "border-violet text-violet font-bold"
-                  : "border-transparent text-tx2 font-normal",
-              )}
+              to={t.path}
+              end={t.id === "overview"}
+              className={({ isActive }) =>
+                clsx(
+                  "py-3 px-4 bg-transparent border-none border-b-2 cursor-pointer text-[13px] font-display whitespace-nowrap transition-all duration-150 no-underline",
+                  isActive
+                    ? "border-violet text-violet font-bold"
+                    : "border-transparent text-tx2 font-normal",
+                )
+              }
             >
               {t.label}
               {t.id === "requests" && pendingRequests.length > 0
                 ? ` (${pendingRequests.length})`
                 : ""}
-            </button>
+            </NavLink>
           ))}
         </div>
       </div>
@@ -447,129 +560,216 @@ export default function AdminScreen() {
       )}
 
       <div className="p-5">
-        {tab === "overview" && (
-          <OverviewTab
-            classicCount={classicRecipes.length}
-            communityCount={communityRecipes.length}
-            pendingRequestsCount={pendingRequests.length}
-            ingredientTypesCount={catalog.types.length}
-            activeInvitesCount={
-              isAdmin
-                ? invites.filter((i) => deriveInvitationStatus(i) === "active")
-                    .length
-                : null
-            }
-            onGoToTab={setTab}
-          />
-        )}
-
-        {tab === "recipes" && (
-          <ClassicRecipesTab
-            classicRecipes={classicRecipes}
-            refetchRecipes={refetchRecipes}
-            isAdmin={isAdmin}
-            confirmDemoteId={confirmDemoteId}
-            demoting={demoting}
-            demoteError={demoteError}
-            onSetConfirmDemote={setConfirmDemoteId}
-            onDemote={handleDemote}
-          />
-        )}
-
-        {tab === "users" && isAdmin && (
-          <UsersTab
-            users={users}
-            usersLoading={usersLoading}
-            currentUserId={userId}
-            onUsersChanged={loadUsers}
-          />
-        )}
-
-        {tab === "invites" && isAdmin && (
-          <InvitesTab
-            invites={invites}
-            setInvites={setInvites}
-            invitesLoading={invitesLoading}
-          />
-        )}
-
-        {tab === "moderation" && (
-          <ModerationTab
-            communityRecipes={communityRecipes}
-            communityLoading={communityLoading}
-            onCommunityRecipesChanged={loadCommunityRecipes}
-            confirmPromote={confirmPromote}
-            promoting={promoting}
-            promoteError={promoteError}
-            onSetConfirmPromote={setConfirmPromote}
-            onPromote={handlePromote}
-          />
-        )}
-
-        {tab === "requests" && (
-          <RequestsTab
-            pendingRequests={pendingRequests}
-            requestsLoading={requestsLoading}
-            onRequestsChanged={loadPendingRequests}
-            onAddToCatalog={startSingleAddFromRequest}
-          />
-        )}
-
-        {tab === "import" && (
-          <ImportTab
-            catalog={catalog}
-            computed={computed}
-            refetchRecipes={refetchRecipes}
-            isAdmin={isAdmin}
-            importEntity={importEntity}
-            setImportEntity={setImportEntity}
-            importMode={importMode}
-            setImportMode={setImportMode}
-            importSuccessMessage={importSuccessMessage}
-            setImportSuccessMessage={setImportSuccessMessage}
-            setSingleFromRequestId={setSingleFromRequestId}
-            singleName={singleName}
-            setSingleName={setSingleName}
-            singleCategoryId={singleCategoryId}
-            setSingleCategoryId={setSingleCategoryId}
-            singleParentTypeId={singleParentTypeId}
-            setSingleParentTypeId={setSingleParentTypeId}
-            singleBarPriority={singleBarPriority}
-            setSingleBarPriority={setSingleBarPriority}
-            singleColor={singleColor}
-            setSingleColor={setSingleColor}
-            singleDescription={singleDescription}
-            setSingleDescription={setSingleDescription}
-            singleSaving={singleSaving}
-            singleError={singleError}
-            onAddSingle={handleAddSingle}
-            batchPhase={batchPhase}
-            setBatchPhase={setBatchPhase}
-            importPrompt={importPrompt}
-            promptCopied={promptCopied}
-            onCopyImportPrompt={copyImportPrompt}
-            importJson={importJson}
-            setImportJson={setImportJson}
-            onRunImportValidation={runImportValidation}
-            importResult={importResult}
-            setImportResult={setImportResult}
-            importing={importing}
-            onCommitImport={handleCommitImport}
-          />
-        )}
-
-        {tab === "catalog" && <CatalogTab catalog={catalog} />}
-
-        {tab === "onboarding" && isAdmin && <OnboardingTab catalog={catalog} />}
-
-        {tab === "types" && (
-          <TypesTab
-            catalog={catalog}
-            onAddNew={() => startSingleAddFromRequest()}
-            initialEditingTypeId={requestedTypeId}
-          />
-        )}
+        <Outlet context={adminContext} />
       </div>
     </div>
+  )
+}
+
+// One thin route-element component per admin section below - each reads
+// only the slice of adminContext it needs and renders the same tab
+// component with the same props AdminLayout used to pass directly, so
+// every existing CatalogTab/ClassicRecipesTab/... keeps its exact current
+// prop contract. This is deliberately mechanical (no new behavior, no
+// re-modularization) - the only thing that changed is that a route in
+// App.jsx now decides which one mounts, instead of AdminLayout's own
+// removed `tab === "..."` switch.
+
+// The Overview route is also `/admin` itself, so it's the one place the
+// legacy `?tab=`/`?type=` compatibility redirect needs to live (every old
+// link only ever pointed at bare /admin - there was only ever one route to
+// begin with). A plain `/admin` visit (no `tab` param) falls through to
+// Overview exactly as before.
+export function AdminOverviewRoute() {
+  const [searchParams] = useSearchParams()
+  const ctx = useOutletContext()
+  const legacyRedirect = resolveLegacyAdminPath({
+    tab: searchParams.get("tab"),
+    type: searchParams.get("type"),
+  })
+  if (legacyRedirect) return <Navigate to={legacyRedirect} replace />
+  return (
+    <OverviewTab
+      classicCount={ctx.classicRecipes.length}
+      communityCount={ctx.communityRecipes.length}
+      pendingRequestsCount={ctx.pendingRequests.length}
+      ingredientTypesCount={ctx.catalog.types.length}
+      activeInvitesCount={
+        ctx.isAdmin
+          ? ctx.invites.filter((i) => deriveInvitationStatus(i) === "active")
+              .length
+          : null
+      }
+      onGoToTab={ctx.goToTab}
+    />
+  )
+}
+
+export function AdminRecipesRoute() {
+  const {
+    classicRecipes,
+    refetchRecipes,
+    isAdmin,
+    confirmDemoteId,
+    demoting,
+    demoteError,
+    setConfirmDemoteId,
+    handleDemote,
+  } = useOutletContext()
+  return (
+    <ClassicRecipesTab
+      classicRecipes={classicRecipes}
+      refetchRecipes={refetchRecipes}
+      isAdmin={isAdmin}
+      confirmDemoteId={confirmDemoteId}
+      demoting={demoting}
+      demoteError={demoteError}
+      onSetConfirmDemote={setConfirmDemoteId}
+      onDemote={handleDemote}
+    />
+  )
+}
+
+export function AdminModerationRoute() {
+  const {
+    communityRecipes,
+    communityLoading,
+    loadCommunityRecipes,
+    confirmPromote,
+    promoting,
+    promoteError,
+    setConfirmPromote,
+    handlePromote,
+  } = useOutletContext()
+  return (
+    <ModerationTab
+      communityRecipes={communityRecipes}
+      communityLoading={communityLoading}
+      onCommunityRecipesChanged={loadCommunityRecipes}
+      confirmPromote={confirmPromote}
+      promoting={promoting}
+      promoteError={promoteError}
+      onSetConfirmPromote={setConfirmPromote}
+      onPromote={handlePromote}
+    />
+  )
+}
+
+export function AdminCatalogRoute() {
+  const { catalog } = useOutletContext()
+  return <CatalogTab catalog={catalog} />
+}
+
+// `?type=<id>` (Ingredient Detail Stage I.4's "Edit ingredient" shortcut,
+// now `/admin/ingredient-types?type=<id>`) is read right here, once, rather
+// than lifted to AdminLayout - it's single-section-scoped, unlike every
+// other value in adminContext. TypesTab itself is unchanged: it still just
+// takes `initialEditingTypeId` as a plain prop and resolves the deep-linked
+// search text with the same existing resolveDeepLinkedSearchQuery() (see
+// src/domain/ingredientEditTarget.js) - that logic was already URL-shape
+// agnostic and needed no changes for this migration. A manual tab click
+// (via the nav bar's plain <NavLink to="/admin/ingredient-types">) never
+// carries a `?type=` here in the first place, so it lands on the clean,
+// full-list starting state exactly as required.
+export function AdminIngredientTypesRoute() {
+  const { catalog, startSingleAddFromRequest } = useOutletContext()
+  const [searchParams] = useSearchParams()
+  return (
+    <TypesTab
+      catalog={catalog}
+      onAddNew={() => startSingleAddFromRequest()}
+      initialEditingTypeId={searchParams.get("type")}
+    />
+  )
+}
+
+export function AdminOnboardingRoute() {
+  const { catalog } = useOutletContext()
+  return <OnboardingTab catalog={catalog} />
+}
+
+export function AdminImportRoute() {
+  const ctx = useOutletContext()
+  return (
+    <ImportTab
+      catalog={ctx.catalog}
+      computed={ctx.computed}
+      refetchRecipes={ctx.refetchRecipes}
+      isAdmin={ctx.isAdmin}
+      importEntity={ctx.importEntity}
+      setImportEntity={ctx.setImportEntity}
+      importMode={ctx.importMode}
+      setImportMode={ctx.setImportMode}
+      importSuccessMessage={ctx.importSuccessMessage}
+      setImportSuccessMessage={ctx.setImportSuccessMessage}
+      setSingleFromRequestId={ctx.setSingleFromRequestId}
+      singleName={ctx.singleName}
+      setSingleName={ctx.setSingleName}
+      singleCategoryId={ctx.singleCategoryId}
+      setSingleCategoryId={ctx.setSingleCategoryId}
+      singleParentTypeId={ctx.singleParentTypeId}
+      setSingleParentTypeId={ctx.setSingleParentTypeId}
+      singleBarPriority={ctx.singleBarPriority}
+      setSingleBarPriority={ctx.setSingleBarPriority}
+      singleColor={ctx.singleColor}
+      setSingleColor={ctx.setSingleColor}
+      singleDescription={ctx.singleDescription}
+      setSingleDescription={ctx.setSingleDescription}
+      singleSaving={ctx.singleSaving}
+      singleError={ctx.singleError}
+      onAddSingle={ctx.handleAddSingle}
+      batchPhase={ctx.batchPhase}
+      setBatchPhase={ctx.setBatchPhase}
+      importPrompt={ctx.importPrompt}
+      promptCopied={ctx.promptCopied}
+      onCopyImportPrompt={ctx.copyImportPrompt}
+      importJson={ctx.importJson}
+      setImportJson={ctx.setImportJson}
+      onRunImportValidation={ctx.runImportValidation}
+      importResult={ctx.importResult}
+      setImportResult={ctx.setImportResult}
+      importing={ctx.importing}
+      onCommitImport={ctx.handleCommitImport}
+    />
+  )
+}
+
+export function AdminRequestsRoute() {
+  const {
+    pendingRequests,
+    requestsLoading,
+    loadPendingRequests,
+    startSingleAddFromRequest,
+  } = useOutletContext()
+  return (
+    <RequestsTab
+      pendingRequests={pendingRequests}
+      requestsLoading={requestsLoading}
+      onRequestsChanged={loadPendingRequests}
+      onAddToCatalog={startSingleAddFromRequest}
+    />
+  )
+}
+
+export function AdminUsersRoute() {
+  const { users, usersLoading, userId, loadUsers } = useOutletContext()
+  return (
+    <UsersTab
+      users={users}
+      usersLoading={usersLoading}
+      currentUserId={userId}
+      onUsersChanged={loadUsers}
+    />
+  )
+}
+
+export function AdminInvitationsRoute() {
+  const { invites, setInvites, invitesLoading } = useOutletContext()
+  return (
+    <InvitesTab
+      invites={invites}
+      setInvites={setInvites}
+      invitesLoading={invitesLoading}
+    />
   )
 }

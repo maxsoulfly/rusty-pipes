@@ -13,7 +13,7 @@ const formatDate = (iso) =>
 // Currently-published community recipes, with Unpublish and Promote to
 // Classic actions. Promote crosses into the Classic Recipes tab's data (it
 // nulls owner_id via admin_promote_recipe_to_classic()), so
-// onPromote/confirmPromote/promoting come from the AdminScreen shell rather
+// onPromote/confirmPromote/promoting come from the AdminLayout shell rather
 // than being local to this tab - a successful promote needs to refresh both
 // this tab's communityRecipes list and the shared `computed` recipes the
 // Classic Recipes tab derives from.

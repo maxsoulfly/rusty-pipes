@@ -17,7 +17,18 @@ import { useRecipes } from "@/hooks/useRecipes"
 import { useSupabaseSession } from "@/hooks/useSupabaseSession"
 import AddIngredientsScreen from "@/screens/AddIngredientsScreen"
 import AddProductScreen from "@/screens/AddProductScreen"
-import AdminScreen from "@/screens/AdminScreen"
+import AdminLayout, {
+  AdminCatalogRoute,
+  AdminImportRoute,
+  AdminIngredientTypesRoute,
+  AdminInvitationsRoute,
+  AdminModerationRoute,
+  AdminOnboardingRoute,
+  AdminOverviewRoute,
+  AdminRecipesRoute,
+  AdminRequestsRoute,
+  AdminUsersRoute,
+} from "@/screens/AdminLayout"
 import DetailScreen from "@/screens/DetailScreen"
 import EditorScreen from "@/screens/EditorScreen"
 import HomeScreen from "@/screens/HomeScreen"
@@ -38,17 +49,47 @@ import { updateProfile } from "@/services/membership"
 // SideNav link, so any authenticated member could reach the Admin screen
 // directly by URL. RLS already default-denies the actual reads/writes
 // underneath, but the screen shouldn't be reachable at all - a wrapper
-// rather than a check inside AdminScreen itself, since AdminScreen calls
+// rather than a check inside AdminLayout itself, since AdminLayout calls
 // dozens of hooks unconditionally and an early return before them would
 // violate the rules of hooks.
 //
 // Renamed from RequireAdmin: a moderator can also reach /admin now (a
-// scoped-down view of it - see AdminScreen.jsx's tab filtering), so this
+// scoped-down view of it - see AdminLayout.jsx's tab filtering), so this
 // gate checks isStaff (admin OR moderator). Finer-grained admin-only
 // actions inside stay gated by isAdmin specifically.
+//
+// Admin nested-route migration (2026-09-14) - this now wraps the ENTIRE
+// /admin/* route subtree (see the nested <Route> tree below), not a single
+// screen. React Router only renders a matched route's children by
+// rendering its ancestors' elements first - if this renders <Navigate>
+// instead of <AdminLayout>, AdminLayout's own <Outlet> (and therefore every
+// nested admin route, whichever path matched) never mounts at all. A
+// non-staff user typing e.g. /admin/users directly never gets far enough
+// to construct that route's component; the redirect happens here, one
+// level up, structurally - not by convention, and not weaker than the
+// single-route version this replaced.
 function RequireStaff({ children }) {
   const { isStaff } = useOutletContext()
   return isStaff ? children : <Navigate to="/home" replace />
+}
+
+// The second, narrower gate the audit found already existed at the
+// component level (Users/Invitations/Onboarding were rendered only when
+// `isAdmin`, on top of the coarser isStaff check above - a moderator
+// hitting one of those the old way just saw blank content, not a redirect).
+// Made into its own real route guard here so the same three sections stay
+// admin-only under real URLs too: a moderator directly entering /admin/
+// users, /admin/invitations, or /admin/onboarding is sent back to /admin
+// (the dashboard they DO have access to), not /home - RequireStaff already
+// established they're staff, just not admin-level for these three
+// sections specifically. Defense-in-depth alongside the existing RLS
+// (profiles/memberships full reads and invitations/onboarding_ingredients
+// writes are already is_admin()-only server-side) - this is the UI-side
+// reflection of that boundary, not a new one, and neither RLS nor the
+// schema changed for this migration.
+function RequireAdmin({ children }) {
+  const { isAdmin } = useOutletContext()
+  return isAdmin ? children : <Navigate to="/admin" replace />
 }
 
 function LoadingScreen() {
@@ -480,14 +521,58 @@ function AuthenticatedApp() {
         />
         <Route path="/lists" element={<ListsScreen />} />
         <Route path="/more" element={<MoreScreen />} />
+        {/* Admin nested-route migration (2026-09-14) - one protected
+            subtree, RequireStaff wrapping the layout route itself (see its
+            own comment above) rather than each child. `index` is the exact
+            `/admin` match (Overview, and also where the legacy `?tab=`
+            compatibility redirect lives - see AdminLayout.jsx's
+            AdminOverviewRoute). RequireAdmin wraps only the three
+            admin-only sections, matching what AdminScreen's old
+            `adminOnly` tab filtering + component-level isAdmin check
+            already enforced - see RequireAdmin's own comment above. */}
         <Route
           path="/admin"
           element={
             <RequireStaff>
-              <AdminScreen />
+              <AdminLayout />
             </RequireStaff>
           }
-        />
+        >
+          <Route index element={<AdminOverviewRoute />} />
+          <Route path="recipes" element={<AdminRecipesRoute />} />
+          <Route path="moderation" element={<AdminModerationRoute />} />
+          <Route path="catalog" element={<AdminCatalogRoute />} />
+          <Route
+            path="ingredient-types"
+            element={<AdminIngredientTypesRoute />}
+          />
+          <Route
+            path="onboarding"
+            element={
+              <RequireAdmin>
+                <AdminOnboardingRoute />
+              </RequireAdmin>
+            }
+          />
+          <Route path="import" element={<AdminImportRoute />} />
+          <Route path="requests" element={<AdminRequestsRoute />} />
+          <Route
+            path="users"
+            element={
+              <RequireAdmin>
+                <AdminUsersRoute />
+              </RequireAdmin>
+            }
+          />
+          <Route
+            path="invitations"
+            element={
+              <RequireAdmin>
+                <AdminInvitationsRoute />
+              </RequireAdmin>
+            }
+          />
+        </Route>
       </Route>
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>

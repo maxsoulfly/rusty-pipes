@@ -251,7 +251,7 @@ export default function IngredientDetailScreen({ kind }) {
               {editTargetTypeId && (
                 <button
                   onClick={() =>
-                    navigate(`/admin?tab=types&type=${editTargetTypeId}`)
+                    navigate(`/admin/ingredient-types?type=${editTargetTypeId}`)
                   }
                   aria-label="Edit ingredient"
                   title="Edit ingredient"

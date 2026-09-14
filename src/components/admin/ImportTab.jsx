@@ -23,7 +23,7 @@ const INGREDIENT_MODES = [
 // single/batch sub-modes), "recipes", and "products" (both batch/AI only,
 // since they already have a member-facing equivalent for one-off creation).
 //
-// Ingredients' state stays lifted in the AdminScreen shell rather than
+// Ingredients' state stays lifted in the AdminLayout shell rather than
 // becoming local here - `startSingleAddFromRequest` (Requests and
 // Ingredient Types tabs deep-link into the single-ingredient form) reads
 // and writes several of those same fields from outside this tab entirely,

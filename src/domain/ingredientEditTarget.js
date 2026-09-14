@@ -5,9 +5,9 @@
 
 /**
  * Whether to show the "Edit ingredient" shortcut, and which ingredient
- * TYPE it should deep-link to (`/admin?tab=types&type=<id>`, opening the
- * existing `IngredientTypeEditor` inline in Admin -> Ingredient Types -
- * AdminScreen.jsx/TypesTab.jsx). This is a convenience-UI decision only:
+ * TYPE it should deep-link to (`/admin/ingredient-types?type=<id>`, opening
+ * the existing `IngredientTypeEditor` inline in Admin -> Ingredient Types -
+ * AdminLayout.jsx/TypesTab.jsx). This is a convenience-UI decision only:
  * the real authorization boundary is unchanged and stays server-side
  * (`save_ingredient_type()`'s own RLS/role check) - `isStaff` here only
  * decides whether a member SEES the shortcut, never whether an edit is

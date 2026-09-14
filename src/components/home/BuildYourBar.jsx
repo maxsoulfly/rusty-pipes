@@ -94,7 +94,7 @@ export function BuildYourBar({ catalog, inventory, computed, isAdmin }) {
         {isAdmin && (
           <button
             type="button"
-            onClick={() => navigate("/admin?tab=onboarding")}
+            onClick={() => navigate("/admin/onboarding")}
             className="text-cyan text-[13px] font-display font-semibold bg-transparent border-none cursor-pointer p-0 min-h-11 flex items-center shrink-0"
           >
             Edit list

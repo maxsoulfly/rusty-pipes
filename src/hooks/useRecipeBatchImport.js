@@ -12,8 +12,9 @@ import { createClassicRecipes } from "@/services/recipes"
 // reads or writes any of this state, unlike the Ingredients entity's
 // single-add path (which Requests/Ingredient Types deep-link into and
 // which shares its own success-message state with that cross-tab flow) -
-// that asymmetry is why ingredients import stays in AdminScreen.jsx while
-// this and useProductBatchImport moved out.
+// that asymmetry is why ingredients import stays lifted in AdminLayout.jsx
+// (renamed from AdminScreen.jsx in the 2026-09-14 nested-route migration)
+// while this and useProductBatchImport moved out.
 //
 // The inline "add this missing ingredient" flow (addIngredientDraft and
 // friends) lives here too, not as a separate hook - it only ever exists to

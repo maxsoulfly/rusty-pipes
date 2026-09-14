@@ -15,7 +15,7 @@ import { deleteRecipe } from "@/services/recipes"
 // Demote (a classic promoted from a community recipe, back to its original
 // author) is the one action here that crosses into the Moderation tab's own
 // data - onDemote/confirmDemoteId/demoting/demoteError all come from the
-// AdminScreen shell rather than being local to this tab, since a successful
+// AdminLayout shell rather than being local to this tab, since a successful
 // demote needs to refresh the shell-owned communityRecipes list too.
 //
 // Edit/Delete are admin-only (classic-recipe editing is out of moderator's

@@ -13,7 +13,7 @@ const formatDate = (iso) =>
 // Members' suggestions for missing ingredient types (see
 // RequestIngredientScreen.jsx). Fulfilling one doesn't auto-create the type
 // - the admin still goes through Batch Import for that (onAddToCatalog,
-// which lives in the AdminScreen shell since it also jumps to the Batch
+// which lives in the AdminLayout shell since it also jumps to the Batch
 // Import tab), since a request is just a name/note, not a validated
 // category+hierarchy.
 export function RequestsTab({
