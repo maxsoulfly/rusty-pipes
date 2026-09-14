@@ -443,6 +443,14 @@ export function buildIngredientImportPrompt({
 
   return `Format a JSON array of new cocktail ingredient types for import into Rusty Pipes.
 
+## Which ingredient(s) to format
+
+This prompt is frequently pasted directly into an ongoing conversation about a specific ingredient (or several), rather than followed by an explicit list of names. Before doing anything else:
+- If ingredient name(s) are given explicitly after this prompt (e.g. following "Here is what I want to add" at the end), format those.
+- Otherwise, use the immediately preceding conversation to identify which ingredient(s) the user is asking about, and format those instead - e.g. if you were just discussing "Elderflower Cordial", that is the request.
+- Do NOT return an empty array \`[]\` merely because this formatting prompt itself contains no explicit ingredient-name list - the request may be carried entirely by the conversation it was pasted into.
+- If, after checking both this message and the preceding conversation, you genuinely cannot identify which ingredient(s) are being requested, ASK the user which ingredient(s) they want formatted instead of guessing or returning \`[]\`.
+
 ## Research first - accuracy over completeness
 
 Before producing each ingredient's data, research it using reliable culinary/product knowledge. If your environment has live web/research capability, use it to verify uncertain facts (spelling, common names, whether a homemade version is actually realistic, typical substitutes).
@@ -480,6 +488,6 @@ Return ONLY a JSON array (no markdown fences, no commentary) where each item has
 Every relationship field above (parentType, canProvide's preparedType, canBeReplacedBy's type, a homemade preparation's input types) can ONLY reference a name or alias from this list - do not invent a new category, and reuse an existing type name or alias wherever a relationship should point at something that already exists (names in parentheses are known aliases, already covered, not gaps to fill):
 ${existingLines}
 
-Here is what I want to add:
+Here is what I want to add (if nothing follows, use the conversation above to identify the ingredient(s), per "Which ingredient(s) to format" above):
 `
 }

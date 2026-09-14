@@ -630,4 +630,36 @@ describe("buildIngredientImportPrompt", () => {
     })
     expect(prompt).toContain("Amber: #d97706")
   })
+
+  // Regression coverage for a real reported bug (2026-09-14): pasting this
+  // prompt into an existing AI conversation about a specific ingredient
+  // (observed with Elderflower Cordial) returned `[]` instead of formatting
+  // it - the prompt thoroughly specified HOW to research/format but never
+  // told the AI to look at the surrounding conversation for WHICH
+  // ingredient(s) to format when none are listed in the prompt text itself.
+  it("tells the AI to use the surrounding conversation to identify which ingredient(s) to format", () => {
+    const prompt = buildIngredientImportPrompt(catalog)
+    expect(prompt).toMatch(/immediately preceding conversation/i)
+    expect(prompt).toMatch(/Elderflower Cordial/)
+  })
+
+  it("tells the AI not to return an empty array merely because no explicit name list follows the prompt", () => {
+    const prompt = buildIngredientImportPrompt(catalog)
+    expect(prompt).toMatch(/Do NOT return an empty array `\[\]`/)
+  })
+
+  it("tells the AI to ask which ingredient(s) rather than guess when none can be identified", () => {
+    const prompt = buildIngredientImportPrompt(catalog)
+    expect(prompt).toMatch(/ASK the user which ingredient\(s\)/)
+    expect(prompt).toMatch(/instead of guessing or returning `\[\]`/)
+  })
+
+  it("still carries every existing research-first/non-invention/accuracy instruction", () => {
+    const prompt = buildIngredientImportPrompt(catalog)
+    expect(prompt).toMatch(/research/i)
+    expect(prompt).toMatch(/NEVER invent metadata/)
+    expect(prompt).toMatch(/sparse but correct/i)
+    expect(prompt).toMatch(/never another new item in this array/)
+    expect(prompt).toMatch(/Return ONLY a JSON array \(no markdown fences, no commentary\)/)
+  })
 })
