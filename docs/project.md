@@ -28,6 +28,7 @@ Nothing in progress right now - all recent work below is shipped, pushed, and (m
 
 # Backlog
 - Duplicate-ingredient-type merge tool (Admin → Ingredient Types → "Merge") is built and RLS-covered but never browser-verified - do that click-through before relying on it for a real live duplicate.
+- Ingredient Type descriptions have no UI surface yet - the field exists and is being filled in by the catalog enrichment pass, but the admin editor doesn't show/edit it and it's not displayed anywhere member-facing either. Evaluate later: expose it in the editor, and/or show it on Ingredient Detail.
 
 # Done
 - Serving-size selector + parts ratio view — 2026-09-05.
