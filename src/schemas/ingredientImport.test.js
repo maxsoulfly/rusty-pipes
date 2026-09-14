@@ -637,24 +637,61 @@ describe("buildIngredientImportPrompt", () => {
   // it - the prompt thoroughly specified HOW to research/format but never
   // told the AI to look at the surrounding conversation for WHICH
   // ingredient(s) to format when none are listed in the prompt text itself.
-  it("tells the AI to use the surrounding conversation to identify which ingredient(s) to format", () => {
+  //
+  // A first fix (since reverted, see git history) added an elaborate
+  // section spelling out "don't return [] just because...", "ASK the user
+  // if you can't tell...". That regressed the SAME [] behavior it was
+  // meant to fix, because it directly contradicts "Return ONLY a JSON
+  // array (no markdown fences, no commentary)" below: a single-shot
+  // completion cannot both "ask a question" and "return ONLY a JSON array,
+  // no commentary" - the one contract-compliant way to express "asking" is
+  // an empty array, which is exactly the failure this was supposed to
+  // prevent. Repeatedly naming `[]` as the forbidden output likely made it
+  // more salient too. The fix here is deliberately minimal - one plain
+  // instruction, no meta-discussion of `[]`, no "ask" branch that conflicts
+  // with the JSON-only contract - matching the user's own report that the
+  // much simpler pre-fix wording already worked in practice.
+  it("tells the AI to format the ingredient(s) discussed immediately before the prompt", () => {
     const prompt = buildIngredientImportPrompt(catalog)
-    expect(prompt).toMatch(/immediately preceding conversation/i)
-    expect(prompt).toMatch(/Elderflower Cordial/)
+    expect(prompt).toMatch(/discussed immediately before this prompt/i)
   })
 
-  it("tells the AI not to return an empty array merely because no explicit name list follows the prompt", () => {
+  it("does not instruct the AI to ask the user, which would contradict the JSON-only return contract", () => {
     const prompt = buildIngredientImportPrompt(catalog)
-    expect(prompt).toMatch(/Do NOT return an empty array `\[\]`/)
+    expect(prompt).not.toMatch(/ask the user/i)
   })
 
-  it("tells the AI to ask which ingredient(s) rather than guess when none can be identified", () => {
+  it("does not dwell on the empty-array case in its own instructions", () => {
     const prompt = buildIngredientImportPrompt(catalog)
-    expect(prompt).toMatch(/ASK the user which ingredient\(s\)/)
-    expect(prompt).toMatch(/instead of guessing or returning `\[\]`/)
+    expect(prompt).not.toMatch(/empty array `?\[\]`?/i)
   })
 
-  it("still carries every existing research-first/non-invention/accuracy instruction", () => {
+  // Second regression round (2026-09-14): even the minimal top-of-prompt
+  // context instruction above wasn't enough on its own - the prompt still
+  // ended with a bare "Here is what I want to add:" followed by nothing,
+  // right after a very long schema/rules block. That trailing empty
+  // placeholder, being the very last thing the model reads, apparently
+  // outweighed the earlier instruction and read as "the request list is
+  // empty" - reproduced live against Elderflower Cordial. There's no
+  // ingredient-name input anywhere in the app at prompt-generation time
+  // (see buildIngredientImportPrompt's only caller, AdminLayout.jsx's
+  // copyImportPrompt), so this placeholder never served a purpose beyond
+  // that. Replaced with a concrete final instruction naming the actual
+  // task, so the last thing the model reads is "do this," not an empty
+  // slot to reason about.
+  it("does not end with an empty 'Here is what I want to add' placeholder", () => {
+    const prompt = buildIngredientImportPrompt(catalog)
+    expect(prompt).not.toMatch(/Here is what I want to add/i)
+  })
+
+  it("ends with a concrete instruction to format the discussed ingredient(s) and return only the JSON array", () => {
+    const prompt = buildIngredientImportPrompt(catalog)
+    expect(prompt.trim().endsWith(
+      "Now format the ingredient(s) discussed immediately before this prompt and return only the JSON array.",
+    )).toBe(true)
+  })
+
+  it("still carries every existing research-first/non-invention/accuracy instruction and the JSON-only contract", () => {
     const prompt = buildIngredientImportPrompt(catalog)
     expect(prompt).toMatch(/research/i)
     expect(prompt).toMatch(/NEVER invent metadata/)
