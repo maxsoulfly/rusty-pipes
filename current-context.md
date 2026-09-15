@@ -116,6 +116,24 @@ The ingredient catalog enrichment pass (see "Known outstanding items" below) is 
 
   **Liqueur category enrichment (7a-7f) is now complete** - covers orange/citrus, bitter aperitif/amaro, herbal/spiced, coffee/chocolate/nut/cream, fruit (stone-fruit/berry/tropical), and floral/mint/anise/specialty families, judged sufficiently broad for a practical ~500-cocktail catalogue. Deliberately deferred as genuinely niche/regional rather than foundational gaps: Licor 43 was added, but Pastis/Pernod, Advocaat, Crème Yvette, Black Sambuca, Nocello, Godiva Chocolate Liqueur, and Watermelon/Strawberry liqueurs remain out - revisit only if a specific recipe genuinely needs one.
 
-  **Next up: the larger Spirit category**, to be split into sub-batches the same way Liqueur was. Not yet started - first step is a read-only Stage-1 inventory audit (same pattern as Liqueur's own opening stage) before proposing sub-batch boundaries. After Spirit, the remaining low-value commodity categories close out the enrichment pass.
+  **Spirit category (Batch 8) - roadmap agreed 2026-09-15, not yet started.** Stage-1 read-only inventory audit complete (28 existing types; only 1 alias - Vodka "Wodka" - and 1 substitution - White Rum→Spiced Rum - in the whole category, far sparser than Liqueur was pre-7a). Split into sub-batches, same pattern as Liqueur:
+  - **8a - Whiskey/Whisky** (Whiskey, Bourbon, Irish Whiskey, Rye Whiskey, Scotch Whiskey, Peach-Flavored Whiskey)
+  - **8b - Rum + Cachaça + Cuban Aguardiente** (Rum, Aged/Dark/Demerara/Gold/White Rum, Rhum Agricole, Spiced Rum, Cachaça, Cuban Aguardiente)
+  - **8c - Agave spirits** (Tequila, Mezcal)
+  - **8d - Brandy + Pisco research** (Brandy, Cognac, Calvados, Grappa)
+  - **8e - Gin** (Gin)
+  - **8f - Absinthe/Anise spirits** (Absinthe, Pernod)
+  - **8g - Vodka** (Vodka, Peach Vodka)
+
+  Recommended order: 8a → 8b → 8c → 8d → 8e → 8f → 8g (largest/best-established families with real correctness fixes first, smallest/lowest-research-value last).
+
+  **The Stage-1 audit surfaced open research questions, deliberately left unresolved pending each sub-batch's own investigation - do not treat any of these as pre-decided:**
+  - Whether `Scotch Whiskey` should rename to `Scotch Whisky` (spelling convention mismatch vs. Bourbon/Irish Whiskey/Rye Whiskey) - correctness of the rename itself, plus alias/import implications, is 8a's job to verify.
+  - Whether Cognac and Calvados should be reparented under the existing `Brandy` generic (currently only Grappa is a child of Brandy, which may be an oversight or may be deliberate) - 8d's job.
+  - Whether Pisco belongs under Brandy or should stand alone by bartending convention (like Cachaça standing apart from Rum) - 8d's job, not pre-decided.
+  - Whether Cuban Aguardiente is genuinely distinct from White Rum or substantially redundant with it - 8b's job.
+  - Whether Pernod's Spirit categorization (vs. Liqueur) is correct, and whether a generic "Pastis" parent belongs above it - 8f's job.
+
+  Every sub-batch still applies the standing rules from Batch 7: verify category correctness rather than assume, only add representative poured-liquid colors, preserve existing user-authored colors/relationships unless a correction is explicitly justified and approved, and ownership-ancestry semantics (does a parent/child link create misleading makeability) are checked before any structural change.
 - **Ingredient Type description has no UI surface** (found 2026-09-15 during the enrichment pass). `ingredient_types.description` exists, is being actively enriched by the enrichment pass, and persists/reads back correctly - but the Ingredient Type admin editor doesn't display or let you edit it, and it has no obvious member-facing surface either (not shown on Ingredient Detail). Future work should evaluate (1) exposing/editing Description in the Ingredient Type editor, and (2) displaying it on Ingredient Detail where useful. Not started - do not let this interrupt the enrichment pass.
 - **White Vermouth / Bianco Vermouth likely represent the same style, not a genuine parent/subtype pair** (found 2026-09-15 during Batch 3). Research confirmed Bianco/Blanc/Blanco vermouth are the same pale, semi-sweet style under different regional names, which makes the existing `White Vermouth` (parent) → `Bianco Vermouth` (child) relationship look more like a duplicate-under-two-names than a real genus/species hierarchy (unlike e.g. Whiskey → Bourbon/Rye/Scotch). Deliberately not touched during Batch 3 - both types' icons were corrected, but no description/alias/parent change was made pending a decision. Future work: a controlled pre-merge audit (recipes, ownership, aliases, relationships referencing both types) evaluating consolidation onto **Bianco Vermouth** as the canonical type, with **White Vermouth**, **Blanc Vermouth**, and **Blanco Vermouth** as aliases, using the existing Ingredient Type merge tool. Not started.
