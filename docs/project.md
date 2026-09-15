@@ -32,6 +32,7 @@ Nothing in progress right now - all recent work below is shipped, pushed, and (m
 - Personal Substitutions / My Preferences - let me define my own private "I'm happy using X instead of Y" rules that make a recipe Adapted for me specifically, without changing the shared catalogue's real substitutions. Not designed/implemented yet.
 - Clone/Adapt Recipe - let me fork a canonical recipe into my own customized version (different spirit, different ratio) as its own saved recipe. Separate from Personal Substitutions - one's a reusable preference, the other's a specific recipe. Not designed/implemented yet.
 - Classic/Flexible makeability mode - a setting where "Classic" only counts canonical/close-traditional substitutions and "Flexible" allows broader home-bar adaptations with an honest "here's how it'll change" note. Names not final. Not designed/implemented yet - part of the post-enrichment adaptation audit (see `current-context.md`).
+- Living catalogue / let me add my own missing ingredients - I shouldn't be stuck with only what's in the shared catalogue. Let me add a bottle I own that isn't there yet, map it to an existing generic type where possible so makeability still works, and maybe propose it for the real shared catalogue later. Not designed/implemented yet.
 
 # Done
 - Serving-size selector + parts ratio view — 2026-09-05.
