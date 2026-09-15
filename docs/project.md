@@ -31,6 +31,7 @@ Nothing in progress right now - all recent work below is shipped, pushed, and (m
 - Ingredient Type descriptions have no UI surface yet - the field exists and is being filled in by the catalog enrichment pass, but the admin editor doesn't show/edit it and it's not displayed anywhere member-facing either. Evaluate later: expose it in the editor, and/or show it on Ingredient Detail.
 - Personal Substitutions / My Preferences - let me define my own private "I'm happy using X instead of Y" rules that make a recipe Adapted for me specifically, without changing the shared catalogue's real substitutions. Not designed/implemented yet.
 - Clone/Adapt Recipe - let me fork a canonical recipe into my own customized version (different spirit, different ratio) as its own saved recipe. Separate from Personal Substitutions - one's a reusable preference, the other's a specific recipe. Not designed/implemented yet.
+- Classic/Flexible makeability mode - a setting where "Classic" only counts canonical/close-traditional substitutions and "Flexible" allows broader home-bar adaptations with an honest "here's how it'll change" note. Names not final. Not designed/implemented yet - part of the post-enrichment adaptation audit (see `current-context.md`).
 
 # Done
 - Serving-size selector + parts ratio view — 2026-09-05.
