@@ -19,7 +19,7 @@ Social network, cocktail school, public community.
 You might revisit this every few months, not every day.
 
 # Current Focus
-Nothing in progress right now - all recent work below is shipped, pushed, and (mostly) manually verified. Pick the next item from "Next" below.
+Existing Cocktail Adaptation Pass - going through every shared cocktail (~7 at a time) to fix up the canonical recipe (ingredients, amounts, glass, family, etc.) and research realistic home-bar adaptations for it. Started after the ingredient catalogue enrichment pass finished. See `current-context.md` for methodology and progress.
 
 # Next
 - Improve mood/taste discovery (still the long-standing open item from earlier - not started).
